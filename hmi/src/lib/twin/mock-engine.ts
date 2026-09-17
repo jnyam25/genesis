@@ -77,6 +77,7 @@ export class MockTwinEngine {
   private throughputCpm = 0;
   private lastEvent: TwinEvent | null = null;
   private lastSpawn = 0;
+  private spawnCounter = 0;
   private lastTick = Date.now();
   private startedAt = Date.now();
   private fourthTankAdded = false;
@@ -124,7 +125,8 @@ export class MockTwinEngine {
     if (this.downtimeUntil > now) return;
     this.lastSpawn = now;
 
-    const id = `C-${String(this.counts.total + 1).padStart(4, "0")}`;
+    this.spawnCounter += 1;
+    const id = `C-${String(this.spawnCounter).padStart(4, "0")}`;
     const recipe = this.randomRecipe();
     this.containers.push({
       id,
