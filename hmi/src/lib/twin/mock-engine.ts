@@ -44,8 +44,18 @@ const TANK_DEFS_4 = [
   { id: "tank-yellow", name: "Yellow", colorCode: "#fdd835", capacityMl: 5000 },
 ];
 
+/** Extra colors for tanks added on demand via the Manual/Jog screen. */
+const EXTRA_TANK_COLORS = [
+  { name: "Cyan", colorCode: "#26c6da" },
+  { name: "Magenta", colorCode: "#ec407a" },
+  { name: "Orange", colorCode: "#fb8c00" },
+  { name: "Violet", colorCode: "#8e24aa" },
+  { name: "Teal", colorCode: "#00897b" },
+];
+
 const STATUS_DWELL_MS: Record<string, number> = {
   scan: 1200,
+  "scan-rejected": 1400,
   mix: 1800,
   qc: 1400,
   output: 1000,
@@ -53,6 +63,7 @@ const STATUS_DWELL_MS: Record<string, number> = {
 };
 const FILL_DWELL_MS = 900;
 const REJECT_RATE = 0.06;
+const SCAN_FAIL_RATE = 0.05;
 const IDEAL_CPM = 12;
 
 let eventCounter = 0;
@@ -105,6 +116,65 @@ export class MockTwinEngine {
     this.pruneCompletions(now);
 
     return this.snapshot(now);
+  }
+
+  // ---- Operator command API (used by the Manual/Jog screen) ----
+
+  jogBelt(): void {
+    this.lastEvent = ev("info", "Manual: belt jog");
+  }
+
+  firePusher(): void {
+    this.lastEvent = ev("warn", "Manual: reject pusher fired");
+  }
+
+  addTank(): void {
+    const used = new Set(this.tanks.map((t) => t.colorCode));
+    const def = EXTRA_TANK_COLORS.find((c) => !used.has(c.colorCode));
+    if (!def) {
+      this.lastEvent = ev("warn", "Manual: no more tank color slots available");
+      return;
+    }
+    const id = `tank-${def.name.toLowerCase()}`;
+    if (this.tanks.some((t) => t.id === id)) {
+      this.lastEvent = ev("warn", `Manual: tank ${def.name} already exists`);
+      return;
+    }
+    this.tanks.push({
+      id,
+      name: def.name,
+      colorCode: def.colorCode,
+      capacityMl: 5000,
+      levelMl: Math.round(5000 * 0.85),
+    });
+    this.lastEvent = ev(
+      "warn",
+      `Manual: tank ${def.name} added — line re-balanced to ${this.tanks.length} tanks`,
+    );
+  }
+
+  removeTank(tankId: string): void {
+    if (this.tanks.length <= 1) {
+      this.lastEvent = ev("warn", "Manual: cannot remove the last tank");
+      return;
+    }
+    const t = this.tanks.find((x) => x.id === tankId);
+    if (!t) return;
+    this.tanks = this.tanks.filter((x) => x.id !== tankId);
+    this.lastEvent = ev(
+      "warn",
+      `Manual: tank ${t.name} removed — line re-balanced to ${this.tanks.length} tanks`,
+    );
+  }
+
+  eStop(): void {
+    this.downtimeUntil = Date.now() + 6000;
+    this.lastEvent = ev("error", "E-STOP triggered — line halted");
+  }
+
+  clearEStop(): void {
+    this.downtimeUntil = 0;
+    this.lastEvent = ev("success", "E-STOP cleared — line resumed");
   }
 
   private maybeAddFourthTank(now: number) {
@@ -168,17 +238,41 @@ export class MockTwinEngine {
       return true;
     });
     this.containers = this.containers.filter(
-      (c) => !(c.status === "output" && c.dwell > 400) && !(c.status === "rejected" && c.dwell > 600),
+      (c) =>
+        !(c.status === "output" && c.dwell > 400) &&
+        !(c.status === "rejected" && c.dwell > 600) &&
+        !(c.status === "scan-rejected" && c.dwell > 500),
     );
   }
 
   private transition(c: SimContainer, now: number) {
     switch (c.status) {
-      case "scan":
-        c.status = `fill-${c.nextNozzle + 1}` as ContainerStatus;
-        c.dwell = 0;
-        this.lastEvent = ev("info", `${c.id} at Nozzle ${c.nextNozzle + 1}`, now);
+      case "scan": {
+        // Scan resolves the recipe. A failed scan (bad/no barcode) cannot be
+        // filled, so the container is rerouted to the scan-reject lane and
+        // never reaches the nozzles.
+        const scanFail = Math.random() < SCAN_FAIL_RATE;
+        if (scanFail) {
+          c.status = "scan-rejected";
+          c.dwell = 0;
+          this.counts.rejected += 1;
+          this.counts.total += 1;
+          this.lastEvent = ev(
+            "error",
+            `${c.id} SCAN FAIL — no recipe, rerouted to scan-reject lane`,
+            now,
+          );
+        } else {
+          c.status = `fill-${c.nextNozzle + 1}` as ContainerStatus;
+          c.dwell = 0;
+          this.lastEvent = ev(
+            "info",
+            `${c.id} at Nozzle ${c.nextNozzle + 1}`,
+            now,
+          );
+        }
         return;
+      }
       case "mix":
         c.status = "qc";
         this.lastEvent = ev("info", `${c.id} → QC`, now);

@@ -10,6 +10,7 @@
 export type ContainerStatus =
   | "idle"
   | "scan"
+  | "scan-rejected"
   | `fill-${number}`
   | "mix"
   | "qc"
@@ -69,6 +70,20 @@ export interface TwinState {
   timestamp: number;
   /** True when the twin has not produced a snapshot yet. */
   connected: boolean;
+}
+
+/**
+ * Optional operator commands the HMI can send back to the twin/engine.
+ * Real transports (OPC UA/MQTT/WS) will proxy these to the PLC; the mock
+ * implements them locally so the Manual/Jog screen is functional standalone.
+ */
+export interface TwinCommands {
+  jogBelt(): void;
+  firePusher(): void;
+  addTank(): void;
+  removeTank(tankId: string): void;
+  eStop(): void;
+  clearEStop(): void;
 }
 
 export const EMPTY_TWIN_STATE: TwinState = {

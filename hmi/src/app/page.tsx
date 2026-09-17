@@ -3,7 +3,6 @@
 import dynamic from "next/dynamic";
 import { Activity, Boxes, LayoutGrid, LineChart } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Header } from "@/components/dashboard/header";
 import { OeeGrid } from "@/components/dashboard/oee-grid";
 import { CountsCard } from "@/components/dashboard/counts-card";
 import { TankLevels } from "@/components/dashboard/tank-levels";
@@ -16,82 +15,73 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useTwinState } from "@/lib/twin/useTwinState";
+import { useTwin } from "@/lib/twin/twin-context";
 
-// 3D scene uses WebGL; load it client-only to avoid SSR import of three.js.
 const LineScene = dynamic(
   () => import("@/components/scene/line-scene").then((m) => m.LineScene),
   { ssr: false, loading: () => <SceneSkeleton /> },
 );
 
 export default function Page() {
-  const { state, events, loading, stale } = useTwinState();
+  const { state, events, loading, stale } = useTwin();
 
   return (
-    <div className="flex min-h-full flex-col">
-      <Header state={state} stale={stale} loading={loading} />
+    <main className="mx-auto w-full max-w-[1400px] flex-1 px-3 py-4 sm:px-6">
+      {loading && <LoadingState />}
+      {!loading && stale && <StaleAlert />}
+      {!loading && (
+        <Tabs defaultValue="dashboard" className="gap-4">
+          <TabsList className="h-9">
+            <TabsTrigger value="dashboard" className="gap-1.5">
+              <LayoutGrid className="h-4 w-4" /> Dashboard
+            </TabsTrigger>
+            <TabsTrigger value="schematic" className="gap-1.5">
+              <LineChart className="h-4 w-4" /> Schematic
+            </TabsTrigger>
+            <TabsTrigger value="scene3d" className="gap-1.5">
+              <Boxes className="h-4 w-4" /> 3D View
+            </TabsTrigger>
+          </TabsList>
 
-      <main className="mx-auto w-full max-w-[1400px] flex-1 px-3 py-4 sm:px-6">
-        {loading && <LoadingState />}
-        {!loading && stale && <StaleAlert />}
-        {!loading && (
-          <Tabs defaultValue="dashboard" className="gap-4">
-            <TabsList className="h-9">
-              <TabsTrigger value="dashboard" className="gap-1.5">
-                <LayoutGrid className="h-4 w-4" /> Dashboard
-              </TabsTrigger>
-              <TabsTrigger value="schematic" className="gap-1.5">
-                <LineChart className="h-4 w-4" /> Schematic
-              </TabsTrigger>
-              <TabsTrigger value="scene3d" className="gap-1.5">
-                <Boxes className="h-4 w-4" /> 3D View
-              </TabsTrigger>
-            </TabsList>
+          <TabsContent value="dashboard" className="mt-4">
+            <DashboardView state={state} events={events} />
+          </TabsContent>
 
-            <TabsContent value="dashboard" className="mt-4">
-              <DashboardView state={state} events={events} />
-            </TabsContent>
+          <TabsContent value="schematic" className="mt-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-4 w-4" /> Line Schematic
+                </CardTitle>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {state.tanks.length} tanks · {state.containers.length} in-flight
+                </span>
+              </CardHeader>
+              <CardContent>
+                <LineSchematic state={state} />
+                <SchematicLegend />
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-            <TabsContent value="schematic" className="mt-4">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <Activity className="h-4 w-4" /> Line Schematic
-                  </CardTitle>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {state.tanks.length} tanks · {state.containers.length} in-flight
-                  </span>
-                </CardHeader>
-                <CardContent>
-                  <LineSchematic state={state} />
-                  <SchematicLegend />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="scene3d" className="mt-4">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <Boxes className="h-4 w-4" /> 3D Visualization
-                  </CardTitle>
-                  <span className="text-xs text-muted-foreground">
-                    Drag to orbit · scroll to zoom · right-drag to pan
-                  </span>
-                </CardHeader>
-                <CardContent>
-                  <LineScene state={state} />
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        )}
-      </main>
-
-      <footer className="border-t border-border/60 px-4 py-2 text-center text-[11px] text-muted-foreground sm:px-6">
-        Captsone HMI · digital twin mock feed · {state.tanks.length} tanks online
-      </footer>
-    </div>
+          <TabsContent value="scene3d" className="mt-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Boxes className="h-4 w-4" /> 3D Visualization
+                </CardTitle>
+                <span className="text-xs text-muted-foreground">
+                  Drag to orbit · scroll to zoom · right-drag to pan
+                </span>
+              </CardHeader>
+              <CardContent>
+                <LineScene state={state} />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      )}
+    </main>
   );
 }
 
@@ -99,8 +89,8 @@ function DashboardView({
   state,
   events,
 }: {
-  state: ReturnType<typeof useTwinState>["state"];
-  events: ReturnType<typeof useTwinState>["events"];
+  state: ReturnType<typeof useTwin>["state"];
+  events: ReturnType<typeof useTwin>["events"];
 }) {
   return (
     <div className="space-y-4">
@@ -135,6 +125,7 @@ function SchematicLegend() {
     { c: "#475569", t: "Idle station" },
     { c: "#ef4444", t: "QC reject / flagged" },
     { c: "#f59e0b", t: "Reject pusher" },
+    { c: "#fb923c", t: "Scan-reject lane" },
   ];
   return (
     <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">

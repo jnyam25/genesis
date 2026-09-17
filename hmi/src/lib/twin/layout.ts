@@ -17,6 +17,7 @@ export interface StationPosition {
   id: string;
   kind:
     | "scan"
+    | "scan-reject"
     | "nozzle"
     | "mix"
     | "qc"
@@ -63,6 +64,17 @@ export function computeLayout(tanks: Tank[]): LineLayout {
     x: SCAN_X,
     y: 0,
     label: "Scan Zone",
+  });
+
+  // Scan-fail reroute: a diverter lane branching off immediately after scan,
+  // before the nozzles. Containers that fail scan are sent here and never
+  // reach the fill stations.
+  stations.push({
+    id: "scan-reject",
+    kind: "scan-reject",
+    x: SCAN_X + 0.45,
+    y: REJECT_Y,
+    label: "Scan Reject Lane",
   });
 
   tanks.forEach((tank, i) => {
@@ -121,6 +133,7 @@ export function stationForStatus(
 ): StationPosition {
   if (status === "idle") return layout.stations[0];
   if (status === "scan") return byId(layout, "scan");
+  if (status === "scan-rejected") return byId(layout, "scan-reject");
   if (status === "mix") return byId(layout, "mix");
   if (status === "qc") return byId(layout, "qc");
   if (status === "output") return byId(layout, "output");
@@ -141,6 +154,6 @@ function byId(layout: LineLayout, id: string): StationPosition {
 /** Station index in the left-to-right traversal (for "active station" badges). */
 export function stationOrder(layout: LineLayout): string[] {
   return layout.stations
-    .filter((s) => s.kind !== "reject")
+    .filter((s) => s.kind !== "reject" && s.kind !== "scan-reject")
     .map((s) => s.id);
 }

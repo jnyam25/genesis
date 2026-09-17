@@ -44,11 +44,13 @@ function SceneContents({ state }: { state: TwinState }) {
   const outputStation = layout.stations.find((s) => s.kind === "output")!;
   const rejectStation = layout.stations.find((s) => s.kind === "reject")!;
   const scanStation = layout.stations.find((s) => s.kind === "scan")!;
+  const scanRejectStation = layout.stations.find((s) => s.kind === "scan-reject")!;
 
   const activeStationIds = new Set<string>();
   for (const c of state.containers) {
     const m = /^fill-(\d+)$/.exec(c.status);
     if (m) activeStationIds.add(`nozzle-tank-${m[1]}`);
+    else if (c.status === "scan-rejected") activeStationIds.add("scan-reject");
     else activeStationIds.add(c.status);
   }
   const mixActive = state.containers.some((c) => c.status === "mix");
@@ -70,10 +72,15 @@ function SceneContents({ state }: { state: TwinState }) {
         </mesh>
       ))}
 
-      {/* Reject lane */}
+      {/* Reject lane (QC) */}
       <mesh position={[qcStation.x, BELT_Y, layout.rejectY * 0.5 - 0.1]}>
         <boxGeometry args={[0.5, BELT_HALF_H * 2, Math.abs(layout.rejectY)]} />
         <meshStandardMaterial color="#1c0f12" metalness={0.2} roughness={0.8} />
+      </mesh>
+      {/* Scan-reject reroute lane (branches off scan, before the nozzles) */}
+      <mesh position={[scanStation.x + 0.45, BELT_Y, layout.rejectY * 0.5 - 0.1]}>
+        <boxGeometry args={[0.5, BELT_HALF_H * 2, Math.abs(layout.rejectY)]} />
+        <meshStandardMaterial color="#1a1206" metalness={0.2} roughness={0.8} />
       </mesh>
 
       {/* Stations */}
@@ -85,6 +92,7 @@ function SceneContents({ state }: { state: TwinState }) {
       <Station3D station={qcStation} active={activeStationIds.has("qc")} color={qcFlagged ? "#ef4444" : "#10b981"} />
       <Station3D station={outputStation} active={activeStationIds.has("output")} color="#10b981" />
       <Station3D station={rejectStation} active={activeStationIds.has("rejected")} color="#ef4444" />
+      <Station3D station={scanRejectStation} active={activeStationIds.has("scan-reject")} color="#fb923c" />
 
       {/* Mixer (spins when active) */}
       <Mixer x={mixStation.x} active={mixActive} />
@@ -127,7 +135,7 @@ function Station3D({
   active: boolean;
   color: string;
 }) {
-  const z = station.kind === "reject" ? station.y : 0;
+  const z = station.kind === "reject" || station.kind === "scan-reject" ? station.y : 0;
   return (
     <group position={[station.x, 0, z]}>
       <mesh position={[0, -0.18, 0]}>

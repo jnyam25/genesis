@@ -29,6 +29,7 @@ function mixedColor(tanks: Tank[]): string {
 }
 export function containerColor(c: Container, tanks: Tank[]): string {
   if (c.status === "scan" || c.status === "idle") return "#cbd5e1";
+  if (c.status === "scan-rejected") return "#fb923c";
   if (c.status === "rejected") return "#7f1d1d";
   const m = /^fill-(\d+)$/.exec(c.status);
   if (m) {
@@ -51,6 +52,7 @@ function svgY(lineY: number, layout: LineLayout): number {
 
 function statusMatchesStation(status: Container["status"], s: StationPosition): boolean {
   if (status === s.kind) return true;
+  if (status === "scan-rejected" && s.kind === "scan-reject") return true;
   const m = /^fill-(\d+)$/.exec(status);
   if (m && s.kind === "nozzle") {
     return s.id === `nozzle-tank-${m[1]}`;
@@ -72,6 +74,7 @@ export function LineSchematic({ state }: { state: TwinState }) {
   }
   const qcFlagged = state.containers.some((c) => c.status === "rejected");
   const qcStation = layout.stations.find((s) => s.kind === "qc")!;
+  const scanStation = layout.stations.find((s) => s.kind === "scan")!;
 
   return (
     <div className="w-full overflow-x-auto">
@@ -115,7 +118,7 @@ export function LineSchematic({ state }: { state: TwinState }) {
           />
         ))}
 
-        {/* Reject lane */}
+        {/* Reject lane (QC) */}
         <rect
           x={svgX(qcStation.x, layout) - 14}
           y={svgY(0, layout)}
@@ -124,6 +127,16 @@ export function LineSchematic({ state }: { state: TwinState }) {
           rx={6}
           fill="#1c0f12"
           stroke="#7f1d1d"
+        />
+        {/* Scan-reject reroute lane (branches off scan, before the nozzles) */}
+        <rect
+          x={svgX(scanStation.x + 0.45, layout) - 14}
+          y={svgY(0, layout)}
+          width={28}
+          height={Math.abs(layout.rejectY) * SCALE}
+          rx={6}
+          fill="#1a1206"
+          stroke="#fb923c"
         />
         {/* Pusher */}
         <g>
@@ -227,13 +240,21 @@ function StationGlyph({
   const cx = svgX(station.x, layout);
   const cy = svgY(station.y, layout);
   const isReject = station.kind === "reject";
+  const isScanReject = station.kind === "scan-reject";
   const isNozzle = station.kind === "nozzle";
   const isScan = station.kind === "scan";
-  const color = qcFlagged ? "#7f1d1d" : active ? "#22c55e" : "#475569";
+  const isLane = isReject || isScanReject;
+  const color = isScanReject
+    ? active ? "#fb923c" : "#c2410c"
+    : qcFlagged
+      ? "#7f1d1d"
+      : active
+        ? "#22c55e"
+        : "#475569";
 
   return (
     <g>
-      {!isReject ? (
+      {!isLane ? (
         <rect
           x={cx - 26}
           y={cy - 16}
@@ -251,9 +272,9 @@ function StationGlyph({
           width={60}
           height={28}
           rx={6}
-          fill="#1c0f12"
-          stroke="#7f1d1d"
-          strokeWidth={1.5}
+          fill={isScanReject ? "#1a1206" : "#1c0f12"}
+          stroke={isScanReject ? "#fb923c" : "#7f1d1d"}
+          strokeWidth={active ? 2.5 : 1.5}
         />
       )}
 
@@ -265,10 +286,11 @@ function StationGlyph({
       )}
       {station.kind === "output" && <text x={cx} y={cy + 5} textAnchor="middle" fontSize={14} className="fill-emerald-300">▶</text>}
       {isReject && <text x={cx} y={cy + 5} textAnchor="middle" fontSize={14} className="fill-rose-400">✕</text>}
+      {isScanReject && <text x={cx} y={cy + 5} textAnchor="middle" fontSize={13} className="fill-orange-300">↶</text>}
 
       <LabelCallout
         x={cx}
-        y={isReject ? cy + 30 : cy - 26}
+        y={isLane ? cy + 30 : cy - 26}
         text={station.label}
         sub={isNozzle ? station.id.replace("nozzle-", "") : undefined}
       />

@@ -26,9 +26,15 @@ export interface TwinDataSource {
 `useTwinState()` (`src/lib/twin/useTwinState.ts`) is the only hook any UI
 component talks to. It subscribes to a `TwinDataSource`, holds the latest
 snapshot, builds the rolling event log, and tracks `loading` / `stale` flags.
-A source is created by `createTwinDataSource()`, which today returns
-`MockTwinDataSource` but branches on `NEXT_PUBLIC_TWIN_SOURCE` so a future
-`ws` / `poll` / `file` source can be added in one place.
+A source is created by `createTwinDataSource()`, which branches on
+`NEXT_PUBLIC_TWIN_SOURCE`:
+- `mock` (default) → `MockTwinDataSource`, which also exposes `commands`
+  (jog/pusher/add-tank/remove-tank/e-stop) so the Manual/Jog screen works
+  standalone.
+- `ws` → `WebSocketTwinDataSource`, a skeleton PLC→HMI bridge that subscribes to
+  a JSON snapshot stream (`NEXT_PUBLIC_TWIN_URL`) and auto-reconnects. This is
+  the seam the engine worker will use to publish the real twin over
+  WebSocket/MQTT/OPC UA wrapped to the same shape.
 
 **Why this shape:**
 - Consumers depend on `TwinState`, never on `fetch`/`WebSocket`/`fs`, so the
@@ -56,6 +62,14 @@ The HMI is built strictly against the twin's documented JSON shape:
 Two non-transport fields are added by the hook for UI state only:
 `connected` (set by the source) and the client-side `events[]` log (derived from
 `lastEvent` changes). No visualization reads fields outside the contract.
+
+### Shared subscription (`TwinProvider`)
+
+`src/lib/twin/twin-context.tsx` creates **one** source at the layout level and
+shares it across every route via React context (`useTwin()`). This means a
+single mock engine / single WebSocket connection backs the whole app, and the
+Manual/Jog screen's `commands` mutate that same engine so the dashboard,
+schematic, and 3D views all update in sync.
 
 ### Mock feed (`src/lib/twin/mock-engine.ts`)
 
@@ -196,11 +210,39 @@ hardcodes tank count:
 
 The mock demonstrates this by starting at 3 tanks and adding a 4th (Yellow)
 after ~25s — watch the schematic lengthen, a new nozzle + Yellow tank appear,
-and containers start visiting `fill-4`. No view is reloaded or re-coded.
+and containers start visiting `fill-4`. No view is reloaded or re-coded. The
+Manual/Jog screen can also add/remove tanks on demand (see §8).
 
 ---
 
-## 7. State handling (empty / loading / error)
+## 7. Scan-fail reroute
+
+A container that **fails the scan** (bad/no barcode) cannot be assigned a
+recipe, so it must never reach the fill nozzles. The reroute is modeled in the
+twin contract and rendered in both views:
+
+- **New status `scan-rejected`** in `ContainerStatus`. The mock transitions
+  `scan → scan-rejected` with a 5% fail rate (vs. the normal `scan → fill-1`),
+  increments `counts.rejected`/`total`, and emits an error event
+  *"C-xxxx SCAN FAIL — no recipe, rerouted to scan-reject lane"*.
+- **New station `scan-reject`** in `computeLayout`: a diverter lane branching off
+  immediately after the scan zone and **before** the nozzles, at the same
+  depth as the QC reject lane. `stationForStatus` maps `scan-rejected` to it.
+- **2D schematic:** an orange-bordered scan-reject lane box is drawn off the
+  scan station; the station glyph uses a ↶ icon and orange highlight when a
+  scan-rejected container is in it. Scan-rejected containers render orange to
+  distinguish them from QC rejects (dark red).
+- **3D scene:** a scan-reject lane mesh + station pad (orange) off the scan
+  station; scan-rejected containers route there via the shared
+  `useContainerPositions` tween.
+
+This keeps scan failures out of the paint path entirely — they are diverted
+before the first nozzle — while reusing the same dynamic-layout and animation
+machinery as the rest of the line.
+
+---
+
+## 8. State handling (empty / loading / error)
 
 - **Loading:** before the first snapshot, `useTwinState` returns
   `loading=true`; the page shows a spinner ("Connecting to the paint mixing
@@ -220,44 +262,56 @@ and containers start visiting `fill-4`. No view is reloaded or re-coded.
 
 ---
 
-## 8. Layout & responsiveness
+## 9. Layout, navigation & responsiveness
 
-- A top `Header` (title, live/stale badge, twin clock) is sticky-bordered.
+- A top `NavBar` (title, route links, live/stale badge, twin clock) is shared
+  across all routes via the `TwinProvider` in the root layout.
+- **Routes:** `/` (Dashboard with tabs: Dashboard / Schematic / 3D View),
+  `/manual` (Manual / Jog), `/alarms` (Alarms). All consume the same shared
+  twin subscription.
 - The body uses a max-width 1400px container. The dashboard stacks OEE → counts
   → (schematic + event log on `lg`, stacked on mobile) → tank levels.
-- Tabs switch between **Dashboard**, **Schematic**, and **3D View**; the
-  dashboard also embeds a schematic so the operator sees the line without
-  switching tabs.
+- **Manual / Jog screen** (`/manual`): operator controls that command the live
+  twin source through `TwinCommands` — jog belt, fire pusher, add/remove tank
+  modules (demonstrates dynamic tanks on demand), and E-Stop / clear. Against
+  the mock these mutate the engine directly; against a real PLC they proxy to
+  the controller over the same transport.
+- **Alarms screen** (`/alarms`): active alarms derived from the snapshot (feed
+  stale, line halted/E-Stop, tanks low/critical) plus the rolling warn/error
+  history from the event log.
 - The SVG schematic scrolls horizontally on small screens (`min-w-[760px]` in an
   `overflow-x-auto` wrapper); the 3D canvas is a fixed 520px tall panel that
   fills width. Cards collapse from 4→2→1 columns from `lg` down to mobile.
 
 ---
 
-## 9. File map
+## 10. File map
 
 ```
 hmi/src/
   app/
-    layout.tsx          # dark theme, metadata
-    page.tsx            # tabs: Dashboard / Schematic / 3D, loading & stale states
+    layout.tsx          # dark theme, metadata, TwinProvider + NavBar
+    page.tsx            # Dashboard tabs: Dashboard / Schematic / 3D, loading & stale states
+    manual/page.tsx     # Manual / Jog screen (commands)
+    alarms/page.tsx     # Alarms screen (active + history)
   lib/
     format.ts           # pct / clock / OEE color helpers
     twin/
-      types.ts          # TwinState contract
-      layout.ts         # shared line layout + status→station mapping
-      mock-engine.ts    # mock twin (3→4 tanks, OEE, events)
-      source.ts         # TwinDataSource interface + MockTwinDataSource
+      types.ts          # TwinState contract + TwinCommands
+      layout.ts         # shared line layout + status→station mapping (incl. scan-reject)
+      mock-engine.ts    # mock twin (3→4 tanks, scan-fail reroute, OEE, events, commands)
+      source.ts         # TwinDataSource + MockTwinDataSource + WebSocketTwinDataSource
       useTwinState.ts   # the one data hook (events, loading, stale)
+      twin-context.tsx  # TwinProvider / useTwin — one shared subscription across routes
       useContainerPositions.ts  # animated positions from status
   components/
-    dashboard/          # header, oee-grid, counts-card, tank-levels, event-log
-    schematic/line-schematic.tsx  # 2D inline SVG
-    scene/line-scene.tsx          # 3D react-three-fiber scene
+    dashboard/          # nav-bar, oee-grid, counts-card, tank-levels, event-log
+    schematic/line-schematic.tsx  # 2D inline SVG (incl. scan-reject lane)
+    scene/line-scene.tsx          # 3D react-three-fiber scene (incl. scan-reject lane)
     ui/                 # shadcn primitives
 ```
 
-## 10. Running
+## 11. Running
 
 ```bash
 cd hmi
@@ -266,5 +320,5 @@ npm run dev   # http://localhost:43123
 ```
 
 Port **43123** (deliberately uncommon — not 3000/5173/8080). To point at a real
-twin later, implement `TwinDataSource` and set `NEXT_PUBLIC_TWIN_SOURCE` to
-select it; no UI changes required.
+twin later, set `NEXT_PUBLIC_TWIN_SOURCE=ws` and `NEXT_PUBLIC_TWIN_URL` to the
+engine's WebSocket/MQTT/OPC UA bridge; no UI changes required.
