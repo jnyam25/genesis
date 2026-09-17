@@ -1,0 +1,21 @@
+{
+  "name": "captsone-paint-twin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Captsone Industrial Paint Mixing System digital twin — prototwin controller + runnable Node harness emitting the live JSON snapshot contract for the HMI.",
+  "type": "commonjs",
+  "main": "dist/run.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/run.js",
+    "dev": "tsc -p tsconfig.json && node dist/run.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "typescript": "^5.4.5"
+  }
+}
