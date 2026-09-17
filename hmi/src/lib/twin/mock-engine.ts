@@ -63,7 +63,7 @@ const STATUS_DWELL_MS: Record<string, number> = {
 };
 const FILL_DWELL_MS = 900;
 const REJECT_RATE = 0.06;
-const SCAN_FAIL_RATE = 0.05;
+const SCAN_FAIL_RATE = 0.08;
 const IDEAL_CPM = 12;
 
 let eventCounter = 0;
@@ -93,6 +93,8 @@ export class MockTwinEngine {
   private startedAt = Date.now();
   private fourthTankAdded = false;
   private downtimeUntil = 0;
+  /** Latched E-Stop — line stays halted until explicitly cleared. */
+  private eStopped = false;
   private completionsInLastMinute: number[] = [];
 
   constructor() {
@@ -110,7 +112,8 @@ export class MockTwinEngine {
 
     this.maybeAddFourthTank(now);
     this.spawnContainers(now);
-    this.advanceContainers(now, dt);
+    // While E-Stopped the line is frozen: no container advancement.
+    if (!this.eStopped) this.advanceContainers(now, dt);
     this.refillTanks(dt);
     this.updateOee(now);
     this.pruneCompletions(now);
@@ -168,12 +171,13 @@ export class MockTwinEngine {
   }
 
   eStop(): void {
-    this.downtimeUntil = Date.now() + 6000;
-    this.lastEvent = ev("error", "E-STOP triggered — line halted");
+    this.eStopped = true;
+    this.lastEvent = ev("error", "E-STOP triggered — line halted (latched)");
   }
 
   clearEStop(): void {
-    this.downtimeUntil = 0;
+    if (!this.eStopped) return;
+    this.eStopped = false;
     this.lastEvent = ev("success", "E-STOP cleared — line resumed");
   }
 
@@ -193,6 +197,7 @@ export class MockTwinEngine {
   private spawnContainers(now: number) {
     if (now - this.lastSpawn < 2600) return;
     if (this.downtimeUntil > now) return;
+    if (this.eStopped) return;
     this.lastSpawn = now;
 
     this.spawnCounter += 1;
@@ -241,7 +246,7 @@ export class MockTwinEngine {
       (c) =>
         !(c.status === "output" && c.dwell > 400) &&
         !(c.status === "rejected" && c.dwell > 600) &&
-        !(c.status === "scan-rejected" && c.dwell > 500),
+        !(c.status === "scan-rejected" && c.dwell > 1500),
     );
   }
 
@@ -340,14 +345,14 @@ export class MockTwinEngine {
   }
 
   private updateOee(now: number) {
-    // Availability: 1 unless in a planned/unplanned downtime window.
-    const down = now < this.downtimeUntil ? 0 : 1;
-    // Occasionally schedule a short micro-stop to make availability move.
-    if (Math.random() < 0.0008 && this.downtimeUntil < now) {
+    // Availability: 0 while E-Stopped (latched) or during a micro-stop window.
+    const availability = this.eStopped || now < this.downtimeUntil ? 0 : 1;
+    // Occasionally schedule a short micro-stop to make availability move
+    // (but never while E-Stopped — that is operator-controlled).
+    if (!this.eStopped && Math.random() < 0.0008 && this.downtimeUntil < now) {
       this.downtimeUntil = now + 4000;
       this.lastEvent = ev("warn", "Micro-stop: nozzle changeover (4s)", now);
     }
-    const availability = down;
     const performance = Math.min(
       1,
       0.85 + (this.throughputCpm / IDEAL_CPM) * 0.15 + (Math.random() - 0.5) * 0.02,
