@@ -28,8 +28,11 @@ import { MAX_TANKS } from "../config";
  * v2: E-Stop / safety circuit / local-remote control bits, start/stop/reset coils, simulation block.
  * v3: bottling line from the BOM — sort lane counters, valve opening per tank, label/cap/press/sort
  *     container statuses, microcontroller station handshake block, E-Stops PANEL/ENTRY/EXIT.
+ * v4: PLC supervises every decision — raw-text scan mailbox (the PLC validates the barcode),
+ *     robotic arm command interface (the arm lifts and places the lid; lid press removed), raw
+ *     sort-sensor height (the PLC classifies the bottle), Sys.FaultCode and the FAULT bit.
  */
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 export type Access = "R" | "RW";
 
@@ -69,6 +72,8 @@ export const SYS = {
   COUNT_LANE_A: 17,
   /** Accepted containers sent to sort lane B (config.sort.lanes[1]). */
   COUNT_LANE_B: 18,
+  /** First latched station fault (FaultCode), 0 = none. */
+  FAULT_CODE: 19,
 } as const;
 export const SYS_BLOCK = { start: 0, length: 20 };
 
@@ -80,6 +85,7 @@ export const LINE_STATE_BITS = {
   ESTOP_ACTIVE: 1,
   /** Safety relay closed — actuator power available (relay feedback input). */
   SAFETY_OK: 2,
+  /** A station fault is latched (see Sys.FaultCode): line stopped, START refused until RESET. */
   FAULT: 3,
   /** PLC sees the Pi/HMI heartbeat changing. */
   HMI_LINK_OK: 4,
@@ -152,7 +158,7 @@ export const CONTAINER_STATUS = {
   OUTPUT: 22,
   REJECTED: 23,
   CAP: 24,
-  PRESS: 25,
+  /** 25 was the lid press (removed in v4); reserved. */
   SORT: 26,
   /** Accepted, sorted to lane B. */
   OUTPUT_LANE_B: 27,
@@ -176,23 +182,64 @@ export function eventRegister(index: number, field: number): number {
 }
 
 // ---------------------------------------------------------------------------
-// Holding registers — recipe mailbox (300..312), written by the scanner node
+// Holding registers — scan mailbox (300..338)
+//
+// The PLC holds a container at SCAN and writes its id to Scan.Request. The
+// scanner node (ESP32 #1) triggers the barcode scanner, writes the raw text it
+// read (or a no-read status), and writes the same id to Scan.Done last. The
+// PLC validates the text itself (PT1 format, tank count, volume sum), publishes
+// the result, clears Scan.Request and releases the container. The node never
+// interprets the barcode.
 // ---------------------------------------------------------------------------
 
-export const RECIPE = {
-  /** Writer increments after filling the other fields. */
-  SEQ: 300,
-  /** BARCODE_ERROR_CODES value from the scanner-side parse (0 = OK). */
-  PARSE_RESULT: 301,
-  TOTAL_ML: 302,
-  /** Interleave rounds override, 0 = use line policy. */
-  ROUNDS: 303,
-  /** VOL_1..VOL_8 at 304..311, ml per tank slot in barcode order. */
-  VOL_BASE: 304,
-  /** PLC copies SEQ here once the recipe is queued. */
-  ACK_SEQ: 312,
+/** Registers of barcode text: 2 ASCII characters per register, first character in the high byte. */
+export const SCAN_TEXT_REGISTERS = 32;
+export const SCAN_TEXT_MAX_CHARS = SCAN_TEXT_REGISTERS * 2;
+
+export const SCAN = {
+  /** Container id held at SCAN waiting for a read, 0 = none. Written by the PLC. */
+  REQUEST: 300,
+  /** Scanner node writes the container id after Status/Length/Text — always last. */
+  DONE: 301,
+  /** SCAN_STATUS value from the scanner node. */
+  STATUS: 302,
+  /** Characters of barcode text in Scan.Text (0..SCAN_TEXT_MAX_CHARS). */
+  LENGTH: 303,
+  /** Scan.Text1..32 at 304..335. */
+  TEXT_BASE: 304,
+  /** PLC's validation of the text (BARCODE_ERROR_CODES, 7 = NO_READ). */
+  PARSE_RESULT: 336,
+  /** Container id Scan.ParseResult and Scan.TotalMl belong to. */
+  RESULT_ID: 337,
+  /** Recipe total (ml) the PLC decoded, 0 when the barcode was rejected. */
+  TOTAL_ML: 338,
 } as const;
-export const RECIPE_BLOCK = { start: 300, length: 13 };
+export const SCAN_BLOCK = { start: 300, length: 39 };
+
+/** Scan.Status values written by the scanner node. */
+export const SCAN_STATUS = {
+  OK: 0,
+  /** Scanner returned nothing within its read timeout. */
+  NO_READ: 1,
+  /** More than SCAN_TEXT_MAX_CHARS characters; the text is truncated. */
+  TOO_LONG: 2,
+} as const;
+
+/** Pack barcode text into Scan.Text registers (2 chars per register, high byte first). */
+export function packScanText(text: string): number[] {
+  const regs = new Array<number>(SCAN_TEXT_REGISTERS).fill(0);
+  const bytes = Buffer.from(text, "latin1").subarray(0, SCAN_TEXT_MAX_CHARS);
+  for (let i = 0; i < bytes.length; i++) regs[i >> 1] |= i % 2 === 0 ? bytes[i] << 8 : bytes[i];
+  return regs;
+}
+
+/** Unpack `length` characters from Scan.Text registers. */
+export function unpackScanText(regs: ArrayLike<number>, length: number): string {
+  const n = Math.min(length, SCAN_TEXT_MAX_CHARS);
+  const bytes = Buffer.alloc(n);
+  for (let i = 0; i < n; i++) bytes[i] = i % 2 === 0 ? (regs[i >> 1] >> 8) & 0xff : regs[i >> 1] & 0xff;
+  return bytes.toString("latin1");
+}
 
 // ---------------------------------------------------------------------------
 // Holding registers — field node inputs (400..419), written by ESP32 nodes
@@ -205,19 +252,25 @@ export const FIELD = {
   TANK_NODE_HEARTBEAT: 410,
   /** Heartbeat of the scanner node (ESP32 #1: labeling station + barcode scanner). */
   SCANNER_NODE_HEARTBEAT: 411,
-  /** Heartbeat of the station node (ESP32 #2: capping arm, lid press, sort sensor). */
+  /** Heartbeat of the station node (ESP32 #2: robotic arm + sort sensor). */
   STATION_NODE_HEARTBEAT: 412,
 } as const;
 export const FIELD_BLOCK = { start: 400, length: 20 };
 
 // ---------------------------------------------------------------------------
-// Holding registers — microcontroller station handshake (420..430)
+// Holding registers — microcontroller stations (420..432)
 //
-// The PLC holds a container at LABEL / CAP / PRESS and publishes its id in the
-// station's Request register. The ESP32 runs the station (label applicator,
-// arm sequence, press stroke) only while RunPermit = 1, then writes the same id
-// to Done. The PLC releases the container when Done = Request, or faults it
-// (RejectReason.STATION_FAULT) on timeout or a station fault bit.
+// The PLC makes every decision; the ESP32 nodes only execute and report.
+//   LABEL: PLC writes the container id to LabelRequest; the scanner node fires
+//          the label applicator and writes the id to LabelDone.
+//   ARM:   PLC writes ArmCmd, then a new ArmCmdSeq. The station node runs that
+//          one command, then writes ArmResult and ArmDoneSeq = ArmCmdSeq. The
+//          PLC sequences HOME → PICK_LID → (container at CAP) PLACE_LID →
+//          PICK_LID …, retries a failed pick, and faults the line.
+//   SORT:  PLC writes the container id at QC to SortRequest; the station node
+//          measures the bottle height, writes SortHeightMm, then SortDone = id.
+//          The PLC classifies the bottle type from the height.
+// Nodes move actuators only while RunPermit = 1 and Sys.PlcHeartbeat changes.
 // ---------------------------------------------------------------------------
 
 export const STATION = {
@@ -225,20 +278,63 @@ export const STATION = {
   RUN_PERMIT: 420,
   LABEL_REQUEST: 421,
   LABEL_DONE: 422,
-  CAP_REQUEST: 423,
-  CAP_DONE: 424,
-  PRESS_REQUEST: 425,
-  PRESS_DONE: 426,
-  /** Bottle type the sort sensor read at QC: 0 unknown, 1 = lanes[0] type, 2 = lanes[1] type. */
-  SORT_SENSOR_TYPE: 427,
-  /** Container id the sort-sensor reading belongs to. */
-  SORT_SENSOR_CONTAINER: 428,
+  /** ARM_CMD value. Written by the PLC before ArmCmdSeq. */
+  ARM_CMD: 423,
+  /** PLC increments (1..65535, skipping 0) to issue ArmCmd. */
+  ARM_CMD_SEQ: 424,
+  /** Station node copies ArmCmdSeq here when the command has finished (after ArmResult). */
+  ARM_DONE_SEQ: 425,
+  /** ARM_RESULT value of the last finished command. */
+  ARM_RESULT: 426,
+  /** ARM_STATUS_BITS, kept current by the station node. */
+  ARM_STATUS: 427,
+  SORT_REQUEST: 428,
+  SORT_DONE: 429,
+  /** Bottle height measured at QC (mm), 0 = no valid reading. Written before SortDone. */
+  SORT_HEIGHT_MM: 430,
   /** Fault bits written only by the scanner node: bit0 labeler, bit1 scanner. */
-  SCANNER_NODE_FAULTS: 429,
-  /** Fault bits written only by the station node: bit0 capping arm, bit1 lid press, bit2 sort sensor. */
-  STATION_NODE_FAULTS: 430,
+  SCANNER_NODE_FAULTS: 431,
+  /** Fault bits written only by the station node: bit0 arm servo bus, bit1 sort sensor. */
+  STATION_NODE_FAULTS: 432,
 } as const;
-export const STATION_BLOCK = { start: 420, length: 11 };
+export const STATION_BLOCK = { start: 420, length: 13 };
+
+/** Station.ArmCmd values. */
+export const ARM_CMD = {
+  NONE: 0,
+  /** Move to the taught HOME pose (clear of the belt), keeping whatever is in the gripper. */
+  HOME: 1,
+  /** Pick the top lid from the lid magazine and return to HOME holding it. */
+  PICK_LID: 2,
+  /** Place the held lid on the container at CAP, press it down to seat it, release, return to HOME. */
+  PLACE_LID: 3,
+} as const;
+
+/** Station.ArmResult values. */
+export const ARM_RESULT = {
+  NONE: 0,
+  OK: 1,
+  /** PICK_LID: the gripper closed on nothing. */
+  NO_LID: 2,
+  /** PLACE_LID: the lid was lost before it reached the container. */
+  LID_LOST: 3,
+  /** A servo did not answer, reported an error, or missed its position. */
+  SERVO_ERROR: 4,
+  /** RunPermit dropped (or the PLC heartbeat stopped) during the move; the arm stopped where it was. */
+  ABORTED: 5,
+  /** Not executed: arm not homed (only HOME allowed), unknown command, or no RunPermit. */
+  REFUSED: 6,
+} as const;
+
+/** Bits of Station.ArmStatus. */
+export const ARM_STATUS_BITS = {
+  /** The arm reached HOME since power-up / the last abort. */
+  HOMED: 0,
+  /** A command is executing. */
+  BUSY: 1,
+  /** The gripper holds a lid. */
+  LID_HELD: 2,
+} as const;
 
 // ---------------------------------------------------------------------------
 // Coils — command pulses
@@ -302,7 +398,7 @@ export function registerTable(): RegisterDef[] {
   const rows: RegisterDef[] = [
     { address: SYS.PROTOCOL_VERSION, name: "Sys.ProtocolVersion", access: "R", unit: "—", description: `Register map version (currently ${PROTOCOL_VERSION}). Bridge refuses to run on a mismatch.` },
     { address: SYS.PLC_HEARTBEAT, name: "Sys.PlcHeartbeat", access: "R", unit: "count", description: "Incremented by the PLC at ≥ 1 Hz. Bridge marks the PLC offline if it stops changing for 3 s." },
-    { address: SYS.LINE_STATE, name: "Sys.LineState", access: "R", unit: "bits", description: "bit0 RUNNING, bit1 ESTOP_ACTIVE, bit2 SAFETY_OK (safety relay closed), bit3 FAULT, bit4 HMI_LINK_OK, bit5 DIGITAL_ESTOP, bit6 PHYSICAL_ESTOP, bit7 RESET_REQUIRED, bit8 LOCAL_MODE, bit9 REMOTE_RESET_ALLOWED, bit10 SIMULATION." },
+    { address: SYS.LINE_STATE, name: "Sys.LineState", access: "R", unit: "bits", description: "bit0 RUNNING, bit1 ESTOP_ACTIVE, bit2 SAFETY_OK (safety relay closed), bit3 FAULT (station fault latched, see Sys.FaultCode), bit4 HMI_LINK_OK, bit5 DIGITAL_ESTOP, bit6 PHYSICAL_ESTOP, bit7 RESET_REQUIRED, bit8 LOCAL_MODE, bit9 REMOTE_RESET_ALLOWED, bit10 SIMULATION." },
     { address: SYS.TANK_COUNT, name: "Sys.TankCount", access: "R", unit: "count", description: "Enabled tank modules." },
     { address: SYS.TANK_ENABLE_MASK, name: "Sys.TankEnableMask", access: "RW", unit: "bits", description: "bit k-1 = tank slot k enabled. HMI add/remove tank writes this. PLC refuses a mask of 0; in-flight containers that still need a disabled tank are rejected (under-filled). Queued recipes with the old tank count are held back (event 19)." },
     { address: SYS.COUNT_ACCEPTED, name: "Counts.Accepted", access: "R", unit: "count", description: "Containers accepted since PLC start (wraps)." },
@@ -319,6 +415,7 @@ export function registerTable(): RegisterDef[] {
     { address: SYS.PHYSICAL_ESTOP_MASK, name: "Sys.PhysicalEStopMask", access: "R", unit: "bits", description: "bit i = physical E-Stop button i pressed, from the safety relay's monitoring contacts (bit0 local control panel, bit1 line entry, bit2 line exit — config.safety.eStopButtons)." },
     { address: SYS.COUNT_LANE_A, name: "Counts.LaneA", access: "R", unit: "count", description: "Accepted containers sorted to lane A (config.sort.lanes[0]) (wraps)." },
     { address: SYS.COUNT_LANE_B, name: "Counts.LaneB", access: "R", unit: "count", description: "Accepted containers sorted to lane B (config.sort.lanes[1]) (wraps)." },
+    { address: SYS.FAULT_CODE, name: "Sys.FaultCode", access: "R", unit: "code", description: "First latched station fault, 0 = none: 1 labeler, 2 scanner, 3 arm servo, 4 arm could not pick a lid, 5 arm dropped the lid, 6 sort sensor, 7 scanner node offline, 8 station node offline. Cleared by RESET once the cause is gone." },
   ];
 
   const tankFields: Array<[number, string, Access, string, string]> = [
@@ -337,7 +434,7 @@ export function registerTable(): RegisterDef[] {
 
   const containerFields: Array<[number, string, string, string]> = [
     [CONTAINER_FIELD.ID, "Id", "—", "Container id, 0 = empty slot."],
-    [CONTAINER_FIELD.STATUS, "Status", "code", "0 none, 1 scan, 2 scan-rejected, 3 label, 11..18 fill at bay n (10+n), 20 mix, 21 sort sensor / reject diverter, 22 accepted to lane A, 23 rejected, 24 cap, 25 press, 26 sort diverter, 27 accepted to lane B."],
+    [CONTAINER_FIELD.STATUS, "Status", "code", "0 none, 1 scan, 2 scan-rejected, 3 label, 11..18 fill at bay n (10+n), 20 mix, 21 sort sensor / reject diverter, 22 accepted to lane A, 23 rejected, 24 capping arm, 26 sort diverter, 27 accepted to lane B (25 reserved)."],
     [CONTAINER_FIELD.FILL_ML_X10, "FillMl", "ml × 10", "Dispensed so far."],
     [CONTAINER_FIELD.TARGET_ML_X10, "TargetMl", "ml × 10", "Recipe total."],
   ];
@@ -357,15 +454,19 @@ export function registerTable(): RegisterDef[] {
   }
 
   rows.push(
-    { address: RECIPE.SEQ, name: "Recipe.Seq", access: "RW", unit: "count", description: "Scanner node increments after writing the fields below (write fields first, SEQ last)." },
-    { address: RECIPE.PARSE_RESULT, name: "Recipe.ParseResult", access: "RW", unit: "code", description: "0 OK, 1 BAD_HEADER, 2 BAD_TOTAL, 3 TANK_COUNT_MISMATCH, 4 NEGATIVE_VOLUME, 5 VOLUME_SUM_MISMATCH, 6 MALFORMED. Non-zero → the container rides through unfilled and the reject diverter rejects it." },
-    { address: RECIPE.TOTAL_ML, name: "Recipe.TotalMl", access: "RW", unit: "ml", description: "" },
-    { address: RECIPE.ROUNDS, name: "Recipe.Rounds", access: "RW", unit: "count", description: "Interleave rounds override, 0 = line policy." },
+    { address: SCAN.REQUEST, name: "Scan.Request", access: "R", unit: "id", description: "Container id held at SCAN waiting for a read, 0 = none. A new non-zero value tells the scanner node to trigger one read." },
+    { address: SCAN.DONE, name: "Scan.Done", access: "RW", unit: "id", description: "Scanner node writes the container id after Status, Length and Text (always last). The PLC acts when Done = Request." },
+    { address: SCAN.STATUS, name: "Scan.Status", access: "RW", unit: "code", description: "0 OK, 1 NO_READ (nothing within the read timeout), 2 TOO_LONG (text truncated)." },
+    { address: SCAN.LENGTH, name: "Scan.Length", access: "RW", unit: "chars", description: `Characters in Scan.Text (0..${SCAN_TEXT_MAX_CHARS}).` },
   );
-  for (let k = 1; k <= MAX_TANKS; k++) {
-    rows.push({ address: RECIPE.VOL_BASE + k - 1, name: `Recipe.Vol${k}`, access: "RW", unit: "ml", description: k === 1 ? "Volume for the k-th enabled tank, in barcode order." : "" });
+  for (let i = 0; i < SCAN_TEXT_REGISTERS; i++) {
+    rows.push({ address: SCAN.TEXT_BASE + i, name: `Scan.Text${i + 1}`, access: "RW", unit: "2 × ASCII", description: i === 0 ? "Raw barcode text exactly as read, 2 characters per register, first character in the high byte, unused bytes 0. The node does not interpret it." : "" });
   }
-  rows.push({ address: RECIPE.ACK_SEQ, name: "Recipe.AckSeq", access: "R", unit: "count", description: "PLC copies Recipe.Seq here once queued. Writer waits for AckSeq = Seq before the next recipe." });
+  rows.push(
+    { address: SCAN.PARSE_RESULT, name: "Scan.ParseResult", access: "R", unit: "code", description: "PLC's validation of the text: 0 OK, 1 BAD_HEADER, 2 BAD_TOTAL, 3 TANK_COUNT_MISMATCH, 4 NEGATIVE_VOLUME, 5 VOLUME_SUM_MISMATCH, 6 MALFORMED, 7 NO_READ. Non-zero → the container rides through unfilled and the reject diverter rejects it." },
+    { address: SCAN.RESULT_ID, name: "Scan.ResultId", access: "R", unit: "id", description: "Container id that Scan.ParseResult and Scan.TotalMl belong to." },
+    { address: SCAN.TOTAL_ML, name: "Scan.TotalMl", access: "R", unit: "ml", description: "Recipe total the PLC decoded (0 when rejected)." },
+  );
 
   for (let k = 1; k <= MAX_TANKS; k++) {
     rows.push({ address: FIELD.TANK_LEVEL_BASE + k - 1, name: `Field.Tank${k}LevelMl`, access: "RW", unit: "ml × 10", description: k === 1 ? "Written by the ESP32 tank-level node; PLC validates range and heartbeat before using it." : "" });
@@ -373,18 +474,20 @@ export function registerTable(): RegisterDef[] {
   rows.push(
     { address: FIELD.TANK_NODE_HEARTBEAT, name: "Field.TankNodeHeartbeat", access: "RW", unit: "count", description: "ESP32 tank node increments ≥ 1 Hz." },
     { address: FIELD.SCANNER_NODE_HEARTBEAT, name: "Field.ScannerNodeHeartbeat", access: "RW", unit: "count", description: "ESP32 scanner node (labeling + barcode scanner) increments ≥ 1 Hz." },
-    { address: FIELD.STATION_NODE_HEARTBEAT, name: "Field.StationNodeHeartbeat", access: "RW", unit: "count", description: "ESP32 station node (capping arm, lid press, sort sensor) increments ≥ 1 Hz." },
+    { address: FIELD.STATION_NODE_HEARTBEAT, name: "Field.StationNodeHeartbeat", access: "RW", unit: "count", description: "ESP32 station node (robotic arm + sort sensor) increments ≥ 1 Hz." },
     { address: STATION.RUN_PERMIT, name: "Station.RunPermit", access: "R", unit: "0/1", description: "1 = line running with the safety circuit closed. ESP32 nodes must stop their actuators when 0 or when Sys.PlcHeartbeat stops changing for 1 s. Not a safety function: actuator power still goes through the safety relay." },
     { address: STATION.LABEL_REQUEST, name: "Station.LabelRequest", access: "R", unit: "id", description: "Container id held at LABEL waiting for its label, 0 = none." },
     { address: STATION.LABEL_DONE, name: "Station.LabelDone", access: "RW", unit: "id", description: "Scanner node writes the container id once the label is applied." },
-    { address: STATION.CAP_REQUEST, name: "Station.CapRequest", access: "R", unit: "id", description: "Container id held at CAP waiting for the arm to place a lid, 0 = none." },
-    { address: STATION.CAP_DONE, name: "Station.CapDone", access: "RW", unit: "id", description: "Station node writes the container id once the lid is placed and the arm is clear." },
-    { address: STATION.PRESS_REQUEST, name: "Station.PressRequest", access: "R", unit: "id", description: "Container id held at PRESS waiting for the lid press, 0 = none." },
-    { address: STATION.PRESS_DONE, name: "Station.PressDone", access: "RW", unit: "id", description: "Station node writes the container id once the press has retracted." },
-    { address: STATION.SORT_SENSOR_TYPE, name: "Station.SortSensorType", access: "RW", unit: "code", description: "Bottle type the sort sensor read: 0 unknown, 1 = lane A type, 2 = lane B type. PLC rejects on mismatch with the recipe (BOTTLE_TYPE_MISMATCH)." },
-    { address: STATION.SORT_SENSOR_CONTAINER, name: "Station.SortSensorContainer", access: "RW", unit: "id", description: "Container id the sort-sensor reading belongs to." },
-    { address: STATION.SCANNER_NODE_FAULTS, name: "Station.ScannerNodeFaults", access: "RW", unit: "bits", description: "Written only by the scanner node: bit0 labeler, bit1 scanner. Any bit → PLC raises FAULT and rejects the affected container (STATION_FAULT)." },
-    { address: STATION.STATION_NODE_FAULTS, name: "Station.StationNodeFaults", access: "RW", unit: "bits", description: "Written only by the station node: bit0 capping arm, bit1 lid press, bit2 sort sensor. Same handling." },
+    { address: STATION.ARM_CMD, name: "Station.ArmCmd", access: "R", unit: "code", description: "Robotic arm command: 0 none, 1 HOME, 2 PICK_LID (lift the top lid from the magazine), 3 PLACE_LID (place the held lid on the container at CAP, press it down, release, return HOME). Written before ArmCmdSeq." },
+    { address: STATION.ARM_CMD_SEQ, name: "Station.ArmCmdSeq", access: "R", unit: "count", description: "PLC increments (1..65535, skips 0) to issue ArmCmd. The station node runs each sequence number once." },
+    { address: STATION.ARM_DONE_SEQ, name: "Station.ArmDoneSeq", access: "RW", unit: "count", description: "Station node copies ArmCmdSeq here when the command has finished, after writing ArmResult." },
+    { address: STATION.ARM_RESULT, name: "Station.ArmResult", access: "RW", unit: "code", description: "1 OK, 2 NO_LID (gripper closed on nothing), 3 LID_LOST, 4 SERVO_ERROR, 5 ABORTED (RunPermit dropped mid-move), 6 REFUSED (not homed / unknown command). The PLC decides retries and faults." },
+    { address: STATION.ARM_STATUS, name: "Station.ArmStatus", access: "RW", unit: "bits", description: "bit0 HOMED, bit1 BUSY, bit2 LID_HELD. Kept current by the station node." },
+    { address: STATION.SORT_REQUEST, name: "Station.SortRequest", access: "R", unit: "id", description: "Container id at the sort sensor (QC) waiting for a height reading, 0 = none." },
+    { address: STATION.SORT_DONE, name: "Station.SortDone", access: "RW", unit: "id", description: "Station node writes the container id after SortHeightMm." },
+    { address: STATION.SORT_HEIGHT_MM, name: "Station.SortHeightMm", access: "RW", unit: "mm", description: "Measured bottle height, 0 = no valid reading. The PLC classifies the bottle type (config.sort) and rejects a mismatch with the recipe (BOTTLE_TYPE_MISMATCH)." },
+    { address: STATION.SCANNER_NODE_FAULTS, name: "Station.ScannerNodeFaults", access: "RW", unit: "bits", description: "Written only by the scanner node: bit0 labeler, bit1 scanner module not answering. Any bit → the PLC latches a fault and stops the line." },
+    { address: STATION.STATION_NODE_FAULTS, name: "Station.StationNodeFaults", access: "RW", unit: "bits", description: "Written only by the station node: bit0 arm servo bus, bit1 sort sensor. Same handling." },
     { address: SIM.PHYSICAL_ESTOP_MASK, name: "Sim.PhysicalEStopMask", access: "RW", unit: "bits", description: "SIMULATION ONLY: drives the physical E-Stop inputs. Ignored unless LineState.SIMULATION = 1. A physical PLC must never act on it with real outputs powered." },
     { address: SIM.LOCAL_MODE, name: "Sim.LocalMode", access: "RW", unit: "0/1", description: "SIMULATION ONLY: Local/Remote key switch (1 = LOCAL)." },
   );

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Hand, KeyRound, OctagonX, RotateCcw } from "lucide-react";
+import { Hand, KeyRound, OctagonX, RotateCcw, TriangleAlert } from "lucide-react";
 import { useTwin } from "@/lib/twin/twin-context";
 
 /**
@@ -11,6 +11,7 @@ import { useTwin } from "@/lib/twin/twin-context";
  * - E-Stop active (physical and/or digital): red, names every pressed button
  *   and whether the digital E-Stop is latched, with recovery steps.
  * - Safety reset required: amber, tells the operator where to reset.
+ * - Station fault (the PLC stopped the line): orange, quotes the fault event.
  * - Local control: blue, explains the HMI is view-only.
  */
 export function SafetyBanner() {
@@ -20,6 +21,7 @@ export function SafetyBanner() {
   if (loading || !safety) return null;
 
   const pressed = safety.eStopButtons.filter((b) => b.pressed);
+  const faultEvent = (state.recentEvents ?? (state.lastEvent ? [state.lastEvent] : [])).find((e) => e.message.startsWith("FAULT"));
   const remoteReset = safety.remoteResetAllowed && safety.controlMode === "remote";
   const controlsLink =
     pathname === "/manual" ? null : (
@@ -77,6 +79,25 @@ export function SafetyBanner() {
         </div>
       )}
 
+      {!safety.eStopActive && safety.faultActive && (
+        <div
+          role="alert"
+          className="flex flex-col gap-2 rounded-lg border border-orange-500/70 bg-orange-950/60 px-4 py-2.5 text-orange-100 sm:flex-row sm:items-center"
+        >
+          <TriangleAlert className="h-5 w-5 shrink-0 text-orange-400" />
+          <div className="flex-1 space-y-0.5 text-sm">
+            <div>
+              <span className="font-semibold">Station fault — the PLC stopped the line.</span>{" "}
+              {faultEvent ? faultEvent.message.replace(/^FAULT:\s*/, "").replace(/ — line stopped$/, "") : "See the event log for the cause."}
+            </div>
+            <div className="text-xs text-orange-200/90">
+              Fix the cause, press RESET {remoteReset ? "(Controls screen or local panel)" : "at the local control panel"}, then START.
+            </div>
+          </div>
+          {remoteReset && controlsLink}
+        </div>
+      )}
+
       {safety.controlMode === "local" && (
         <div className="flex items-center gap-2 rounded-lg border border-sky-500/60 bg-sky-950/50 px-4 py-2 text-sm text-sky-100">
           <KeyRound className="h-4 w-4 shrink-0 text-sky-400" />
@@ -88,7 +109,7 @@ export function SafetyBanner() {
         </div>
       )}
 
-      {!safety.eStopActive && !safety.resetRequired && !safety.running && (
+      {!safety.eStopActive && !safety.resetRequired && !safety.faultActive && !safety.running && (
         <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/40 px-4 py-2 text-sm text-muted-foreground">
           <Hand className="h-4 w-4 shrink-0" />
           <span>

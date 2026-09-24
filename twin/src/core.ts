@@ -2,10 +2,16 @@
  * Captsone twin core — the framework-agnostic simulation engine.
  *
  * Pure TypeScript, no simulator dependency. Owns the container state machine,
- * station routing (label → scan → fill bays → cap → press → sort sensor →
+ * station routing (label → scan → fill bays → capping arm → sort sensor →
  * reject diverter → sort diverter), pipelining, tank levels + auto-refill, jam/timeout handling,
  * OEE + throughput accounting, and the JSON snapshot builder. The Node harness
  * (`run.ts`) and the virtual PLC (`plc/virtual-plc.ts`) drive it directly.
+ *
+ * A container's label is read at SCAN: the recipe (and so the fill ops) is
+ * only known once the SCAN op completes. Microcontroller stations complete on
+ * the core's own timers, unless a `StationDriver` is attached — the virtual PLC
+ * attaches one so LABEL, SCAN, CAP and QC finish only when the field nodes
+ * report back through the register map, exactly as on the real PLC.
  */
 
 import { MAX_TANKS, TANK_SLOTS, tankSlot, type StationConfig, type TankConfig, type TwinConfig } from "./config";
@@ -14,6 +20,8 @@ import {
   BARCODE_ERROR_CODES,
   EVENT_SEVERITY,
   EventCode,
+  FAULT_TEXT,
+  FaultCode,
   RejectReason,
   TankChangeRefusal,
   stationCode,
@@ -66,9 +74,34 @@ const EVENT_LOG_SIZE = 50;
 /** How far a manual jog advances belt transit (s). */
 const JOG_SEC = 0.5;
 
+/** What a station reported when it finished with a container. */
+export interface StationResult {
+  /** SCAN only: the raw text the scanner read, or null for a no-read. */
+  scanText?: string | null;
+  /** Reject the container at the reject diverter (station failed, bottle type mismatch). */
+  reject?: RejectReason;
+}
+
+/**
+ * Completes stations from outside the core (the PLC talking to field nodes).
+ * Stations it does not handle complete on the core's timers.
+ */
+export interface StationDriver {
+  handles(stationId: string): boolean;
+  /**
+   * Polled every tick while `c` is SERVING at `stationId`. Return null while the
+   * station is still working; the core jams the container after
+   * `config.stationNodeTimeoutSec`.
+   */
+  poll(stationId: string, c: Container): StationResult | null;
+}
+
 export interface Container {
   id: number;
-  barcodeRaw: string;
+  /** Text printed on the container's label (simulation truth); null when only a real scanner can read it. */
+  labelText: string | null;
+  /** Text the scanner read at SCAN; null until then or on a no-read. */
+  barcodeRaw: string | null;
   parsed: ParsedBarcode | null;
   plan: DispensePlan | null;
   parseError: string | null;
@@ -88,6 +121,8 @@ export interface Container {
   completedAtSec: number | null;
   /** Output lane after the sort diverter (index into config.sort.lanes), from the bottle type. */
   lane: number;
+  /** Set when a station failed on this container: the reject diverter rejects it for this reason. */
+  rejectReason: RejectReason | null;
 }
 
 export interface SnapshotTank {
@@ -144,8 +179,11 @@ export class TwinCore {
   private readonly acceptedRate: RollingRate;
   simTimeSec = 0;
   private occupancy = new Map<string, number>();
-  private barcodeQueue: string[] = [];
+  /** Bottles waiting to enter, by label text (null = label only a real scanner can read). */
+  private barcodeQueue: Array<string | null> = [];
   private readonly idealCycleSec: number;
+  /** Completes microcontroller stations from outside (the virtual PLC); null = the core's own timers. */
+  driver: StationDriver | null = null;
   /** Operator-editable tank names and colors, per slot. */
   readonly palette: TankPalette;
 
@@ -173,14 +211,30 @@ export class TwinCore {
     this.idealCycleSec = idealCycleSec(config);
   }
 
-  /** Barcodes read but not yet admitted onto the belt. */
+  /** Bottles waiting upstream, not yet admitted onto the belt. */
   get queuedBarcodes(): number {
     return this.barcodeQueue.length;
   }
 
+  /** Queue a bottle with this preprinted label; the scanner reads it at SCAN. */
   enqueueBarcode(barcode: string): void {
     this.barcodeQueue.push(barcode);
     this.recordEvent(`barcode queued: ${barcode}`, "info", EventCode.BARCODE_QUEUED);
+  }
+
+  /** Queue a bottle whose label only the (real) scanner can read. */
+  enqueueBottle(): void {
+    this.barcodeQueue.push(null);
+  }
+
+  /**
+   * A station fault decided by the PLC: record it, stop the line, and latch it
+   * until RESET (START is refused meanwhile).
+   */
+  raiseFault(code: FaultCode, stationId: string | null = null): void {
+    const at = stationId ? ` at ${stationId}` : "";
+    this.recordEvent(`FAULT: ${FAULT_TEXT[code]}${at} — line stopped`, "error", EventCode.FAULT, code, stationCode(stationId));
+    this.safety.latchFault();
   }
 
   /** True whenever the line may not move: stopped, E-Stop active, or safety reset pending. */
@@ -244,52 +298,20 @@ export class TwinCore {
     }
   }
 
-  private spawnContainer(barcodeRaw: string): void {
+  private spawnContainer(labelText: string | null): void {
     const id = this.nextContainerId++;
-    let parsed: ParsedBarcode | null = null;
-    let plan: DispensePlan | null = null;
-    let parseError: string | null = null;
-    let parseErrorCode: number = BARCODE_ERROR_CODES.OK;
-    try {
-      parsed = parseBarcode(barcodeRaw, this.config);
-      plan = buildDispensePlan(parsed, this.config.mixPolicy);
-    } catch (e) {
-      parseError = e instanceof BarcodeError ? `${e.code}: ${e.message}` : String(e);
-      parseErrorCode = e instanceof BarcodeError ? BARCODE_ERROR_CODES[e.code] : BARCODE_ERROR_CODES.MALFORMED;
-    }
-
     const times = this.config.stationTimesSec;
     const ops: Op[] = [];
-    const visit = (stationId: string, durationSec: number, required = false) => {
-      if (required || this.hasStation(stationId)) ops.push({ stationId, tankId: null, durationSec, volumeMl: 0 });
-    };
-    visit("LABEL", times.label);
-    visit("SCAN", times.scan, true);
-    if (parsed && plan) {
-      // One pass along the belt: each bay once, in belt order (see beltOrderSteps).
-      for (const step of beltOrderSteps(plan)) {
-        const tank = this.config.tanks[step.tankIndex];
-        const stationId = this.dispenseStationFor(step.tankIndex);
-        const dur = step.volumeMl / tank.dispenseRateMlPerSec + 0.2;
-        ops.push({ stationId, tankId: tank.id, durationSec: dur, volumeMl: step.volumeMl });
-      }
-      visit("MIX", this.config.mixDurationSec);
-      visit("CAP", times.cap);
-      visit("PRESS", times.press);
-      visit("QC", times.qc, true);
-      visit("GATE", times.gate, true);
-      visit("SORT", times.sort);
-    } else {
-      // No scan diverter: an unreadable bottle rides through unserved to the reject diverter.
-      visit("GATE", times.gate, true);
-    }
+    if (this.hasStation("LABEL")) ops.push(serviceOp("LABEL", times.label));
+    ops.push(serviceOp("SCAN", times.scan));
 
     const c: Container = {
       id,
-      barcodeRaw,
-      parsed,
-      plan,
-      parseError,
+      labelText,
+      barcodeRaw: null,
+      parsed: null,
+      plan: null,
+      parseError: null,
       ops,
       opIndex: 0,
       state: "ENTERING",
@@ -297,18 +319,72 @@ export class TwinCore {
       transitTimerSec: 0,
       deadlineSec: 0,
       fillMl: 0,
-      targetMl: parsed ? parsed.totalMl : 0,
+      targetMl: 0,
       occupyingStationId: null,
       jamReason: null,
-      parseErrorCode,
+      parseErrorCode: BARCODE_ERROR_CODES.OK,
       completedAtSec: null,
-      lane: parsed ? this.laneFor(parsed.totalMl) : 0,
+      lane: 0,
+      rejectReason: null,
     };
     this.containers.push(c);
-    this.recordEvent(`container ${id} entered (barcode ${barcodeRaw})`, "info", EventCode.CONTAINER_ENTERED, id);
-    if (parseError) {
-      this.recordEvent(`container ${id} barcode rejected: ${parseError}`, "warn", EventCode.BARCODE_REJECTED, id, parseErrorCode);
+    this.recordEvent(`container ${id} entered`, "info", EventCode.CONTAINER_ENTERED, id);
+  }
+
+  /**
+   * The PLC validates what the scanner read at SCAN and plans the rest of the
+   * container's route. `text` null = no read.
+   */
+  private applyScan(c: Container, text: string | null): void {
+    c.barcodeRaw = text;
+    try {
+      if (text === null) throw new BarcodeError("MALFORMED", "no read");
+      c.parsed = parseBarcode(text, this.config);
+      c.plan = buildDispensePlan(c.parsed, this.config.mixPolicy);
+    } catch (e) {
+      c.parsed = null;
+      c.plan = null;
+      if (text === null) {
+        c.parseError = "NO_READ: the scanner returned no barcode";
+        c.parseErrorCode = BARCODE_ERROR_CODES.NO_READ;
+      } else {
+        c.parseError = e instanceof BarcodeError ? `${e.code}: ${e.message}` : String(e);
+        c.parseErrorCode = e instanceof BarcodeError ? BARCODE_ERROR_CODES[e.code] : BARCODE_ERROR_CODES.MALFORMED;
+      }
     }
+
+    const times = this.config.stationTimesSec;
+    const visit = (stationId: string, durationSec: number, required = false) => {
+      if (required || this.hasStation(stationId)) c.ops.push(serviceOp(stationId, durationSec));
+    };
+    if (c.parsed && c.plan) {
+      c.targetMl = c.parsed.totalMl;
+      c.lane = this.laneFor(c.parsed.totalMl);
+      // One pass along the belt: each bay once, in belt order (see beltOrderSteps).
+      for (const step of beltOrderSteps(c.plan)) {
+        const tank = this.config.tanks[step.tankIndex];
+        const stationId = this.dispenseStationFor(step.tankIndex);
+        const dur = step.volumeMl / tank.dispenseRateMlPerSec + 0.2;
+        c.ops.push({ stationId, tankId: tank.id, durationSec: dur, volumeMl: step.volumeMl });
+      }
+      visit("MIX", this.config.mixDurationSec);
+      visit("CAP", times.cap);
+      visit("QC", times.qc, true);
+      visit("GATE", times.gate, true);
+      visit("SORT", times.sort);
+      this.recordEvent(`container ${c.id} barcode read: ${text}`, "info", EventCode.BARCODE_READ, c.id, c.targetMl);
+    } else {
+      // No scan diverter: an unreadable bottle rides through unserved to the reject diverter.
+      visit("GATE", times.gate, true);
+      this.recordEvent(`container ${c.id} barcode rejected: ${c.parseError}`, "warn", EventCode.BARCODE_REJECTED, c.id, c.parseErrorCode);
+    }
+  }
+
+  /** A station failed on `c`: skip its remaining service and send it to the reject diverter. */
+  private flagReject(c: Container, reason: RejectReason): void {
+    c.rejectReason = reason;
+    const rest = c.ops.slice(c.opIndex + 1).filter((op) => op.stationId === "GATE");
+    c.ops = c.ops.slice(0, c.opIndex + 1).concat(rest);
   }
 
   private hasStation(stationId: string): boolean {
@@ -344,32 +420,17 @@ export class TwinCore {
     const op = c.ops[c.opIndex];
 
     if (c.state === "ENTERING") {
-      if (this.occupancy.has(op.stationId)) {
-        c.state = "BLOCKED";
-        c.deadlineSec = this.config.sensorWaitTimeoutSec;
-        return;
-      }
-      this.acquire(c, op.stationId);
-      c.state = "SERVING";
-      c.timeInOpSec = 0;
-      c.deadlineSec = this.config.sensorWaitTimeoutSec;
+      if (this.occupancy.has(op.stationId)) this.block(c);
+      else this.serve(c, op.stationId);
       return;
     }
 
     if (c.state === "MOVING") {
       c.transitTimerSec -= dt;
       if (c.transitTimerSec <= 0) {
-        if (op.stationId === "GATE") {
-          this.finalizeAtGate(c);
-        } else if (this.occupancy.has(op.stationId)) {
-          c.state = "BLOCKED";
-          c.deadlineSec = this.config.sensorWaitTimeoutSec;
-        } else {
-          this.acquire(c, op.stationId);
-          c.state = "SERVING";
-          c.timeInOpSec = 0;
-          c.deadlineSec = this.config.sensorWaitTimeoutSec;
-        }
+        if (op.stationId === "GATE") this.finalizeAtGate(c);
+        else if (this.occupancy.has(op.stationId)) this.block(c);
+        else this.serve(c, op.stationId);
       }
       return;
     }
@@ -381,14 +442,8 @@ export class TwinCore {
         return;
       }
       if (!this.occupancy.has(op.stationId)) {
-        if (op.stationId === "GATE") {
-          this.finalizeAtGate(c);
-          return;
-        }
-        this.acquire(c, op.stationId);
-        c.state = "SERVING";
-        c.timeInOpSec = 0;
-        c.deadlineSec = this.config.sensorWaitTimeoutSec;
+        if (op.stationId === "GATE") this.finalizeAtGate(c);
+        else this.serve(c, op.stationId);
       }
       return;
     }
@@ -400,37 +455,49 @@ export class TwinCore {
         this.forceReject(c, `service timeout at ${op.stationId}`, op.stationId);
         return;
       }
-      if (c.timeInOpSec >= op.durationSec) {
-        if (op.tankId) this.dispense(c, op);
-        if (c.opIndex === c.ops.length - 1) {
-          // Last station passed (SORT, or GATE on a line without a sort diverter).
-          this.accept(c);
-          return;
-        }
-        this.release(c);
-        c.opIndex++;
-        const next = c.ops[c.opIndex];
-        if (next.stationId === "GATE" && op.stationId === "QC") {
-          // The reject diverter sits directly after the sort sensor.
-          this.finalizeAtGate(c);
-          return;
-        }
-        if (next.stationId === "QC") {
-          if (this.occupancy.has("QC")) {
-            c.state = "BLOCKED";
-            c.deadlineSec = this.config.sensorWaitTimeoutSec;
-          } else {
-            this.acquire(c, "QC");
-            c.state = "SERVING";
-            c.timeInOpSec = 0;
-            c.deadlineSec = this.config.sensorWaitTimeoutSec;
-          }
-          return;
-        }
-        c.state = "MOVING";
-        c.transitTimerSec = this.transitSec(op.stationId, next.stationId);
-      }
+      let result: StationResult | null = {};
+      if (this.driver?.handles(op.stationId)) result = this.driver.poll(op.stationId, c);
+      else if (c.timeInOpSec < op.durationSec) result = null;
+      if (result) this.completeOp(c, op, result);
     }
+  }
+
+  private completeOp(c: Container, op: Op, result: StationResult): void {
+    if (op.tankId) this.dispense(c, op);
+    if (op.stationId === "SCAN") this.applyScan(c, result.scanText !== undefined ? result.scanText : c.labelText);
+    if (result.reject) this.flagReject(c, result.reject);
+    if (c.opIndex === c.ops.length - 1) {
+      // Last station passed (SORT, or GATE on a line without a sort diverter).
+      this.accept(c);
+      return;
+    }
+    this.release(c);
+    c.opIndex++;
+    const next = c.ops[c.opIndex];
+    if (next.stationId === "GATE" && op.stationId === "QC") {
+      // The reject diverter sits directly after the sort sensor.
+      this.finalizeAtGate(c);
+      return;
+    }
+    if (next.stationId === "QC") {
+      if (this.occupancy.has("QC")) this.block(c);
+      else this.serve(c, "QC");
+      return;
+    }
+    c.state = "MOVING";
+    c.transitTimerSec = this.transitSec(op.stationId, next.stationId);
+  }
+
+  private block(c: Container): void {
+    c.state = "BLOCKED";
+    c.deadlineSec = this.config.sensorWaitTimeoutSec;
+  }
+
+  private serve(c: Container, stationId: string): void {
+    this.acquire(c, stationId);
+    c.state = "SERVING";
+    c.timeInOpSec = 0;
+    c.deadlineSec = this.driver?.handles(stationId) ? this.config.stationNodeTimeoutSec : this.config.sensorWaitTimeoutSec;
   }
 
   private dispense(c: Container, op: Op): void {
@@ -466,6 +533,10 @@ export class TwinCore {
     // containers continue to the sort diverter (or are accepted here without one).
     if (c.parseError || !c.parsed) {
       this.reject(c, "bad barcode", RejectReason.BAD_BARCODE);
+      return;
+    }
+    if (c.rejectReason !== null) {
+      this.reject(c, REJECT_REASON_TEXT[c.rejectReason] ?? "station fault", c.rejectReason);
       return;
     }
     const tolerance = Math.max(1, c.targetMl * (this.config.dispenseVariance + 0.01));
@@ -705,6 +776,7 @@ export class TwinCore {
   private dropStaleBarcodes(): void {
     const before = this.barcodeQueue.length;
     this.barcodeQueue = this.barcodeQueue.filter((code) => {
+      if (code === null) return true;
       try {
         parseBarcode(code, this.config);
         return true;
@@ -780,3 +852,12 @@ export class TwinCore {
 function slotOf(tankId: string | null): number {
   return tankId ? (tankSlot(tankId) ?? 0) : 0;
 }
+
+function serviceOp(stationId: string, durationSec: number): Op {
+  return { stationId, tankId: null, durationSec, volumeMl: 0 };
+}
+
+const REJECT_REASON_TEXT: Partial<Record<RejectReason, string>> = {
+  [RejectReason.BOTTLE_TYPE_MISMATCH]: "bottle type does not match the recipe (sort sensor)",
+  [RejectReason.STATION_FAULT]: "station fault (labeler or robotic arm)",
+};

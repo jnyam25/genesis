@@ -4,8 +4,8 @@
  * Both the 2D schematic and the 3D scene render the *same* physical line, so
  * they share one geometric model. Stations are placed along the X axis in
  * "line units" (1 unit ~= 1 meter) in belt order: labeling, barcode scan, one
- * fill bay per tank, capping arm, lid press, sort sensor, reject diverter, sort
- * diverter. Tanks sit above their fill bays; the reject lane branches off the
+ * fill bay per tank, capping arm (lifts a lid and places it), sort sensor,
+ * reject diverter, sort diverter. Tanks sit above their fill bays; the reject lane branches off the
  * reject diverter downward; after the sort diverter Lane A runs straight on and
  * Lane B branches off upward.
  *
@@ -23,7 +23,6 @@ export interface StationPosition {
     | "scan"
     | "nozzle"
     | "cap"
-    | "press"
     | "qc"
     | "gate"
     | "sort"
@@ -90,14 +89,12 @@ export function computeLayout(tanks: Tank[]): LineLayout {
       : NOZZLE_START;
 
   const capX = lastNozzleX + CAP_OFFSET;
-  const pressX = capX + STATION_SPACING;
-  const qcX = pressX + STATION_SPACING;
+  const qcX = capX + STATION_SPACING;
   const gateX = qcX + STATION_SPACING;
   const sortX = gateX + STATION_SPACING;
   const outputX = sortX + OUTPUT_OFFSET;
 
   stations.push({ id: "cap", kind: "cap", x: capX, y: 0, label: "Capping Arm" });
-  stations.push({ id: "press", kind: "press", x: pressX, y: 0, label: "Lid Press" });
   stations.push({ id: "qc", kind: "qc", x: qcX, y: 0, label: "Sort Sensor" });
   stations.push({ id: "gate", kind: "gate", x: gateX, y: 0, label: "Reject Diverter" });
   stations.push({ id: "sort", kind: "sort", x: sortX, y: 0, label: "Sort Diverter" });
@@ -133,7 +130,6 @@ export function stationForStatus(
     case "label":
     case "scan":
     case "cap":
-    case "press":
     case "qc":
     case "sort":
       return byId(layout, status);

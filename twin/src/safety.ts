@@ -22,6 +22,9 @@
  *   - Local/Remote key switch decides who may START, JOG, fire the pusher, and
  *     change tanks. STOP and both E-Stops work from anywhere, in any mode.
  *     Changing mode stops the line.
+ *   - A station fault (arm, labeler, scanner, sort sensor, node offline) is a
+ *     controlled stop decided by the PLC. It stays latched — START is refused —
+ *     until a RESET, which the PLC only honours once the cause is gone.
  */
 
 import { COMMAND_TEXT, EventCode, REFUSAL_TEXT, RefusalReason, SafetyCommand } from "./events";
@@ -74,6 +77,8 @@ export interface SafetyState {
   remoteResetAllowed: boolean;
   /** The source is a simulation: local-panel/E-Stop buttons can be operated from the HMI. */
   simulated: boolean;
+  /** A station fault is latched: START is refused until RESET. */
+  faultActive: boolean;
 }
 
 /**
@@ -113,6 +118,7 @@ export function authorize(state: SafetyState, command: SafetyCommand, source: Co
   if (command === SafetyCommand.TANK_CHANGE) return null; // configuration change; allowed while stopped too
   if (state.eStopActive) return refuse(RefusalReason.ESTOP_ACTIVE);
   if (state.resetRequired) return refuse(RefusalReason.RESET_REQUIRED);
+  if (command === SafetyCommand.START && state.faultActive) return refuse(RefusalReason.FAULT_ACTIVE);
   if (command === SafetyCommand.JOG && state.running) return refuse(RefusalReason.LINE_RUNNING);
   return null;
 }
@@ -120,9 +126,12 @@ export function authorize(state: SafetyState, command: SafetyCommand, source: Co
 export type SafetyEventSink = (code: EventCode, arg1: number, arg2: number, message: string) => void;
 
 export const SOURCE_CODE: Record<ControlSource, number> = { local: 1, remote: 2 };
+/** LINE_STOPPED source code for a stop the PLC decided itself (station fault). */
+export const FAULT_SOURCE_CODE = 3;
 
 export class LineSafety {
   private digital = false;
+  private faults = 0;
   private readonly pressed = new Set<string>();
   private circuitOk: boolean;
   private runCommanded: boolean;
@@ -163,7 +172,16 @@ export class LineSafety {
       controlMode: this.mode,
       remoteResetAllowed: this.config.remoteResetAllowed,
       simulated: this.simulated,
+      faultActive: this.faults > 0,
     };
+  }
+
+  /** Latch a station fault and stop the line (the fault event itself is recorded by the caller). */
+  latchFault(): void {
+    this.faults++;
+    if (!this.runCommanded) return;
+    this.runCommanded = false;
+    this.emit(EventCode.LINE_STOPPED, FAULT_SOURCE_CODE, 0, "Line stopped (station fault)");
   }
 
   /** Bit mask of pressed physical E-Stops (bit i = config.eStopButtons[i]). */
@@ -223,6 +241,11 @@ export class LineSafety {
   reset(source: ControlSource): Refusal | null {
     const r = this.check(SafetyCommand.RESET, source);
     if (r) return r;
+    if (this.faults > 0) {
+      const cleared = this.faults;
+      this.faults = 0;
+      this.emit(EventCode.FAULT_CLEARED, cleared, 0, `${cleared} station fault(s) cleared by RESET`);
+    }
     if (this.circuitOk) return null;
     this.circuitOk = true;
     this.runCommanded = false; // a reset never starts the line

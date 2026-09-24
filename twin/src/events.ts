@@ -58,7 +58,7 @@ export enum EventCode {
   SAFETY_CIRCUIT_OPEN = 20,
   /** Hardware safety circuit restored. PLC only. */
   SAFETY_CIRCUIT_OK = 21,
-  /** arg1: vendor fault code, arg2: StationCode or 0. PLC only. */
+  /** arg1: FaultCode, arg2: StationCode or 0. The PLC stops the line and latches the fault until RESET. */
   FAULT = 22,
   /** Digital E-Stop activated (HMI). arg1: source (2 = remote). Opens the safety circuit. */
   DIGITAL_ESTOP = 23,
@@ -78,7 +78,45 @@ export enum EventCode {
   CONTROL_MODE_CHANGED = 30,
   /** arg1: SafetyCommand, arg2: RefusalReason. */
   COMMAND_REFUSED = 31,
+  /** arg1: container id, arg2: recipe total in ml. The PLC read and validated the label at SCAN. */
+  BARCODE_READ = 32,
+  /** Latched station faults cleared by RESET. arg1: number of faults cleared. */
+  FAULT_CLEARED = 33,
 }
+
+/**
+ * Station faults the PLC detects (FAULT event arg1, Sys.FaultCode). Every
+ * fault stops the line and stays latched until RESET (wire contract: append only).
+ */
+export enum FaultCode {
+  /** Scanner node fault bit 0: label applicator. */
+  LABELER = 1,
+  /** Scanner node fault bit 1: barcode scanner module not answering. */
+  SCANNER = 2,
+  /** Station node fault bit 0, or the arm reported SERVO_ERROR. */
+  ARM_SERVO = 3,
+  /** The arm closed on nothing ARM_PICK_ATTEMPTS times in a row: lid magazine empty or misaligned. */
+  ARM_NO_LID = 4,
+  /** The arm lost the lid between pick and place. */
+  ARM_LID_LOST = 5,
+  /** Station node fault bit 1: sort sensor. */
+  SORT_SENSOR = 6,
+  /** Scanner node heartbeat stopped. */
+  SCANNER_NODE_OFFLINE = 7,
+  /** Station node heartbeat stopped. */
+  STATION_NODE_OFFLINE = 8,
+}
+
+export const FAULT_TEXT: Record<FaultCode, string> = {
+  [FaultCode.LABELER]: "label applicator fault",
+  [FaultCode.SCANNER]: "barcode scanner not answering",
+  [FaultCode.ARM_SERVO]: "robotic arm servo fault",
+  [FaultCode.ARM_NO_LID]: "robotic arm could not pick a lid — check the lid magazine",
+  [FaultCode.ARM_LID_LOST]: "robotic arm dropped the lid",
+  [FaultCode.SORT_SENSOR]: "sort sensor fault",
+  [FaultCode.SCANNER_NODE_OFFLINE]: "scanner node (ESP32 #1) offline",
+  [FaultCode.STATION_NODE_OFFLINE]: "station node (ESP32 #2, robotic arm) offline",
+};
 
 /** Commands subject to safety/authority checks (wire contract: append only). */
 export enum SafetyCommand {
@@ -103,6 +141,7 @@ export enum RefusalReason {
   REMOTE_RESET_NOT_ALLOWED = 6,
   ESTOP_STILL_PRESSED = 7,
   NOT_ACTIVE = 8,
+  FAULT_ACTIVE = 9,
 }
 
 export const REFUSAL_TEXT: Record<RefusalReason, string> = {
@@ -114,6 +153,7 @@ export const REFUSAL_TEXT: Record<RefusalReason, string> = {
   [RefusalReason.REMOTE_RESET_NOT_ALLOWED]: "reset must be done at the local control panel",
   [RefusalReason.ESTOP_STILL_PRESSED]: "a physical E-Stop is still pressed — release it first",
   [RefusalReason.NOT_ACTIVE]: "the digital E-Stop is not active",
+  [RefusalReason.FAULT_ACTIVE]: "a station fault is latched — fix it, then press RESET",
 };
 
 export const COMMAND_TEXT: Record<SafetyCommand, string> = {
@@ -136,7 +176,7 @@ export enum RejectReason {
   SERVICE_TIMEOUT = 5,
   /** PLC only: the sort sensor read a different bottle type than the recipe calls for. */
   BOTTLE_TYPE_MISMATCH = 6,
-  /** PLC only: a microcontroller station (label, cap, press) reported a fault or did not finish. */
+  /** A microcontroller station (labeler, robotic arm) failed on this container. */
   STATION_FAULT = 7,
 }
 
@@ -156,10 +196,12 @@ export const BARCODE_ERROR_CODES = {
   NEGATIVE_VOLUME: 4,
   VOLUME_SUM_MISMATCH: 5,
   MALFORMED: 6,
+  /** The scanner returned nothing (no label, unreadable, or timed out). */
+  NO_READ: 7,
 } as const;
 export type BarcodeErrorName = keyof typeof BARCODE_ERROR_CODES;
 
-/** Fixed station codes. BAY-n is 10+n; 0 = none/unknown. */
+/** Fixed station codes. BAY-n is 10+n; 0 = none/unknown. 24 was the lid press (removed; reserved). */
 const STATION_CODES: Record<string, number> = {
   SCAN: 1,
   LABEL: 2,
@@ -167,13 +209,12 @@ const STATION_CODES: Record<string, number> = {
   QC: 21,
   GATE: 22,
   CAP: 23,
-  PRESS: 24,
   SORT: 25,
 };
 
 /**
  * Station codes: SCAN=1, LABEL=2, BAY-n=10+n, MIX=20, QC=21, GATE=22, CAP=23,
- * PRESS=24, SORT=25, 0 = none/unknown.
+ * SORT=25, 0 = none/unknown.
  */
 export function stationCode(stationId: string | null | undefined): number {
   if (!stationId) return 0;
@@ -221,6 +262,8 @@ export const EVENT_SEVERITY: Record<EventCode, EventSeverity> = {
   [EventCode.LINE_STOPPED]: "warn",
   [EventCode.CONTROL_MODE_CHANGED]: "info",
   [EventCode.COMMAND_REFUSED]: "warn",
+  [EventCode.BARCODE_READ]: "info",
+  [EventCode.FAULT_CLEARED]: "success",
 };
 
 const REJECT_TEXT: Record<number, string> = {
@@ -230,7 +273,7 @@ const REJECT_TEXT: Record<number, string> = {
   [RejectReason.WAIT_TIMEOUT]: "wait timeout",
   [RejectReason.SERVICE_TIMEOUT]: "service timeout",
   [RejectReason.BOTTLE_TYPE_MISMATCH]: "bottle type does not match the recipe (sort sensor)",
-  [RejectReason.STATION_FAULT]: "station fault (label, cap or press)",
+  [RejectReason.STATION_FAULT]: "station fault (labeler or robotic arm)",
 };
 
 const TANK_REFUSAL_TEXT: Record<number, string> = {
@@ -250,7 +293,7 @@ export type TankNameLookup = (slot: number) => string | undefined;
 
 const defaultTankName: TankNameLookup = (slot) => TANK_SLOTS[slot - 1]?.name;
 
-const SOURCE_TEXT: Record<number, string> = { 0: "E-Stop", 1: "local", 2: "remote" };
+const SOURCE_TEXT: Record<number, string> = { 0: "E-Stop", 1: "local", 2: "remote", 3: "station fault" };
 
 function eStopButtonName(index: number): string {
   return DEFAULT_CONFIG.safety.eStopButtons[index]?.name ?? `button ${index + 1}`;
@@ -313,7 +356,7 @@ export function formatEvent(code: number, arg1: number, arg2: number, tankName: 
     case EventCode.SAFETY_CIRCUIT_OK:
       return "Safety circuit restored — reset required";
     case EventCode.FAULT:
-      return `FAULT ${arg1}${arg2 ? ` at ${stationIdFromCode(arg2) ?? `station ${arg2}`}` : ""}`;
+      return `FAULT: ${FAULT_TEXT[arg1 as FaultCode] ?? `code ${arg1}`}${arg2 ? ` at ${stationIdFromCode(arg2) ?? `station ${arg2}`}` : ""} — line stopped`;
     case EventCode.DIGITAL_ESTOP:
       return "DIGITAL E-STOP activated from the HMI — safety circuit opened, all motion de-energized";
     case EventCode.DIGITAL_ESTOP_RELEASED:
@@ -328,6 +371,10 @@ export function formatEvent(code: number, arg1: number, arg2: number, tankName: 
       return `Line started (${SOURCE_TEXT[arg1] ?? arg1})`;
     case EventCode.LINE_STOPPED:
       return arg1 === 0 ? "Line stopped by emergency stop" : `Line stopped (${SOURCE_TEXT[arg1] ?? arg1})`;
+    case EventCode.BARCODE_READ:
+      return `${containerLabel(arg1)} barcode read — ${arg2} ml recipe`;
+    case EventCode.FAULT_CLEARED:
+      return `${arg1} station fault(s) cleared by RESET`;
     case EventCode.CONTROL_MODE_CHANGED:
       return arg1 === 1 ? "Control mode: LOCAL — HMI is view-only" : "Control mode: REMOTE";
     case EventCode.COMMAND_REFUSED:

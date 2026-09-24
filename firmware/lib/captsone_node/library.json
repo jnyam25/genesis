@@ -1,0 +1,10 @@
+{
+  "name": "captsone_node",
+  "version": "0.4.0",
+  "description": "Shared code for the Captsone ESP32 field nodes: Wi-Fi, Modbus TCP link to the Micro850, PLC supervision, NVS settings and serial console.",
+  "frameworks": "arduino",
+  "platforms": "espressif32",
+  "dependencies": {
+    "emelianov/modbus-esp8266": "4.1.0"
+  }
+}

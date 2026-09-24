@@ -42,7 +42,6 @@ function SceneContents({ state }: { state: TwinState }) {
   const station = (kind: StationPosition["kind"]) => layout.stations.find((s) => s.kind === kind)!;
   const labelStation = station("label");
   const capStation = station("cap");
-  const pressStation = station("press");
   const gateStation = station("gate");
   const sortStation = station("sort");
   const laneBStation = layout.stations.find((s) => s.kind === "output" && s.lane === 1)!;
@@ -110,11 +109,8 @@ function SceneContents({ state }: { state: TwinState }) {
       {/* Labeler roll (spins while labeling) */}
       <LabelRoller x={labelStation.x} active={activeStationIds.has(labelStation.id)} />
 
-      {/* Capping arm (lowers a lid while capping) */}
+      {/* Robotic arm: lifts a lid off the stack, places it on the container and presses it down */}
       <CapArm x={capStation.x} active={activeStationIds.has(capStation.id)} />
-
-      {/* Lid press (ram strokes down while pressing) */}
-      <LidPress x={pressStation.x} active={activeStationIds.has(pressStation.id)} />
 
       {/* Reject diverter (extends when a container is being rejected) */}
       <RejectDiverter x={gateStation.x} active={rejecting} />
@@ -159,7 +155,7 @@ function Station3D({
   label?: string;
   sub?: string;
 }) {
-  const labelY = station.kind === "cap" || station.kind === "press" ? 1.25 : 0.45;
+  const labelY = station.kind === "cap" ? 1.25 : 0.45;
   return (
     <group position={[station.x, 0, station.y]}>
       <mesh position={[0, -0.18, 0]}>
@@ -191,7 +187,6 @@ const STATION_COLORS: Record<StationPosition["kind"], string> = {
   scan: "#0ea5e9",
   nozzle: "#64748b",
   cap: "#14b8a6",
-  press: "#6366f1",
   qc: "#10b981",
   gate: "#f59e0b",
   sort: "#f59e0b",
@@ -219,51 +214,53 @@ function LabelRoller({ x, active }: { x: number; active: boolean }) {
   );
 }
 
-function CapArm({ x, active }: { x: number; active: boolean }) {
-  const ref = useRef<THREE.Group>(null);
-  useFrame((_, dt) => {
-    if (!ref.current) return;
-    ref.current.position.y = approach(ref.current.position.y, active ? 0.62 : 0.85, dt);
-  });
-  return (
-    <group position={[x, 0, 0]}>
-      {/* Column beside the belt */}
-      <mesh position={[0, 0.5, -0.55]}>
-        <boxGeometry args={[0.1, 1.0, 0.1]} />
-        <meshStandardMaterial color="#334155" metalness={0.5} roughness={0.5} />
-      </mesh>
-      <group ref={ref} position={[0, 0.85, 0]}>
-        <mesh position={[0, 0, -0.28]}>
-          <boxGeometry args={[0.08, 0.06, 0.56]} />
-          <meshStandardMaterial color="#14b8a6" emissive="#14b8a6" emissiveIntensity={active ? 0.5 : 0} metalness={0.4} roughness={0.5} />
-        </mesh>
-        {/* Lid in the gripper */}
-        <mesh position={[0, -0.06, 0]}>
-          <cylinderGeometry args={[CONTAINER_R, CONTAINER_R, 0.04, 20]} />
-          <meshStandardMaterial color="#e2e8f0" metalness={0.3} roughness={0.5} />
-        </mesh>
-      </group>
-    </group>
-  );
-}
+/** Arm base beside the belt; the boom swings from the lid stack to over the belt. */
+const ARM_BASE_Z = -0.62;
+const ARM_REACH = 0.62;
+const LID_STACK_ANGLE = 1.9;
 
-function LidPress({ x, active }: { x: number; active: boolean }) {
-  const ref = useRef<THREE.Mesh>(null);
+function CapArm({ x, active }: { x: number; active: boolean }) {
+  const swing = useRef<THREE.Group>(null);
+  const lift = useRef<THREE.Group>(null);
   useFrame((_, dt) => {
-    if (!ref.current) return;
-    ref.current.position.y = approach(ref.current.position.y, active ? 0.62 : 0.85, dt);
+    if (!swing.current || !lift.current) return;
+    // Idle: holding the next lid over the stack. Capping: over the container, lowered to seat the lid.
+    swing.current.rotation.y = approach(swing.current.rotation.y, active ? 0 : LID_STACK_ANGLE, dt);
+    lift.current.position.y = approach(lift.current.position.y, active ? 0.6 : 0.85, dt);
   });
   return (
-    <group position={[x, 0, 0]}>
-      {/* Crossbeam */}
-      <mesh position={[0, 1.0, 0]}>
-        <boxGeometry args={[0.3, 0.1, 1.0]} />
+    <group position={[x, 0, ARM_BASE_Z]}>
+      {/* Base and column */}
+      <mesh position={[0, -0.05, 0]}>
+        <cylinderGeometry args={[0.16, 0.18, 0.1, 20]} />
         <meshStandardMaterial color="#334155" metalness={0.5} roughness={0.5} />
       </mesh>
-      <mesh ref={ref} position={[0, 0.85, 0]}>
-        <cylinderGeometry args={[0.16, 0.16, 0.12, 20]} />
-        <meshStandardMaterial color="#6366f1" emissive="#6366f1" emissiveIntensity={active ? 0.5 : 0} metalness={0.5} roughness={0.4} />
+      <mesh position={[0, 0.45, 0]}>
+        <boxGeometry args={[0.1, 0.9, 0.1]} />
+        <meshStandardMaterial color="#334155" metalness={0.5} roughness={0.5} />
       </mesh>
+      {/* Lid stack (magazine) beside the belt */}
+      <mesh position={[Math.sin(LID_STACK_ANGLE) * ARM_REACH, 0.12, Math.cos(LID_STACK_ANGLE) * ARM_REACH]}>
+        <cylinderGeometry args={[CONTAINER_R, CONTAINER_R, 0.3, 20]} />
+        <meshStandardMaterial color="#cbd5e1" metalness={0.3} roughness={0.6} />
+      </mesh>
+      <group ref={swing} rotation={[0, LID_STACK_ANGLE, 0]}>
+        <group ref={lift} position={[0, 0.85, 0]}>
+          <mesh position={[0, 0, ARM_REACH / 2]}>
+            <boxGeometry args={[0.08, 0.06, ARM_REACH]} />
+            <meshStandardMaterial color="#14b8a6" emissive="#14b8a6" emissiveIntensity={active ? 0.5 : 0} metalness={0.4} roughness={0.5} />
+          </mesh>
+          {/* Gripper with the lid */}
+          <mesh position={[0, -0.06, ARM_REACH]}>
+            <boxGeometry args={[0.22, 0.05, 0.06]} />
+            <meshStandardMaterial color="#0f766e" metalness={0.4} roughness={0.5} />
+          </mesh>
+          <mesh position={[0, -0.12, ARM_REACH]}>
+            <cylinderGeometry args={[CONTAINER_R, CONTAINER_R, 0.04, 20]} />
+            <meshStandardMaterial color="#e2e8f0" metalness={0.3} roughness={0.5} />
+          </mesh>
+        </group>
+      </group>
     </group>
   );
 }

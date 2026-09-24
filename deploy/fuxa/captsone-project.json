@@ -1,0 +1,3894 @@
+{
+  "version": "1.02",
+  "name": "Captsone bottling line",
+  "server": {
+    "id": "0",
+    "name": "FUXA Server",
+    "type": "FuxaServer",
+    "property": {}
+  },
+  "devices": {
+    "captsone-plc": {
+      "id": "captsone-plc",
+      "name": "Micro850",
+      "type": "ModbusTCP",
+      "enabled": true,
+      "polling": 1000,
+      "property": {
+        "address": "127.0.0.1:5020",
+        "port": 5020,
+        "slaveid": "1",
+        "delay": 10,
+        "options": false
+      },
+      "tags": {
+        "t_Sys_ProtocolVersion": {
+          "id": "t_Sys_ProtocolVersion",
+          "name": "Sys.ProtocolVersion",
+          "label": "Sys.ProtocolVersion",
+          "type": "UInt16",
+          "address": "1",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Register map version (currently 4). Bridge refuses to run on a mismatch."
+        },
+        "t_Sys_PlcHeartbeat": {
+          "id": "t_Sys_PlcHeartbeat",
+          "name": "Sys.PlcHeartbeat",
+          "label": "Sys.PlcHeartbeat",
+          "type": "UInt16",
+          "address": "2",
+          "memaddress": "400000",
+          "description": "Incremented by the PLC at ≥ 1 Hz. Bridge marks the PLC offline if it stops changing for 3 s."
+        },
+        "t_Sys_LineState": {
+          "id": "t_Sys_LineState",
+          "name": "Sys.LineState",
+          "label": "Sys.LineState",
+          "type": "UInt16",
+          "address": "3",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "bit0 RUNNING, bit1 ESTOP_ACTIVE, bit2 SAFETY_OK (safety relay closed), bit3 FAULT (station fault latched, see Sys.FaultCode), bit4 HMI_LINK_OK, bit5 DIGITAL_ESTOP, bit6 PHYSICAL_ESTOP, bit7 RESET_REQUIRED, bit8 LOCAL_MODE, bit9 REMOTE_RESET_ALLOWED, bit10 SIMULATION."
+        },
+        "t_Sys_TankCount": {
+          "id": "t_Sys_TankCount",
+          "name": "Sys.TankCount",
+          "label": "Sys.TankCount",
+          "type": "UInt16",
+          "address": "4",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Enabled tank modules."
+        },
+        "t_Sys_TankEnableMask": {
+          "id": "t_Sys_TankEnableMask",
+          "name": "Sys.TankEnableMask",
+          "label": "Sys.TankEnableMask",
+          "type": "UInt16",
+          "address": "5",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "bit k-1 = tank slot k enabled. HMI add/remove tank writes this. PLC refuses a mask of 0; in-flight containers that still need a disabled tank are rejected (under-filled). Queued recipes with the old tank count are held back (event 19)."
+        },
+        "t_Counts_Accepted": {
+          "id": "t_Counts_Accepted",
+          "name": "Counts.Accepted",
+          "label": "Counts.Accepted",
+          "type": "UInt16",
+          "address": "6",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Containers accepted since PLC start (wraps)."
+        },
+        "t_Counts_Rejected": {
+          "id": "t_Counts_Rejected",
+          "name": "Counts.Rejected",
+          "label": "Counts.Rejected",
+          "type": "UInt16",
+          "address": "7",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Containers rejected, incl. scan rejects and jams (wraps)."
+        },
+        "t_Counts_Total": {
+          "id": "t_Counts_Total",
+          "name": "Counts.Total",
+          "label": "Counts.Total",
+          "type": "UInt16",
+          "address": "8",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Accepted + rejected (wraps)."
+        },
+        "t_Perf_ThroughputCpm": {
+          "id": "t_Perf_ThroughputCpm",
+          "name": "Perf.ThroughputCpm",
+          "label": "Perf.ThroughputCpm",
+          "type": "UInt16",
+          "address": "9",
+          "memaddress": "400000",
+          "divisor": 100,
+          "format": 2,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Accepted containers per minute, rolling window."
+        },
+        "t_Oee_Availability": {
+          "id": "t_Oee_Availability",
+          "name": "Oee.Availability",
+          "label": "Oee.Availability",
+          "type": "UInt16",
+          "address": "10",
+          "memaddress": "400000",
+          "divisor": 1000,
+          "format": 3,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "0 while the line is not running (stopped, E-Stop, reset pending)."
+        },
+        "t_Oee_Performance": {
+          "id": "t_Oee_Performance",
+          "name": "Oee.Performance",
+          "label": "Oee.Performance",
+          "type": "UInt16",
+          "address": "11",
+          "memaddress": "400000",
+          "divisor": 1000,
+          "format": 3,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Oee_Quality": {
+          "id": "t_Oee_Quality",
+          "name": "Oee.Quality",
+          "label": "Oee.Quality",
+          "type": "UInt16",
+          "address": "12",
+          "memaddress": "400000",
+          "divisor": 1000,
+          "format": 3,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Oee_Overall": {
+          "id": "t_Oee_Overall",
+          "name": "Oee.Overall",
+          "label": "Oee.Overall",
+          "type": "UInt16",
+          "address": "13",
+          "memaddress": "400000",
+          "divisor": 1000,
+          "format": 3,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Sys_HmiHeartbeat": {
+          "id": "t_Sys_HmiHeartbeat",
+          "name": "Sys.HmiHeartbeat",
+          "label": "Sys.HmiHeartbeat",
+          "type": "UInt16",
+          "address": "14",
+          "memaddress": "400000",
+          "description": "Written by the Pi bridge every poll. PLC clears HMI_LINK_OK if it stops changing (alarm only — never a safety function)."
+        },
+        "t_Sys_UptimeS": {
+          "id": "t_Sys_UptimeS",
+          "name": "Sys.UptimeS",
+          "label": "Sys.UptimeS",
+          "type": "UInt16",
+          "address": "15",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Seconds since PLC run start."
+        },
+        "t_Sys_ActiveContainers": {
+          "id": "t_Sys_ActiveContainers",
+          "name": "Sys.ActiveContainers",
+          "label": "Sys.ActiveContainers",
+          "type": "UInt16",
+          "address": "16",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Containers currently on the belt."
+        },
+        "t_Sys_PhysicalEStopMask": {
+          "id": "t_Sys_PhysicalEStopMask",
+          "name": "Sys.PhysicalEStopMask",
+          "label": "Sys.PhysicalEStopMask",
+          "type": "UInt16",
+          "address": "17",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "bit i = physical E-Stop button i pressed, from the safety relay's monitoring contacts (bit0 local control panel, bit1 line entry, bit2 line exit — config.safety.eStopButtons)."
+        },
+        "t_Counts_LaneA": {
+          "id": "t_Counts_LaneA",
+          "name": "Counts.LaneA",
+          "label": "Counts.LaneA",
+          "type": "UInt16",
+          "address": "18",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Accepted containers sorted to lane A (config.sort.lanes[0]) (wraps)."
+        },
+        "t_Counts_LaneB": {
+          "id": "t_Counts_LaneB",
+          "name": "Counts.LaneB",
+          "label": "Counts.LaneB",
+          "type": "UInt16",
+          "address": "19",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Accepted containers sorted to lane B (config.sort.lanes[1]) (wraps)."
+        },
+        "t_Sys_FaultCode": {
+          "id": "t_Sys_FaultCode",
+          "name": "Sys.FaultCode",
+          "label": "Sys.FaultCode",
+          "type": "UInt16",
+          "address": "20",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "First latched station fault, 0 = none: 1 labeler, 2 scanner, 3 arm servo, 4 arm could not pick a lid, 5 arm dropped the lid, 6 sort sensor, 7 scanner node offline, 8 station node offline. Cleared by RESET once the cause is gone."
+        },
+        "t_Tank1_LevelMl": {
+          "id": "t_Tank1_LevelMl",
+          "name": "Tank1.LevelMl",
+          "label": "Tank1.LevelMl",
+          "type": "UInt16",
+          "address": "21",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Measured level (from field node or analog input)."
+        },
+        "t_Tank1_CapacityMl": {
+          "id": "t_Tank1_CapacityMl",
+          "name": "Tank1.CapacityMl",
+          "label": "Tank1.CapacityMl",
+          "type": "UInt16",
+          "address": "22",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Usable capacity."
+        },
+        "t_Tank1_Flags": {
+          "id": "t_Tank1_Flags",
+          "name": "Tank1.Flags",
+          "label": "Tank1.Flags",
+          "type": "UInt16",
+          "address": "23",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "bit0 ENABLED, bit1 REFILLING, bit2 LOW."
+        },
+        "t_Tank1_RefillThresholdMl": {
+          "id": "t_Tank1_RefillThresholdMl",
+          "name": "Tank1.RefillThresholdMl",
+          "label": "Tank1.RefillThresholdMl",
+          "type": "UInt16",
+          "address": "24",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Auto-refill starts below this level."
+        },
+        "t_Tank1_DispenseRate": {
+          "id": "t_Tank1_DispenseRate",
+          "name": "Tank1.DispenseRate",
+          "label": "Tank1.DispenseRate",
+          "type": "UInt16",
+          "address": "25",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Calibrated flow through the valve at ValveOpeningPct."
+        },
+        "t_Tank1_ValveOpeningPct": {
+          "id": "t_Tank1_ValveOpeningPct",
+          "name": "Tank1.ValveOpeningPct",
+          "label": "Tank1.ValveOpeningPct",
+          "type": "UInt16",
+          "address": "26",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Proportional valve opening while dispensing (drives AO_Valve_T<k>_Angle)."
+        },
+        "t_Tank2_LevelMl": {
+          "id": "t_Tank2_LevelMl",
+          "name": "Tank2.LevelMl",
+          "label": "Tank2.LevelMl",
+          "type": "UInt16",
+          "address": "27",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank2_CapacityMl": {
+          "id": "t_Tank2_CapacityMl",
+          "name": "Tank2.CapacityMl",
+          "label": "Tank2.CapacityMl",
+          "type": "UInt16",
+          "address": "28",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank2_Flags": {
+          "id": "t_Tank2_Flags",
+          "name": "Tank2.Flags",
+          "label": "Tank2.Flags",
+          "type": "UInt16",
+          "address": "29",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank2_RefillThresholdMl": {
+          "id": "t_Tank2_RefillThresholdMl",
+          "name": "Tank2.RefillThresholdMl",
+          "label": "Tank2.RefillThresholdMl",
+          "type": "UInt16",
+          "address": "30",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank2_DispenseRate": {
+          "id": "t_Tank2_DispenseRate",
+          "name": "Tank2.DispenseRate",
+          "label": "Tank2.DispenseRate",
+          "type": "UInt16",
+          "address": "31",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank2_ValveOpeningPct": {
+          "id": "t_Tank2_ValveOpeningPct",
+          "name": "Tank2.ValveOpeningPct",
+          "label": "Tank2.ValveOpeningPct",
+          "type": "UInt16",
+          "address": "32",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank3_LevelMl": {
+          "id": "t_Tank3_LevelMl",
+          "name": "Tank3.LevelMl",
+          "label": "Tank3.LevelMl",
+          "type": "UInt16",
+          "address": "33",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank3_CapacityMl": {
+          "id": "t_Tank3_CapacityMl",
+          "name": "Tank3.CapacityMl",
+          "label": "Tank3.CapacityMl",
+          "type": "UInt16",
+          "address": "34",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank3_Flags": {
+          "id": "t_Tank3_Flags",
+          "name": "Tank3.Flags",
+          "label": "Tank3.Flags",
+          "type": "UInt16",
+          "address": "35",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank3_RefillThresholdMl": {
+          "id": "t_Tank3_RefillThresholdMl",
+          "name": "Tank3.RefillThresholdMl",
+          "label": "Tank3.RefillThresholdMl",
+          "type": "UInt16",
+          "address": "36",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank3_DispenseRate": {
+          "id": "t_Tank3_DispenseRate",
+          "name": "Tank3.DispenseRate",
+          "label": "Tank3.DispenseRate",
+          "type": "UInt16",
+          "address": "37",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank3_ValveOpeningPct": {
+          "id": "t_Tank3_ValveOpeningPct",
+          "name": "Tank3.ValveOpeningPct",
+          "label": "Tank3.ValveOpeningPct",
+          "type": "UInt16",
+          "address": "38",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank4_LevelMl": {
+          "id": "t_Tank4_LevelMl",
+          "name": "Tank4.LevelMl",
+          "label": "Tank4.LevelMl",
+          "type": "UInt16",
+          "address": "39",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank4_CapacityMl": {
+          "id": "t_Tank4_CapacityMl",
+          "name": "Tank4.CapacityMl",
+          "label": "Tank4.CapacityMl",
+          "type": "UInt16",
+          "address": "40",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank4_Flags": {
+          "id": "t_Tank4_Flags",
+          "name": "Tank4.Flags",
+          "label": "Tank4.Flags",
+          "type": "UInt16",
+          "address": "41",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank4_RefillThresholdMl": {
+          "id": "t_Tank4_RefillThresholdMl",
+          "name": "Tank4.RefillThresholdMl",
+          "label": "Tank4.RefillThresholdMl",
+          "type": "UInt16",
+          "address": "42",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank4_DispenseRate": {
+          "id": "t_Tank4_DispenseRate",
+          "name": "Tank4.DispenseRate",
+          "label": "Tank4.DispenseRate",
+          "type": "UInt16",
+          "address": "43",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank4_ValveOpeningPct": {
+          "id": "t_Tank4_ValveOpeningPct",
+          "name": "Tank4.ValveOpeningPct",
+          "label": "Tank4.ValveOpeningPct",
+          "type": "UInt16",
+          "address": "44",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank5_LevelMl": {
+          "id": "t_Tank5_LevelMl",
+          "name": "Tank5.LevelMl",
+          "label": "Tank5.LevelMl",
+          "type": "UInt16",
+          "address": "45",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank5_CapacityMl": {
+          "id": "t_Tank5_CapacityMl",
+          "name": "Tank5.CapacityMl",
+          "label": "Tank5.CapacityMl",
+          "type": "UInt16",
+          "address": "46",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank5_Flags": {
+          "id": "t_Tank5_Flags",
+          "name": "Tank5.Flags",
+          "label": "Tank5.Flags",
+          "type": "UInt16",
+          "address": "47",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank5_RefillThresholdMl": {
+          "id": "t_Tank5_RefillThresholdMl",
+          "name": "Tank5.RefillThresholdMl",
+          "label": "Tank5.RefillThresholdMl",
+          "type": "UInt16",
+          "address": "48",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank5_DispenseRate": {
+          "id": "t_Tank5_DispenseRate",
+          "name": "Tank5.DispenseRate",
+          "label": "Tank5.DispenseRate",
+          "type": "UInt16",
+          "address": "49",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank5_ValveOpeningPct": {
+          "id": "t_Tank5_ValveOpeningPct",
+          "name": "Tank5.ValveOpeningPct",
+          "label": "Tank5.ValveOpeningPct",
+          "type": "UInt16",
+          "address": "50",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank6_LevelMl": {
+          "id": "t_Tank6_LevelMl",
+          "name": "Tank6.LevelMl",
+          "label": "Tank6.LevelMl",
+          "type": "UInt16",
+          "address": "51",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank6_CapacityMl": {
+          "id": "t_Tank6_CapacityMl",
+          "name": "Tank6.CapacityMl",
+          "label": "Tank6.CapacityMl",
+          "type": "UInt16",
+          "address": "52",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank6_Flags": {
+          "id": "t_Tank6_Flags",
+          "name": "Tank6.Flags",
+          "label": "Tank6.Flags",
+          "type": "UInt16",
+          "address": "53",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank6_RefillThresholdMl": {
+          "id": "t_Tank6_RefillThresholdMl",
+          "name": "Tank6.RefillThresholdMl",
+          "label": "Tank6.RefillThresholdMl",
+          "type": "UInt16",
+          "address": "54",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank6_DispenseRate": {
+          "id": "t_Tank6_DispenseRate",
+          "name": "Tank6.DispenseRate",
+          "label": "Tank6.DispenseRate",
+          "type": "UInt16",
+          "address": "55",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank6_ValveOpeningPct": {
+          "id": "t_Tank6_ValveOpeningPct",
+          "name": "Tank6.ValveOpeningPct",
+          "label": "Tank6.ValveOpeningPct",
+          "type": "UInt16",
+          "address": "56",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank7_LevelMl": {
+          "id": "t_Tank7_LevelMl",
+          "name": "Tank7.LevelMl",
+          "label": "Tank7.LevelMl",
+          "type": "UInt16",
+          "address": "57",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank7_CapacityMl": {
+          "id": "t_Tank7_CapacityMl",
+          "name": "Tank7.CapacityMl",
+          "label": "Tank7.CapacityMl",
+          "type": "UInt16",
+          "address": "58",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank7_Flags": {
+          "id": "t_Tank7_Flags",
+          "name": "Tank7.Flags",
+          "label": "Tank7.Flags",
+          "type": "UInt16",
+          "address": "59",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank7_RefillThresholdMl": {
+          "id": "t_Tank7_RefillThresholdMl",
+          "name": "Tank7.RefillThresholdMl",
+          "label": "Tank7.RefillThresholdMl",
+          "type": "UInt16",
+          "address": "60",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank7_DispenseRate": {
+          "id": "t_Tank7_DispenseRate",
+          "name": "Tank7.DispenseRate",
+          "label": "Tank7.DispenseRate",
+          "type": "UInt16",
+          "address": "61",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank7_ValveOpeningPct": {
+          "id": "t_Tank7_ValveOpeningPct",
+          "name": "Tank7.ValveOpeningPct",
+          "label": "Tank7.ValveOpeningPct",
+          "type": "UInt16",
+          "address": "62",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank8_LevelMl": {
+          "id": "t_Tank8_LevelMl",
+          "name": "Tank8.LevelMl",
+          "label": "Tank8.LevelMl",
+          "type": "UInt16",
+          "address": "63",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank8_CapacityMl": {
+          "id": "t_Tank8_CapacityMl",
+          "name": "Tank8.CapacityMl",
+          "label": "Tank8.CapacityMl",
+          "type": "UInt16",
+          "address": "64",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank8_Flags": {
+          "id": "t_Tank8_Flags",
+          "name": "Tank8.Flags",
+          "label": "Tank8.Flags",
+          "type": "UInt16",
+          "address": "65",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank8_RefillThresholdMl": {
+          "id": "t_Tank8_RefillThresholdMl",
+          "name": "Tank8.RefillThresholdMl",
+          "label": "Tank8.RefillThresholdMl",
+          "type": "UInt16",
+          "address": "66",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank8_DispenseRate": {
+          "id": "t_Tank8_DispenseRate",
+          "name": "Tank8.DispenseRate",
+          "label": "Tank8.DispenseRate",
+          "type": "UInt16",
+          "address": "67",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Tank8_ValveOpeningPct": {
+          "id": "t_Tank8_ValveOpeningPct",
+          "name": "Tank8.ValveOpeningPct",
+          "label": "Tank8.ValveOpeningPct",
+          "type": "UInt16",
+          "address": "68",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container1_Id": {
+          "id": "t_Container1_Id",
+          "name": "Container1.Id",
+          "label": "Container1.Id",
+          "type": "UInt16",
+          "address": "101",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Container id, 0 = empty slot."
+        },
+        "t_Container1_Status": {
+          "id": "t_Container1_Status",
+          "name": "Container1.Status",
+          "label": "Container1.Status",
+          "type": "UInt16",
+          "address": "102",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "0 none, 1 scan, 2 scan-rejected, 3 label, 11..18 fill at bay n (10+n), 20 mix, 21 sort sensor / reject diverter, 22 accepted to lane A, 23 rejected, 24 capping arm, 26 sort diverter, 27 accepted to lane B (25 reserved)."
+        },
+        "t_Container1_FillMl": {
+          "id": "t_Container1_FillMl",
+          "name": "Container1.FillMl",
+          "label": "Container1.FillMl",
+          "type": "UInt16",
+          "address": "103",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Dispensed so far."
+        },
+        "t_Container1_TargetMl": {
+          "id": "t_Container1_TargetMl",
+          "name": "Container1.TargetMl",
+          "label": "Container1.TargetMl",
+          "type": "UInt16",
+          "address": "104",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Recipe total."
+        },
+        "t_Container2_Id": {
+          "id": "t_Container2_Id",
+          "name": "Container2.Id",
+          "label": "Container2.Id",
+          "type": "UInt16",
+          "address": "106",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container2_Status": {
+          "id": "t_Container2_Status",
+          "name": "Container2.Status",
+          "label": "Container2.Status",
+          "type": "UInt16",
+          "address": "107",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container2_FillMl": {
+          "id": "t_Container2_FillMl",
+          "name": "Container2.FillMl",
+          "label": "Container2.FillMl",
+          "type": "UInt16",
+          "address": "108",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container2_TargetMl": {
+          "id": "t_Container2_TargetMl",
+          "name": "Container2.TargetMl",
+          "label": "Container2.TargetMl",
+          "type": "UInt16",
+          "address": "109",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container3_Id": {
+          "id": "t_Container3_Id",
+          "name": "Container3.Id",
+          "label": "Container3.Id",
+          "type": "UInt16",
+          "address": "111",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container3_Status": {
+          "id": "t_Container3_Status",
+          "name": "Container3.Status",
+          "label": "Container3.Status",
+          "type": "UInt16",
+          "address": "112",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container3_FillMl": {
+          "id": "t_Container3_FillMl",
+          "name": "Container3.FillMl",
+          "label": "Container3.FillMl",
+          "type": "UInt16",
+          "address": "113",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container3_TargetMl": {
+          "id": "t_Container3_TargetMl",
+          "name": "Container3.TargetMl",
+          "label": "Container3.TargetMl",
+          "type": "UInt16",
+          "address": "114",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container4_Id": {
+          "id": "t_Container4_Id",
+          "name": "Container4.Id",
+          "label": "Container4.Id",
+          "type": "UInt16",
+          "address": "116",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container4_Status": {
+          "id": "t_Container4_Status",
+          "name": "Container4.Status",
+          "label": "Container4.Status",
+          "type": "UInt16",
+          "address": "117",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container4_FillMl": {
+          "id": "t_Container4_FillMl",
+          "name": "Container4.FillMl",
+          "label": "Container4.FillMl",
+          "type": "UInt16",
+          "address": "118",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container4_TargetMl": {
+          "id": "t_Container4_TargetMl",
+          "name": "Container4.TargetMl",
+          "label": "Container4.TargetMl",
+          "type": "UInt16",
+          "address": "119",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container5_Id": {
+          "id": "t_Container5_Id",
+          "name": "Container5.Id",
+          "label": "Container5.Id",
+          "type": "UInt16",
+          "address": "121",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container5_Status": {
+          "id": "t_Container5_Status",
+          "name": "Container5.Status",
+          "label": "Container5.Status",
+          "type": "UInt16",
+          "address": "122",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container5_FillMl": {
+          "id": "t_Container5_FillMl",
+          "name": "Container5.FillMl",
+          "label": "Container5.FillMl",
+          "type": "UInt16",
+          "address": "123",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container5_TargetMl": {
+          "id": "t_Container5_TargetMl",
+          "name": "Container5.TargetMl",
+          "label": "Container5.TargetMl",
+          "type": "UInt16",
+          "address": "124",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container6_Id": {
+          "id": "t_Container6_Id",
+          "name": "Container6.Id",
+          "label": "Container6.Id",
+          "type": "UInt16",
+          "address": "126",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container6_Status": {
+          "id": "t_Container6_Status",
+          "name": "Container6.Status",
+          "label": "Container6.Status",
+          "type": "UInt16",
+          "address": "127",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container6_FillMl": {
+          "id": "t_Container6_FillMl",
+          "name": "Container6.FillMl",
+          "label": "Container6.FillMl",
+          "type": "UInt16",
+          "address": "128",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container6_TargetMl": {
+          "id": "t_Container6_TargetMl",
+          "name": "Container6.TargetMl",
+          "label": "Container6.TargetMl",
+          "type": "UInt16",
+          "address": "129",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container7_Id": {
+          "id": "t_Container7_Id",
+          "name": "Container7.Id",
+          "label": "Container7.Id",
+          "type": "UInt16",
+          "address": "131",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container7_Status": {
+          "id": "t_Container7_Status",
+          "name": "Container7.Status",
+          "label": "Container7.Status",
+          "type": "UInt16",
+          "address": "132",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container7_FillMl": {
+          "id": "t_Container7_FillMl",
+          "name": "Container7.FillMl",
+          "label": "Container7.FillMl",
+          "type": "UInt16",
+          "address": "133",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container7_TargetMl": {
+          "id": "t_Container7_TargetMl",
+          "name": "Container7.TargetMl",
+          "label": "Container7.TargetMl",
+          "type": "UInt16",
+          "address": "134",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container8_Id": {
+          "id": "t_Container8_Id",
+          "name": "Container8.Id",
+          "label": "Container8.Id",
+          "type": "UInt16",
+          "address": "136",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container8_Status": {
+          "id": "t_Container8_Status",
+          "name": "Container8.Status",
+          "label": "Container8.Status",
+          "type": "UInt16",
+          "address": "137",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container8_FillMl": {
+          "id": "t_Container8_FillMl",
+          "name": "Container8.FillMl",
+          "label": "Container8.FillMl",
+          "type": "UInt16",
+          "address": "138",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Container8_TargetMl": {
+          "id": "t_Container8_TargetMl",
+          "name": "Container8.TargetMl",
+          "label": "Container8.TargetMl",
+          "type": "UInt16",
+          "address": "139",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Events_LastSeq": {
+          "id": "t_Events_LastSeq",
+          "name": "Events.LastSeq",
+          "label": "Events.LastSeq",
+          "type": "UInt16",
+          "address": "201",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Sequence number of the newest event (wraps; 0 = none)."
+        },
+        "t_Event1_Seq": {
+          "id": "t_Event1_Seq",
+          "name": "Event1.Seq",
+          "label": "Event1.Seq",
+          "type": "UInt16",
+          "address": "202",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Entries are newest first; Event1 is the newest."
+        },
+        "t_Event1_Code": {
+          "id": "t_Event1_Code",
+          "name": "Event1.Code",
+          "label": "Event1.Code",
+          "type": "UInt16",
+          "address": "203",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "See the event code table."
+        },
+        "t_Event1_Arg1": {
+          "id": "t_Event1_Arg1",
+          "name": "Event1.Arg1",
+          "label": "Event1.Arg1",
+          "type": "UInt16",
+          "address": "204",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event1_Arg2": {
+          "id": "t_Event1_Arg2",
+          "name": "Event1.Arg2",
+          "label": "Event1.Arg2",
+          "type": "UInt16",
+          "address": "205",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event2_Seq": {
+          "id": "t_Event2_Seq",
+          "name": "Event2.Seq",
+          "label": "Event2.Seq",
+          "type": "UInt16",
+          "address": "206",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event2_Code": {
+          "id": "t_Event2_Code",
+          "name": "Event2.Code",
+          "label": "Event2.Code",
+          "type": "UInt16",
+          "address": "207",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event2_Arg1": {
+          "id": "t_Event2_Arg1",
+          "name": "Event2.Arg1",
+          "label": "Event2.Arg1",
+          "type": "UInt16",
+          "address": "208",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event2_Arg2": {
+          "id": "t_Event2_Arg2",
+          "name": "Event2.Arg2",
+          "label": "Event2.Arg2",
+          "type": "UInt16",
+          "address": "209",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event3_Seq": {
+          "id": "t_Event3_Seq",
+          "name": "Event3.Seq",
+          "label": "Event3.Seq",
+          "type": "UInt16",
+          "address": "210",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event3_Code": {
+          "id": "t_Event3_Code",
+          "name": "Event3.Code",
+          "label": "Event3.Code",
+          "type": "UInt16",
+          "address": "211",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event3_Arg1": {
+          "id": "t_Event3_Arg1",
+          "name": "Event3.Arg1",
+          "label": "Event3.Arg1",
+          "type": "UInt16",
+          "address": "212",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event3_Arg2": {
+          "id": "t_Event3_Arg2",
+          "name": "Event3.Arg2",
+          "label": "Event3.Arg2",
+          "type": "UInt16",
+          "address": "213",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event4_Seq": {
+          "id": "t_Event4_Seq",
+          "name": "Event4.Seq",
+          "label": "Event4.Seq",
+          "type": "UInt16",
+          "address": "214",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event4_Code": {
+          "id": "t_Event4_Code",
+          "name": "Event4.Code",
+          "label": "Event4.Code",
+          "type": "UInt16",
+          "address": "215",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event4_Arg1": {
+          "id": "t_Event4_Arg1",
+          "name": "Event4.Arg1",
+          "label": "Event4.Arg1",
+          "type": "UInt16",
+          "address": "216",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event4_Arg2": {
+          "id": "t_Event4_Arg2",
+          "name": "Event4.Arg2",
+          "label": "Event4.Arg2",
+          "type": "UInt16",
+          "address": "217",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event5_Seq": {
+          "id": "t_Event5_Seq",
+          "name": "Event5.Seq",
+          "label": "Event5.Seq",
+          "type": "UInt16",
+          "address": "218",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event5_Code": {
+          "id": "t_Event5_Code",
+          "name": "Event5.Code",
+          "label": "Event5.Code",
+          "type": "UInt16",
+          "address": "219",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event5_Arg1": {
+          "id": "t_Event5_Arg1",
+          "name": "Event5.Arg1",
+          "label": "Event5.Arg1",
+          "type": "UInt16",
+          "address": "220",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event5_Arg2": {
+          "id": "t_Event5_Arg2",
+          "name": "Event5.Arg2",
+          "label": "Event5.Arg2",
+          "type": "UInt16",
+          "address": "221",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event6_Seq": {
+          "id": "t_Event6_Seq",
+          "name": "Event6.Seq",
+          "label": "Event6.Seq",
+          "type": "UInt16",
+          "address": "222",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event6_Code": {
+          "id": "t_Event6_Code",
+          "name": "Event6.Code",
+          "label": "Event6.Code",
+          "type": "UInt16",
+          "address": "223",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event6_Arg1": {
+          "id": "t_Event6_Arg1",
+          "name": "Event6.Arg1",
+          "label": "Event6.Arg1",
+          "type": "UInt16",
+          "address": "224",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event6_Arg2": {
+          "id": "t_Event6_Arg2",
+          "name": "Event6.Arg2",
+          "label": "Event6.Arg2",
+          "type": "UInt16",
+          "address": "225",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event7_Seq": {
+          "id": "t_Event7_Seq",
+          "name": "Event7.Seq",
+          "label": "Event7.Seq",
+          "type": "UInt16",
+          "address": "226",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event7_Code": {
+          "id": "t_Event7_Code",
+          "name": "Event7.Code",
+          "label": "Event7.Code",
+          "type": "UInt16",
+          "address": "227",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event7_Arg1": {
+          "id": "t_Event7_Arg1",
+          "name": "Event7.Arg1",
+          "label": "Event7.Arg1",
+          "type": "UInt16",
+          "address": "228",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event7_Arg2": {
+          "id": "t_Event7_Arg2",
+          "name": "Event7.Arg2",
+          "label": "Event7.Arg2",
+          "type": "UInt16",
+          "address": "229",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event8_Seq": {
+          "id": "t_Event8_Seq",
+          "name": "Event8.Seq",
+          "label": "Event8.Seq",
+          "type": "UInt16",
+          "address": "230",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event8_Code": {
+          "id": "t_Event8_Code",
+          "name": "Event8.Code",
+          "label": "Event8.Code",
+          "type": "UInt16",
+          "address": "231",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event8_Arg1": {
+          "id": "t_Event8_Arg1",
+          "name": "Event8.Arg1",
+          "label": "Event8.Arg1",
+          "type": "UInt16",
+          "address": "232",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Event8_Arg2": {
+          "id": "t_Event8_Arg2",
+          "name": "Event8.Arg2",
+          "label": "Event8.Arg2",
+          "type": "UInt16",
+          "address": "233",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Scan_Request": {
+          "id": "t_Scan_Request",
+          "name": "Scan.Request",
+          "label": "Scan.Request",
+          "type": "UInt16",
+          "address": "301",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Container id held at SCAN waiting for a read, 0 = none. A new non-zero value tells the scanner node to trigger one read."
+        },
+        "t_Scan_Done": {
+          "id": "t_Scan_Done",
+          "name": "Scan.Done",
+          "label": "Scan.Done",
+          "type": "UInt16",
+          "address": "302",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Scanner node writes the container id after Status, Length and Text (always last). The PLC acts when Done = Request."
+        },
+        "t_Scan_Status": {
+          "id": "t_Scan_Status",
+          "name": "Scan.Status",
+          "label": "Scan.Status",
+          "type": "UInt16",
+          "address": "303",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "0 OK, 1 NO_READ (nothing within the read timeout), 2 TOO_LONG (text truncated)."
+        },
+        "t_Scan_Length": {
+          "id": "t_Scan_Length",
+          "name": "Scan.Length",
+          "label": "Scan.Length",
+          "type": "UInt16",
+          "address": "304",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Characters in Scan.Text (0..64)."
+        },
+        "t_Scan_ParseResult": {
+          "id": "t_Scan_ParseResult",
+          "name": "Scan.ParseResult",
+          "label": "Scan.ParseResult",
+          "type": "UInt16",
+          "address": "337",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "PLC's validation of the text: 0 OK, 1 BAD_HEADER, 2 BAD_TOTAL, 3 TANK_COUNT_MISMATCH, 4 NEGATIVE_VOLUME, 5 VOLUME_SUM_MISMATCH, 6 MALFORMED, 7 NO_READ. Non-zero → the container rides through unfilled and the reject diverter rejects it."
+        },
+        "t_Scan_ResultId": {
+          "id": "t_Scan_ResultId",
+          "name": "Scan.ResultId",
+          "label": "Scan.ResultId",
+          "type": "UInt16",
+          "address": "338",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Container id that Scan.ParseResult and Scan.TotalMl belong to."
+        },
+        "t_Scan_TotalMl": {
+          "id": "t_Scan_TotalMl",
+          "name": "Scan.TotalMl",
+          "label": "Scan.TotalMl",
+          "type": "UInt16",
+          "address": "339",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Recipe total the PLC decoded (0 when rejected)."
+        },
+        "t_Field_Tank1LevelMl": {
+          "id": "t_Field_Tank1LevelMl",
+          "name": "Field.Tank1LevelMl",
+          "label": "Field.Tank1LevelMl",
+          "type": "UInt16",
+          "address": "401",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Written by the ESP32 tank-level node; PLC validates range and heartbeat before using it."
+        },
+        "t_Field_Tank2LevelMl": {
+          "id": "t_Field_Tank2LevelMl",
+          "name": "Field.Tank2LevelMl",
+          "label": "Field.Tank2LevelMl",
+          "type": "UInt16",
+          "address": "402",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Field_Tank3LevelMl": {
+          "id": "t_Field_Tank3LevelMl",
+          "name": "Field.Tank3LevelMl",
+          "label": "Field.Tank3LevelMl",
+          "type": "UInt16",
+          "address": "403",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Field_Tank4LevelMl": {
+          "id": "t_Field_Tank4LevelMl",
+          "name": "Field.Tank4LevelMl",
+          "label": "Field.Tank4LevelMl",
+          "type": "UInt16",
+          "address": "404",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Field_Tank5LevelMl": {
+          "id": "t_Field_Tank5LevelMl",
+          "name": "Field.Tank5LevelMl",
+          "label": "Field.Tank5LevelMl",
+          "type": "UInt16",
+          "address": "405",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Field_Tank6LevelMl": {
+          "id": "t_Field_Tank6LevelMl",
+          "name": "Field.Tank6LevelMl",
+          "label": "Field.Tank6LevelMl",
+          "type": "UInt16",
+          "address": "406",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Field_Tank7LevelMl": {
+          "id": "t_Field_Tank7LevelMl",
+          "name": "Field.Tank7LevelMl",
+          "label": "Field.Tank7LevelMl",
+          "type": "UInt16",
+          "address": "407",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Field_Tank8LevelMl": {
+          "id": "t_Field_Tank8LevelMl",
+          "name": "Field.Tank8LevelMl",
+          "label": "Field.Tank8LevelMl",
+          "type": "UInt16",
+          "address": "408",
+          "memaddress": "400000",
+          "divisor": 10,
+          "format": 1,
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": ""
+        },
+        "t_Field_TankNodeHeartbeat": {
+          "id": "t_Field_TankNodeHeartbeat",
+          "name": "Field.TankNodeHeartbeat",
+          "label": "Field.TankNodeHeartbeat",
+          "type": "UInt16",
+          "address": "411",
+          "memaddress": "400000",
+          "description": "ESP32 tank node increments ≥ 1 Hz."
+        },
+        "t_Field_ScannerNodeHeartbeat": {
+          "id": "t_Field_ScannerNodeHeartbeat",
+          "name": "Field.ScannerNodeHeartbeat",
+          "label": "Field.ScannerNodeHeartbeat",
+          "type": "UInt16",
+          "address": "412",
+          "memaddress": "400000",
+          "description": "ESP32 scanner node (labeling + barcode scanner) increments ≥ 1 Hz."
+        },
+        "t_Field_StationNodeHeartbeat": {
+          "id": "t_Field_StationNodeHeartbeat",
+          "name": "Field.StationNodeHeartbeat",
+          "label": "Field.StationNodeHeartbeat",
+          "type": "UInt16",
+          "address": "413",
+          "memaddress": "400000",
+          "description": "ESP32 station node (robotic arm + sort sensor) increments ≥ 1 Hz."
+        },
+        "t_Station_RunPermit": {
+          "id": "t_Station_RunPermit",
+          "name": "Station.RunPermit",
+          "label": "Station.RunPermit",
+          "type": "UInt16",
+          "address": "421",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "1 = line running with the safety circuit closed. ESP32 nodes must stop their actuators when 0 or when Sys.PlcHeartbeat stops changing for 1 s. Not a safety function: actuator power still goes through the safety relay."
+        },
+        "t_Station_LabelRequest": {
+          "id": "t_Station_LabelRequest",
+          "name": "Station.LabelRequest",
+          "label": "Station.LabelRequest",
+          "type": "UInt16",
+          "address": "422",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Container id held at LABEL waiting for its label, 0 = none."
+        },
+        "t_Station_LabelDone": {
+          "id": "t_Station_LabelDone",
+          "name": "Station.LabelDone",
+          "label": "Station.LabelDone",
+          "type": "UInt16",
+          "address": "423",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Scanner node writes the container id once the label is applied."
+        },
+        "t_Station_ArmCmd": {
+          "id": "t_Station_ArmCmd",
+          "name": "Station.ArmCmd",
+          "label": "Station.ArmCmd",
+          "type": "UInt16",
+          "address": "424",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Robotic arm command: 0 none, 1 HOME, 2 PICK_LID (lift the top lid from the magazine), 3 PLACE_LID (place the held lid on the container at CAP, press it down, release, return HOME). Written before ArmCmdSeq."
+        },
+        "t_Station_ArmCmdSeq": {
+          "id": "t_Station_ArmCmdSeq",
+          "name": "Station.ArmCmdSeq",
+          "label": "Station.ArmCmdSeq",
+          "type": "UInt16",
+          "address": "425",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "PLC increments (1..65535, skips 0) to issue ArmCmd. The station node runs each sequence number once."
+        },
+        "t_Station_ArmDoneSeq": {
+          "id": "t_Station_ArmDoneSeq",
+          "name": "Station.ArmDoneSeq",
+          "label": "Station.ArmDoneSeq",
+          "type": "UInt16",
+          "address": "426",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Station node copies ArmCmdSeq here when the command has finished, after writing ArmResult."
+        },
+        "t_Station_ArmResult": {
+          "id": "t_Station_ArmResult",
+          "name": "Station.ArmResult",
+          "label": "Station.ArmResult",
+          "type": "UInt16",
+          "address": "427",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "1 OK, 2 NO_LID (gripper closed on nothing), 3 LID_LOST, 4 SERVO_ERROR, 5 ABORTED (RunPermit dropped mid-move), 6 REFUSED (not homed / unknown command). The PLC decides retries and faults."
+        },
+        "t_Station_ArmStatus": {
+          "id": "t_Station_ArmStatus",
+          "name": "Station.ArmStatus",
+          "label": "Station.ArmStatus",
+          "type": "UInt16",
+          "address": "428",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "bit0 HOMED, bit1 BUSY, bit2 LID_HELD. Kept current by the station node."
+        },
+        "t_Station_SortRequest": {
+          "id": "t_Station_SortRequest",
+          "name": "Station.SortRequest",
+          "label": "Station.SortRequest",
+          "type": "UInt16",
+          "address": "429",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Container id at the sort sensor (QC) waiting for a height reading, 0 = none."
+        },
+        "t_Station_SortDone": {
+          "id": "t_Station_SortDone",
+          "name": "Station.SortDone",
+          "label": "Station.SortDone",
+          "type": "UInt16",
+          "address": "430",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Station node writes the container id after SortHeightMm."
+        },
+        "t_Station_SortHeightMm": {
+          "id": "t_Station_SortHeightMm",
+          "name": "Station.SortHeightMm",
+          "label": "Station.SortHeightMm",
+          "type": "UInt16",
+          "address": "431",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Measured bottle height, 0 = no valid reading. The PLC classifies the bottle type (config.sort) and rejects a mismatch with the recipe (BOTTLE_TYPE_MISMATCH)."
+        },
+        "t_Station_ScannerNodeFaults": {
+          "id": "t_Station_ScannerNodeFaults",
+          "name": "Station.ScannerNodeFaults",
+          "label": "Station.ScannerNodeFaults",
+          "type": "UInt16",
+          "address": "432",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Written only by the scanner node: bit0 labeler, bit1 scanner module not answering. Any bit → the PLC latches a fault and stops the line."
+        },
+        "t_Station_StationNodeFaults": {
+          "id": "t_Station_StationNodeFaults",
+          "name": "Station.StationNodeFaults",
+          "label": "Station.StationNodeFaults",
+          "type": "UInt16",
+          "address": "433",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "Written only by the station node: bit0 arm servo bus, bit1 sort sensor. Same handling."
+        },
+        "t_Sim_PhysicalEStopMask": {
+          "id": "t_Sim_PhysicalEStopMask",
+          "name": "Sim.PhysicalEStopMask",
+          "label": "Sim.PhysicalEStopMask",
+          "type": "UInt16",
+          "address": "451",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "SIMULATION ONLY: drives the physical E-Stop inputs. Ignored unless LineState.SIMULATION = 1. A physical PLC must never act on it with real outputs powered."
+        },
+        "t_Sim_LocalMode": {
+          "id": "t_Sim_LocalMode",
+          "name": "Sim.LocalMode",
+          "label": "Sim.LocalMode",
+          "type": "UInt16",
+          "address": "452",
+          "memaddress": "400000",
+          "daq": {
+            "enabled": true,
+            "changed": true,
+            "interval": 60
+          },
+          "description": "SIMULATION ONLY: Local/Remote key switch (1 = LOCAL)."
+        }
+      }
+    }
+  },
+  "hmi": {
+    "views": [
+      {
+        "id": "v_line_overview",
+        "name": "Line overview",
+        "type": "svg",
+        "profile": {
+          "width": 1280,
+          "height": 760,
+          "bkcolor": "#10151c",
+          "margin": 10,
+          "align": "middleCenter"
+        },
+        "items": {
+          "GSE_0006": {
+            "id": "GSE_0006",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Running",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Sys_LineState",
+              "bitmask": 1,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#43d17a"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0009": {
+            "id": "GSE_0009",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Safety circuit closed",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Sys_LineState",
+              "bitmask": 4,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#43d17a"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0012": {
+            "id": "GSE_0012",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "E-Stop active",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Sys_LineState",
+              "bitmask": 2,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#ff4d4f"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0015": {
+            "id": "GSE_0015",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Station fault latched",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Sys_LineState",
+              "bitmask": 8,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#ff4d4f"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0018": {
+            "id": "GSE_0018",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Reset required",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Sys_LineState",
+              "bitmask": 128,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#ffb020"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0021": {
+            "id": "GSE_0021",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Local mode (HMI view-only)",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Sys_LineState",
+              "bitmask": 256,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#4aa3ff"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0024": {
+            "id": "GSE_0024",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Pi / HMI link",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Sys_LineState",
+              "bitmask": 16,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#43d17a"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0027": {
+            "id": "GSE_0027",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Simulation inputs",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Sys_LineState",
+              "bitmask": 1024,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#ffb020"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "VAL_0031": {
+            "id": "VAL_0031",
+            "type": "svg-ext-value",
+            "name": "Fault code",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Sys_FaultCode"
+            },
+            "label": "Value"
+          },
+          "VAL_0036": {
+            "id": "VAL_0036",
+            "type": "svg-ext-value",
+            "name": "Accepted",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Counts_Accepted"
+            },
+            "label": "Value"
+          },
+          "VAL_0039": {
+            "id": "VAL_0039",
+            "type": "svg-ext-value",
+            "name": "Rejected",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Counts_Rejected"
+            },
+            "label": "Value"
+          },
+          "VAL_0042": {
+            "id": "VAL_0042",
+            "type": "svg-ext-value",
+            "name": "Total",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Counts_Total"
+            },
+            "label": "Value"
+          },
+          "VAL_0045": {
+            "id": "VAL_0045",
+            "type": "svg-ext-value",
+            "name": "Sorted to lane A",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Counts_LaneA"
+            },
+            "label": "Value"
+          },
+          "VAL_0048": {
+            "id": "VAL_0048",
+            "type": "svg-ext-value",
+            "name": "Sorted to lane B",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Counts_LaneB"
+            },
+            "label": "Value"
+          },
+          "VAL_0051": {
+            "id": "VAL_0051",
+            "type": "svg-ext-value",
+            "name": "Throughput",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Perf_ThroughputCpm"
+            },
+            "label": "Value"
+          },
+          "VAL_0055": {
+            "id": "VAL_0055",
+            "type": "svg-ext-value",
+            "name": "OEE",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Oee_Overall"
+            },
+            "label": "Value"
+          },
+          "VAL_0058": {
+            "id": "VAL_0058",
+            "type": "svg-ext-value",
+            "name": "Containers on belt",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Sys_ActiveContainers"
+            },
+            "label": "Value"
+          },
+          "VAL_0061": {
+            "id": "VAL_0061",
+            "type": "svg-ext-value",
+            "name": "Uptime",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Sys_UptimeS"
+            },
+            "label": "Value"
+          },
+          "GSE_0066": {
+            "id": "GSE_0066",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Run permit to ESP32 nodes",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Station_RunPermit",
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#43d17a"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0069": {
+            "id": "GSE_0069",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Arm homed",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Station_ArmStatus",
+              "bitmask": 1,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#43d17a"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0072": {
+            "id": "GSE_0072",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Arm busy",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Station_ArmStatus",
+              "bitmask": 2,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#4aa3ff"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0075": {
+            "id": "GSE_0075",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Arm holding a lid",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Station_ArmStatus",
+              "bitmask": 4,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#43d17a"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "VAL_0079": {
+            "id": "VAL_0079",
+            "type": "svg-ext-value",
+            "name": "Arm command (1 home, 2 pick, 3 place)",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Station_ArmCmd"
+            },
+            "label": "Value"
+          },
+          "VAL_0082": {
+            "id": "VAL_0082",
+            "type": "svg-ext-value",
+            "name": "Arm result (1 OK … 6 refused)",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Station_ArmResult"
+            },
+            "label": "Value"
+          },
+          "VAL_0085": {
+            "id": "VAL_0085",
+            "type": "svg-ext-value",
+            "name": "Last scan: container / result",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Scan_ResultId"
+            },
+            "label": "Value"
+          },
+          "VAL_0088": {
+            "id": "VAL_0088",
+            "type": "svg-ext-value",
+            "name": "Sort height (mm)",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Station_SortHeightMm"
+            },
+            "label": "Value"
+          },
+          "VAL_0091": {
+            "id": "VAL_0091",
+            "type": "svg-ext-value",
+            "name": "Scan result",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Scan_ParseResult"
+            },
+            "label": "Value"
+          },
+          "VAL_0094": {
+            "id": "VAL_0094",
+            "type": "svg-ext-value",
+            "name": "Scanner node heartbeat",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Field_ScannerNodeHeartbeat"
+            },
+            "label": "Value"
+          },
+          "VAL_0096": {
+            "id": "VAL_0096",
+            "type": "svg-ext-value",
+            "name": "Station node heartbeat",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Field_StationNodeHeartbeat"
+            },
+            "label": "Value"
+          },
+          "GSE_0105": {
+            "id": "GSE_0105",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Tank 1 enabled",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank1_Flags",
+              "bitmask": 1,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#43d17a"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "VAL_0107": {
+            "id": "VAL_0107",
+            "type": "svg-ext-value",
+            "name": "Tank 1 level",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank1_LevelMl"
+            },
+            "label": "Value"
+          },
+          "VAL_0109": {
+            "id": "VAL_0109",
+            "type": "svg-ext-value",
+            "name": "Tank 1 valve",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank1_ValveOpeningPct"
+            },
+            "label": "Value"
+          },
+          "GSE_0111": {
+            "id": "GSE_0111",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Tank 1 low",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank1_Flags",
+              "bitmask": 4,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#ffb020"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0114": {
+            "id": "GSE_0114",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Tank 2 enabled",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank2_Flags",
+              "bitmask": 1,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#43d17a"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "VAL_0116": {
+            "id": "VAL_0116",
+            "type": "svg-ext-value",
+            "name": "Tank 2 level",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank2_LevelMl"
+            },
+            "label": "Value"
+          },
+          "VAL_0118": {
+            "id": "VAL_0118",
+            "type": "svg-ext-value",
+            "name": "Tank 2 valve",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank2_ValveOpeningPct"
+            },
+            "label": "Value"
+          },
+          "GSE_0120": {
+            "id": "GSE_0120",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Tank 2 low",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank2_Flags",
+              "bitmask": 4,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#ffb020"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0123": {
+            "id": "GSE_0123",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Tank 3 enabled",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank3_Flags",
+              "bitmask": 1,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#43d17a"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "VAL_0125": {
+            "id": "VAL_0125",
+            "type": "svg-ext-value",
+            "name": "Tank 3 level",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank3_LevelMl"
+            },
+            "label": "Value"
+          },
+          "VAL_0127": {
+            "id": "VAL_0127",
+            "type": "svg-ext-value",
+            "name": "Tank 3 valve",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank3_ValveOpeningPct"
+            },
+            "label": "Value"
+          },
+          "GSE_0129": {
+            "id": "GSE_0129",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Tank 3 low",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank3_Flags",
+              "bitmask": 4,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#ffb020"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0132": {
+            "id": "GSE_0132",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Tank 4 enabled",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank4_Flags",
+              "bitmask": 1,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#43d17a"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "VAL_0134": {
+            "id": "VAL_0134",
+            "type": "svg-ext-value",
+            "name": "Tank 4 level",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank4_LevelMl"
+            },
+            "label": "Value"
+          },
+          "VAL_0136": {
+            "id": "VAL_0136",
+            "type": "svg-ext-value",
+            "name": "Tank 4 valve",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank4_ValveOpeningPct"
+            },
+            "label": "Value"
+          },
+          "GSE_0138": {
+            "id": "GSE_0138",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Tank 4 low",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank4_Flags",
+              "bitmask": 4,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#ffb020"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0141": {
+            "id": "GSE_0141",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Tank 5 enabled",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank5_Flags",
+              "bitmask": 1,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#43d17a"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "VAL_0143": {
+            "id": "VAL_0143",
+            "type": "svg-ext-value",
+            "name": "Tank 5 level",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank5_LevelMl"
+            },
+            "label": "Value"
+          },
+          "VAL_0145": {
+            "id": "VAL_0145",
+            "type": "svg-ext-value",
+            "name": "Tank 5 valve",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank5_ValveOpeningPct"
+            },
+            "label": "Value"
+          },
+          "GSE_0147": {
+            "id": "GSE_0147",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Tank 5 low",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank5_Flags",
+              "bitmask": 4,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#ffb020"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0150": {
+            "id": "GSE_0150",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Tank 6 enabled",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank6_Flags",
+              "bitmask": 1,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#43d17a"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "VAL_0152": {
+            "id": "VAL_0152",
+            "type": "svg-ext-value",
+            "name": "Tank 6 level",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank6_LevelMl"
+            },
+            "label": "Value"
+          },
+          "VAL_0154": {
+            "id": "VAL_0154",
+            "type": "svg-ext-value",
+            "name": "Tank 6 valve",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank6_ValveOpeningPct"
+            },
+            "label": "Value"
+          },
+          "GSE_0156": {
+            "id": "GSE_0156",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Tank 6 low",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank6_Flags",
+              "bitmask": 4,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#ffb020"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0159": {
+            "id": "GSE_0159",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Tank 7 enabled",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank7_Flags",
+              "bitmask": 1,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#43d17a"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "VAL_0161": {
+            "id": "VAL_0161",
+            "type": "svg-ext-value",
+            "name": "Tank 7 level",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank7_LevelMl"
+            },
+            "label": "Value"
+          },
+          "VAL_0163": {
+            "id": "VAL_0163",
+            "type": "svg-ext-value",
+            "name": "Tank 7 valve",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank7_ValveOpeningPct"
+            },
+            "label": "Value"
+          },
+          "GSE_0165": {
+            "id": "GSE_0165",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Tank 7 low",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank7_Flags",
+              "bitmask": 4,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#ffb020"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "GSE_0168": {
+            "id": "GSE_0168",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Tank 8 enabled",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank8_Flags",
+              "bitmask": 1,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#43d17a"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          },
+          "VAL_0170": {
+            "id": "VAL_0170",
+            "type": "svg-ext-value",
+            "name": "Tank 8 level",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank8_LevelMl"
+            },
+            "label": "Value"
+          },
+          "VAL_0172": {
+            "id": "VAL_0172",
+            "type": "svg-ext-value",
+            "name": "Tank 8 valve",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank8_ValveOpeningPct"
+            },
+            "label": "Value"
+          },
+          "GSE_0174": {
+            "id": "GSE_0174",
+            "type": "svg-ext-gauge_semaphore",
+            "name": "Tank 8 low",
+            "property": {
+              "events": [],
+              "actions": [],
+              "variableId": "t_Tank8_Flags",
+              "bitmask": 4,
+              "ranges": [
+                {
+                  "type": "range",
+                  "min": 0,
+                  "max": 0,
+                  "color": "#39424e"
+                },
+                {
+                  "type": "range",
+                  "min": 1,
+                  "max": 1,
+                  "color": "#ffb020"
+                }
+              ]
+            },
+            "label": "HtmlSemaphore"
+          }
+        },
+        "variables": {},
+        "svgcontent": "<svg width=\"1280\" height=\"760\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:svg=\"http://www.w3.org/2000/svg\" xmlns:html=\"http://www.w3.org/1999/xhtml\"><g><title>Layer 1</title><rect id=\"svg_0001\" x=\"0\" y=\"0\" width=\"1280\" height=\"760\" rx=\"0\" fill=\"#10151c\" stroke=\"none\"/><text id=\"svg_0002\" x=\"24\" y=\"40\" font-family=\"sans-serif\" font-size=\"24\" font-weight=\"bold\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Captsone bottling line</text><text id=\"svg_0003\" x=\"1256\" y=\"40\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"end\" xml:space=\"preserve\">Allen-Bradley Micro850 2080-L50E-48QBB · Modbus TCP</text><rect id=\"svg_0004\" x=\"20\" y=\"60\" width=\"400\" height=\"330\" rx=\"6\" fill=\"#1a222d\" stroke=\"#2c3847\"/><text id=\"svg_0005\" x=\"34\" y=\"86\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"bold\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">LINE STATUS</text><g id=\"GSE_0006\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0007\" cx=\"48\" cy=\"105\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0008\" x=\"68\" y=\"110\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Running</text><g id=\"GSE_0009\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0010\" cx=\"48\" cy=\"135\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0011\" x=\"68\" y=\"140\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Safety circuit closed</text><g id=\"GSE_0012\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0013\" cx=\"48\" cy=\"165\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0014\" x=\"68\" y=\"170\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">E-Stop active</text><g id=\"GSE_0015\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0016\" cx=\"48\" cy=\"195\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0017\" x=\"68\" y=\"200\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Station fault latched</text><g id=\"GSE_0018\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0019\" cx=\"48\" cy=\"225\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0020\" x=\"68\" y=\"230\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Reset required</text><g id=\"GSE_0021\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0022\" cx=\"48\" cy=\"255\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0023\" x=\"68\" y=\"260\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Local mode (HMI view-only)</text><g id=\"GSE_0024\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0025\" cx=\"48\" cy=\"285\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0026\" x=\"68\" y=\"290\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Pi / HMI link</text><g id=\"GSE_0027\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0028\" cx=\"48\" cy=\"315\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0029\" x=\"68\" y=\"320\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Simulation inputs</text><text id=\"svg_0030\" x=\"34\" y=\"368\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">Fault code</text><g id=\"VAL_0031\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"20\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0032\" x=\"400\" y=\"368\" font-family=\"monospace\" font-size=\"20\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><rect id=\"svg_0033\" x=\"440\" y=\"60\" width=\"400\" height=\"330\" rx=\"6\" fill=\"#1a222d\" stroke=\"#2c3847\"/><text id=\"svg_0034\" x=\"454\" y=\"86\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"bold\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">PRODUCTION</text><text id=\"svg_0035\" x=\"458\" y=\"110\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Accepted</text><g id=\"VAL_0036\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"18\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0037\" x=\"820\" y=\"110\" font-family=\"monospace\" font-size=\"18\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><text id=\"svg_0038\" x=\"458\" y=\"140\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Rejected</text><g id=\"VAL_0039\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"18\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0040\" x=\"820\" y=\"140\" font-family=\"monospace\" font-size=\"18\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><text id=\"svg_0041\" x=\"458\" y=\"170\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Total</text><g id=\"VAL_0042\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"18\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0043\" x=\"820\" y=\"170\" font-family=\"monospace\" font-size=\"18\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><text id=\"svg_0044\" x=\"458\" y=\"200\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Sorted to lane A</text><g id=\"VAL_0045\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"18\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0046\" x=\"820\" y=\"200\" font-family=\"monospace\" font-size=\"18\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><text id=\"svg_0047\" x=\"458\" y=\"230\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Sorted to lane B</text><g id=\"VAL_0048\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"18\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0049\" x=\"820\" y=\"230\" font-family=\"monospace\" font-size=\"18\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><text id=\"svg_0050\" x=\"458\" y=\"260\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Throughput</text><g id=\"VAL_0051\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"18\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0052\" x=\"780\" y=\"260\" font-family=\"monospace\" font-size=\"18\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><text id=\"svg_0053\" x=\"786\" y=\"260\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">/min</text><text id=\"svg_0054\" x=\"458\" y=\"290\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">OEE</text><g id=\"VAL_0055\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"18\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0056\" x=\"820\" y=\"290\" font-family=\"monospace\" font-size=\"18\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><text id=\"svg_0057\" x=\"458\" y=\"320\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Containers on belt</text><g id=\"VAL_0058\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"18\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0059\" x=\"820\" y=\"320\" font-family=\"monospace\" font-size=\"18\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><text id=\"svg_0060\" x=\"458\" y=\"350\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Uptime</text><g id=\"VAL_0061\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"18\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0062\" x=\"780\" y=\"350\" font-family=\"monospace\" font-size=\"18\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><text id=\"svg_0063\" x=\"786\" y=\"350\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">s</text><rect id=\"svg_0064\" x=\"860\" y=\"60\" width=\"400\" height=\"330\" rx=\"6\" fill=\"#1a222d\" stroke=\"#2c3847\"/><text id=\"svg_0065\" x=\"874\" y=\"86\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"bold\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">STATIONS (PLC-SUPERVISED)</text><g id=\"GSE_0066\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0067\" cx=\"888\" cy=\"105\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0068\" x=\"908\" y=\"110\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Run permit to ESP32 nodes</text><g id=\"GSE_0069\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0070\" cx=\"888\" cy=\"133\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0071\" x=\"908\" y=\"138\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Arm homed</text><g id=\"GSE_0072\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0073\" cx=\"888\" cy=\"161\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0074\" x=\"908\" y=\"166\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Arm busy</text><g id=\"GSE_0075\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0076\" cx=\"888\" cy=\"189\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0077\" x=\"908\" y=\"194\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"normal\" fill=\"#e6edf3\" text-anchor=\"start\" xml:space=\"preserve\">Arm holding a lid</text><text id=\"svg_0078\" x=\"878\" y=\"232\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">Arm command (1 home, 2 pick, 3 place)</text><g id=\"VAL_0079\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"18\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0080\" x=\"1240\" y=\"232\" font-family=\"monospace\" font-size=\"18\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><text id=\"svg_0081\" x=\"878\" y=\"260\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">Arm result (1 OK … 6 refused)</text><g id=\"VAL_0082\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"18\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0083\" x=\"1240\" y=\"260\" font-family=\"monospace\" font-size=\"18\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><text id=\"svg_0084\" x=\"878\" y=\"288\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">Last scan: container / result</text><g id=\"VAL_0085\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"18\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0086\" x=\"1190\" y=\"288\" font-family=\"monospace\" font-size=\"18\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><text id=\"svg_0087\" x=\"878\" y=\"316\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">Sort height (mm)</text><g id=\"VAL_0088\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"18\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0089\" x=\"1240\" y=\"316\" font-family=\"monospace\" font-size=\"18\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><text id=\"svg_0090\" x=\"1205\" y=\"288\" font-family=\"sans-serif\" font-size=\"16\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"middle\" xml:space=\"preserve\">/</text><g id=\"VAL_0091\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"18\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0092\" x=\"1240\" y=\"288\" font-family=\"monospace\" font-size=\"18\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><text id=\"svg_0093\" x=\"878\" y=\"372\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">Node heartbeats: scanner / station</text><g id=\"VAL_0094\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0095\" x=\"1170\" y=\"372\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"VAL_0096\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0097\" x=\"1240\" y=\"372\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><rect id=\"svg_0098\" x=\"20\" y=\"410\" width=\"820\" height=\"330\" rx=\"6\" fill=\"#1a222d\" stroke=\"#2c3847\"/><text id=\"svg_0099\" x=\"34\" y=\"436\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"bold\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">TANKS</text><text id=\"svg_0100\" x=\"34\" y=\"490\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">Enabled</text><text id=\"svg_0101\" x=\"34\" y=\"540\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">Level (ml)</text><text id=\"svg_0102\" x=\"34\" y=\"590\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">Valve (%)</text><text id=\"svg_0103\" x=\"34\" y=\"640\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">Low</text><text id=\"svg_0104\" x=\"170\" y=\"455\" font-family=\"sans-serif\" font-size=\"16\" font-weight=\"bold\" fill=\"#e6edf3\" text-anchor=\"middle\" xml:space=\"preserve\">T1</text><g id=\"GSE_0105\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0106\" cx=\"170\" cy=\"485\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><g id=\"VAL_0107\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0108\" x=\"200\" y=\"540\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"VAL_0109\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0110\" x=\"200\" y=\"590\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"GSE_0111\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0112\" cx=\"170\" cy=\"635\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0113\" x=\"254\" y=\"455\" font-family=\"sans-serif\" font-size=\"16\" font-weight=\"bold\" fill=\"#e6edf3\" text-anchor=\"middle\" xml:space=\"preserve\">T2</text><g id=\"GSE_0114\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0115\" cx=\"254\" cy=\"485\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><g id=\"VAL_0116\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0117\" x=\"284\" y=\"540\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"VAL_0118\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0119\" x=\"284\" y=\"590\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"GSE_0120\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0121\" cx=\"254\" cy=\"635\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0122\" x=\"338\" y=\"455\" font-family=\"sans-serif\" font-size=\"16\" font-weight=\"bold\" fill=\"#e6edf3\" text-anchor=\"middle\" xml:space=\"preserve\">T3</text><g id=\"GSE_0123\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0124\" cx=\"338\" cy=\"485\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><g id=\"VAL_0125\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0126\" x=\"368\" y=\"540\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"VAL_0127\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0128\" x=\"368\" y=\"590\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"GSE_0129\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0130\" cx=\"338\" cy=\"635\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0131\" x=\"422\" y=\"455\" font-family=\"sans-serif\" font-size=\"16\" font-weight=\"bold\" fill=\"#e6edf3\" text-anchor=\"middle\" xml:space=\"preserve\">T4</text><g id=\"GSE_0132\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0133\" cx=\"422\" cy=\"485\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><g id=\"VAL_0134\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0135\" x=\"452\" y=\"540\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"VAL_0136\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0137\" x=\"452\" y=\"590\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"GSE_0138\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0139\" cx=\"422\" cy=\"635\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0140\" x=\"506\" y=\"455\" font-family=\"sans-serif\" font-size=\"16\" font-weight=\"bold\" fill=\"#e6edf3\" text-anchor=\"middle\" xml:space=\"preserve\">T5</text><g id=\"GSE_0141\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0142\" cx=\"506\" cy=\"485\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><g id=\"VAL_0143\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0144\" x=\"536\" y=\"540\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"VAL_0145\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0146\" x=\"536\" y=\"590\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"GSE_0147\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0148\" cx=\"506\" cy=\"635\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0149\" x=\"590\" y=\"455\" font-family=\"sans-serif\" font-size=\"16\" font-weight=\"bold\" fill=\"#e6edf3\" text-anchor=\"middle\" xml:space=\"preserve\">T6</text><g id=\"GSE_0150\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0151\" cx=\"590\" cy=\"485\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><g id=\"VAL_0152\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0153\" x=\"620\" y=\"540\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"VAL_0154\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0155\" x=\"620\" y=\"590\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"GSE_0156\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0157\" cx=\"590\" cy=\"635\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0158\" x=\"674\" y=\"455\" font-family=\"sans-serif\" font-size=\"16\" font-weight=\"bold\" fill=\"#e6edf3\" text-anchor=\"middle\" xml:space=\"preserve\">T7</text><g id=\"GSE_0159\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0160\" cx=\"674\" cy=\"485\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><g id=\"VAL_0161\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0162\" x=\"704\" y=\"540\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"VAL_0163\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0164\" x=\"704\" y=\"590\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"GSE_0165\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0166\" cx=\"674\" cy=\"635\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0167\" x=\"758\" y=\"455\" font-family=\"sans-serif\" font-size=\"16\" font-weight=\"bold\" fill=\"#e6edf3\" text-anchor=\"middle\" xml:space=\"preserve\">T8</text><g id=\"GSE_0168\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0169\" cx=\"758\" cy=\"485\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><g id=\"VAL_0170\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0171\" x=\"788\" y=\"540\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"VAL_0172\" type=\"svg-ext-value\" fill=\"#e6edf3\" stroke=\"none\" font-size=\"16\" font-family=\"sans-serif\" text-anchor=\"end\"><text id=\"VAL_0173\" x=\"788\" y=\"590\" font-family=\"monospace\" font-size=\"16\" fill=\"#e6edf3\" text-anchor=\"end\" xml:space=\"preserve\">--</text></g><g id=\"GSE_0174\" type=\"svg-ext-gauge_semaphore\" fill=\"#39424e\" stroke=\"#000000\" font-size=\"14\" font-family=\"sans-serif\"><ellipse id=\"GSE_0175\" cx=\"758\" cy=\"635\" rx=\"9\" ry=\"9\" fill=\"#39424e\" stroke=\"#0b0f14\"/></g><text id=\"svg_0176\" x=\"34\" y=\"715\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">Levels come from the PLC (tank-level node or analog inputs). Refill is automatic below the threshold.</text><rect id=\"svg_0177\" x=\"860\" y=\"410\" width=\"400\" height=\"330\" rx=\"6\" fill=\"#1a222d\" stroke=\"#2c3847\"/><text id=\"svg_0178\" x=\"874\" y=\"436\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"bold\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">COMMANDS</text><text id=\"svg_0179\" x=\"880\" y=\"470\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">Read-only SCADA: this project never writes to the PLC.</text><text id=\"svg_0180\" x=\"880\" y=\"496\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">Operate the line from the local panel or the web HMI.</text><text id=\"svg_0181\" x=\"880\" y=\"522\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"normal\" fill=\"#8b98a8\" text-anchor=\"start\" xml:space=\"preserve\">Set FUXA_COMMANDS=1 to add command buttons.</text></g></svg>"
+      }
+    ],
+    "layout": {
+      "start": "v_line_overview",
+      "zoom": "autoresize",
+      "navigation": {
+        "mode": "over",
+        "type": "inline",
+        "bkcolor": "#1a222d",
+        "fgcolor": "#e6edf3",
+        "items": [
+          {
+            "icon": "dashboard",
+            "view": "v_line_overview",
+            "link": "",
+            "text": "Line overview"
+          }
+        ]
+      },
+      "header": {
+        "title": "Captsone SCADA",
+        "alarms": "fix",
+        "infos": "fix",
+        "bkcolor": "#10151c",
+        "fgcolor": "#e6edf3"
+      },
+      "showdev": true,
+      "show_connection_error": true
+    }
+  },
+  "alarms": [
+    {
+      "name": "E-Stop active",
+      "property": {
+        "variableId": "t_Sys_LineState",
+        "bitmask": 2
+      },
+      "highhigh": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 1,
+        "max": 1,
+        "text": "EMERGENCY STOP active — safety circuit open, all motion de-energized",
+        "group": "Safety",
+        "ackmode": "ackactive",
+        "bkcolor": "#c62828",
+        "color": "#ffffff"
+      }
+    },
+    {
+      "name": "Safety reset required",
+      "property": {
+        "variableId": "t_Sys_LineState",
+        "bitmask": 128
+      },
+      "info": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 1,
+        "max": 1,
+        "text": "Safety circuit waiting for RESET at the local panel",
+        "group": "Safety",
+        "ackmode": "float",
+        "bkcolor": "#1565c0",
+        "color": "#ffffff"
+      }
+    },
+    {
+      "name": "Station fault 1",
+      "property": {
+        "variableId": "t_Sys_FaultCode"
+      },
+      "highhigh": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 1,
+        "max": 1,
+        "text": "FAULT 1: label applicator fault — line stopped, fix it then RESET",
+        "group": "Station faults",
+        "ackmode": "ackactive",
+        "bkcolor": "#c62828",
+        "color": "#ffffff"
+      }
+    },
+    {
+      "name": "Station fault 2",
+      "property": {
+        "variableId": "t_Sys_FaultCode"
+      },
+      "highhigh": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 2,
+        "max": 2,
+        "text": "FAULT 2: barcode scanner not answering — line stopped, fix it then RESET",
+        "group": "Station faults",
+        "ackmode": "ackactive",
+        "bkcolor": "#c62828",
+        "color": "#ffffff"
+      }
+    },
+    {
+      "name": "Station fault 3",
+      "property": {
+        "variableId": "t_Sys_FaultCode"
+      },
+      "highhigh": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 3,
+        "max": 3,
+        "text": "FAULT 3: robotic arm servo fault — line stopped, fix it then RESET",
+        "group": "Station faults",
+        "ackmode": "ackactive",
+        "bkcolor": "#c62828",
+        "color": "#ffffff"
+      }
+    },
+    {
+      "name": "Station fault 4",
+      "property": {
+        "variableId": "t_Sys_FaultCode"
+      },
+      "highhigh": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 4,
+        "max": 4,
+        "text": "FAULT 4: robotic arm could not pick a lid — check the lid magazine — line stopped, fix it then RESET",
+        "group": "Station faults",
+        "ackmode": "ackactive",
+        "bkcolor": "#c62828",
+        "color": "#ffffff"
+      }
+    },
+    {
+      "name": "Station fault 5",
+      "property": {
+        "variableId": "t_Sys_FaultCode"
+      },
+      "highhigh": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 5,
+        "max": 5,
+        "text": "FAULT 5: robotic arm dropped the lid — line stopped, fix it then RESET",
+        "group": "Station faults",
+        "ackmode": "ackactive",
+        "bkcolor": "#c62828",
+        "color": "#ffffff"
+      }
+    },
+    {
+      "name": "Station fault 6",
+      "property": {
+        "variableId": "t_Sys_FaultCode"
+      },
+      "highhigh": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 6,
+        "max": 6,
+        "text": "FAULT 6: sort sensor fault — line stopped, fix it then RESET",
+        "group": "Station faults",
+        "ackmode": "ackactive",
+        "bkcolor": "#c62828",
+        "color": "#ffffff"
+      }
+    },
+    {
+      "name": "Station fault 7",
+      "property": {
+        "variableId": "t_Sys_FaultCode"
+      },
+      "highhigh": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 7,
+        "max": 7,
+        "text": "FAULT 7: scanner node (ESP32 #1) offline — line stopped, fix it then RESET",
+        "group": "Station faults",
+        "ackmode": "ackactive",
+        "bkcolor": "#c62828",
+        "color": "#ffffff"
+      }
+    },
+    {
+      "name": "Station fault 8",
+      "property": {
+        "variableId": "t_Sys_FaultCode"
+      },
+      "highhigh": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 8,
+        "max": 8,
+        "text": "FAULT 8: station node (ESP32 #2, robotic arm) offline — line stopped, fix it then RESET",
+        "group": "Station faults",
+        "ackmode": "ackactive",
+        "bkcolor": "#c62828",
+        "color": "#ffffff"
+      }
+    },
+    {
+      "name": "Tank 1 low",
+      "property": {
+        "variableId": "t_Tank1_Flags",
+        "bitmask": 4
+      },
+      "low": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 1,
+        "max": 1,
+        "text": "Tank 1 below its refill threshold",
+        "group": "Tanks",
+        "ackmode": "float",
+        "bkcolor": "#f9a825",
+        "color": "#1b1b1b"
+      }
+    },
+    {
+      "name": "Tank 2 low",
+      "property": {
+        "variableId": "t_Tank2_Flags",
+        "bitmask": 4
+      },
+      "low": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 1,
+        "max": 1,
+        "text": "Tank 2 below its refill threshold",
+        "group": "Tanks",
+        "ackmode": "float",
+        "bkcolor": "#f9a825",
+        "color": "#1b1b1b"
+      }
+    },
+    {
+      "name": "Tank 3 low",
+      "property": {
+        "variableId": "t_Tank3_Flags",
+        "bitmask": 4
+      },
+      "low": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 1,
+        "max": 1,
+        "text": "Tank 3 below its refill threshold",
+        "group": "Tanks",
+        "ackmode": "float",
+        "bkcolor": "#f9a825",
+        "color": "#1b1b1b"
+      }
+    },
+    {
+      "name": "Tank 4 low",
+      "property": {
+        "variableId": "t_Tank4_Flags",
+        "bitmask": 4
+      },
+      "low": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 1,
+        "max": 1,
+        "text": "Tank 4 below its refill threshold",
+        "group": "Tanks",
+        "ackmode": "float",
+        "bkcolor": "#f9a825",
+        "color": "#1b1b1b"
+      }
+    },
+    {
+      "name": "Tank 5 low",
+      "property": {
+        "variableId": "t_Tank5_Flags",
+        "bitmask": 4
+      },
+      "low": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 1,
+        "max": 1,
+        "text": "Tank 5 below its refill threshold",
+        "group": "Tanks",
+        "ackmode": "float",
+        "bkcolor": "#f9a825",
+        "color": "#1b1b1b"
+      }
+    },
+    {
+      "name": "Tank 6 low",
+      "property": {
+        "variableId": "t_Tank6_Flags",
+        "bitmask": 4
+      },
+      "low": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 1,
+        "max": 1,
+        "text": "Tank 6 below its refill threshold",
+        "group": "Tanks",
+        "ackmode": "float",
+        "bkcolor": "#f9a825",
+        "color": "#1b1b1b"
+      }
+    },
+    {
+      "name": "Tank 7 low",
+      "property": {
+        "variableId": "t_Tank7_Flags",
+        "bitmask": 4
+      },
+      "low": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 1,
+        "max": 1,
+        "text": "Tank 7 below its refill threshold",
+        "group": "Tanks",
+        "ackmode": "float",
+        "bkcolor": "#f9a825",
+        "color": "#1b1b1b"
+      }
+    },
+    {
+      "name": "Tank 8 low",
+      "property": {
+        "variableId": "t_Tank8_Flags",
+        "bitmask": 4
+      },
+      "low": {
+        "enabled": true,
+        "checkdelay": 1,
+        "timedelay": 0,
+        "min": 1,
+        "max": 1,
+        "text": "Tank 8 below its refill threshold",
+        "group": "Tanks",
+        "ackmode": "float",
+        "bkcolor": "#f9a825",
+        "color": "#1b1b1b"
+      }
+    }
+  ],
+  "texts": [],
+  "notifications": [],
+  "scripts": [],
+  "charts": []
+}

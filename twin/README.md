@@ -8,8 +8,9 @@ This package contains one control model with several faces:
 | --- | --- | --- |
 | `src/core.ts` | Framework-agnostic simulation engine (state machine, pipelining, commands, events, snapshot) | Node |
 | `src/run.ts` | HTTP service: simulated line (`CAPTSONE_MODE=sim`) or PLC bridge (`CAPTSONE_MODE=plc`) | Node (PC or Raspberry Pi) |
-| `src/plc/virtual-plc.ts` | The core exposed on the PLC register map over Modbus TCP: the reference PLC | Node |
+| `src/plc/virtual-plc.ts` | The core exposed on the PLC register map over Modbus TCP: the reference PLC. It simulates both ESP32 nodes in-process (`src/plc/simulated-nodes.ts`) unless `VPLC_NODES` says real nodes are connected | Node |
 | `src/plc/bridge.ts` | Reads a real or virtual PLC and serves the HMI | Node (Raspberry Pi) |
+| `src/plc/fuxa-project.ts` | Generates the FUXA SCADA project from the register map | Node |
 | `src/config.ts`, `barcode.ts`, `recipe.ts`, `events.ts`, `metrics.ts` | Shared config, barcode parser, dispense planning, event codes, OEE maths | All of the above |
 
 The physical line's PLC (an Allen-Bradley Micro850) implements the same register map; its program is specified in [`../docs/prototype/micro850-plc.md`](../docs/prototype/micro850-plc.md), with the virtual PLC as the reference.
@@ -24,7 +25,11 @@ npm run build        # emit dist/
 npm start            # node dist/run.js
 npm test             # automated tests
 npm run virtual-plc  # Modbus TCP virtual PLC on :5020
+npm run tag-map      # print the register tables (-- --write updates io-map.md and the firmware header)
+npm run fuxa-project # write ../deploy/fuxa/captsone-project.json (-- --push also loads it into a running FUXA)
 ```
+
+The virtual PLC simulates both ESP32 nodes by default. Set `VPLC_NODES=scanner`, `station`, `scanner,station` or `all` to use real ESP32 nodes instead: the PLC then watches their heartbeats and latches a fault when one goes offline. `VPLC_FEED=0` stops bottle arrivals ([`../docs/configuration.md`](../docs/configuration.md#virtual-plc-npm-run-virtual-plc)).
 
 PLC-bridge mode (e.g. against the virtual PLC):
 
@@ -47,7 +52,9 @@ To run the twin together with the operator HMI, use `npm run dev` at the repo ro
 ## What it does
 
 - Preprinted **custom barcodes** encode the dispense instructions directly (ml per tank). See `src/barcode.ts`.
-- Containers are labelled and scanned, stop at **one bay per tank, in belt order**, then pass the capping arm, lid press, sort sensor (QC), reject diverter and sort diverter. Several containers flow at once (**pipelining**), held at stations by stoppers.
+- Containers are labelled and scanned, stop at **one bay per tank, in belt order**, then pass the robotic capping arm (it places a lid from the lid magazine and presses it down), the sort sensor (QC), the reject diverter and the sort diverter. Several containers flow at once (**pipelining**), held at stations by stoppers.
+- **The PLC makes every decision.** In the virtual PLC, LABEL, SCAN, CAP and QC finish only when the (simulated or real) ESP32 node reports back through the register map. The PLC validates the raw barcode text the scanner node forwards, sequences the robotic arm, and classifies the bottle height the station node measures; a type that doesn't match the recipe is rejected (`BOTTLE_TYPE_MISMATCH`). A node that doesn't report within `stationNodeTimeoutSec` jams its container.
+- **Station faults** (labeler, scanner, arm servo, no lid, lid lost, sort sensor, node offline) latch in the PLC: the line stops, START is refused, and RESET clears the fault once the cause is gone.
 - Tanks come from **fixed slots** (`TANK_SLOTS`, `T1..T8`). Adding or removing a tank is a config edit or a runtime command, not a code change.
 - `mix_sequence` builds sequential or interleaved plans (`config.mixPolicy`). They become physical order only with a multi-nozzle manifold.
 - Every wait is **bounded by a timeout** that pauses while halted; a jam rejects the container and releases the station.
@@ -106,9 +113,12 @@ twin/
     plc/
       tag-map.ts           # PLC register map (the hardware contract)
       modbus.ts            # Modbus TCP client + server (no dependencies)
-      virtual-plc.ts       # reference PLC: core on the register map
+      virtual-plc.ts       # reference PLC: core on the register map, node supervision, station faults
+      arm-sequencer.ts     # PLC-side robotic arm sequencing (HOME, PICK_LID, PLACE_LID)
+      simulated-nodes.ts   # simulated ESP32 scanner and station nodes (same register contract as the firmware)
       bridge.ts            # Raspberry Pi bridge: PLC ↔ HMI
-      print-tag-map.ts     # generates docs/prototype/io-map.md tables (npm run tag-map)
+      print-tag-map.ts     # generates docs/prototype/io-map.md tables and the firmware header (npm run tag-map)
+      fuxa-project.ts      # generates the FUXA SCADA project (npm run fuxa-project)
     safety.ts              # E-Stop / reset / local-remote state machine
     tank-colors.ts         # saved operator tank names and colours
     test/                  # node:test suites (npm test)

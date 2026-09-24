@@ -26,7 +26,6 @@ export type ContainerStatus =
   | `fill-${number}`
   | "mix"
   | "cap"
-  | "press"
   | "qc"
   | "sort"
   | "output"
@@ -159,6 +158,12 @@ export interface SafetyState {
   remoteResetAllowed: boolean;
   /** The source is a simulation: physical panel/E-Stop buttons can be operated from the HMI. */
   simulated: boolean;
+  /**
+   * A station fault (robotic arm, labeler, scanner, sort sensor, node offline)
+   * is latched: the PLC stopped the line and refuses START until RESET.
+   * Optional: older sources do not send it.
+   */
+  faultActive?: boolean;
 }
 
 /** Result of a command: null on success, otherwise why it was refused. */

@@ -1,6 +1,6 @@
 # Safety
 
-The prototype combines moving machinery (conveyor, stoppers, reject and sort diverters, a robotic capping arm, a lid press, a label applicator), gravity-fed liquids through proportional valves (paint, cleaning fluid), possibly pneumatics, and mains/24 V electrics. This page defines the emergency-stop and control-authority design that the rest of the documentation, the PLC program and the software all implement.
+The prototype combines moving machinery (conveyor, stoppers, reject and sort diverters, a robotic capping arm that lifts each lid, places it on the container and presses it down, a label applicator), gravity-fed liquids through proportional valves (paint, cleaning fluid), possibly pneumatics, and mains/24 V electrics. This page defines the emergency-stop and control-authority design that the rest of the documentation, the PLC program and the software all implement.
 
 > This is engineering guidance for a prototype, not a certified safety assessment. Before anyone other than the development team operates the line, have a qualified person do a risk assessment against the standards that apply where you are (§7).
 
@@ -10,7 +10,7 @@ The line has **two ways to trigger an emergency stop**. Both end in the same har
 
 | | Physical E-Stop | Digital E-Stop |
 | --- | --- | --- |
-| Where | Red mushroom buttons on the machine: local control panel, **line entry** (start of the belt, at the labeling station) and **line exit** (end of the belt, at the sort diverter) (`config.safety.eStopButtons`: `PANEL`, `ENTRY`, `EXIT`) | Red **E-STOP** button in the HMI nav bar (every screen) and on the Controls screen |
+| Where | Red mushroom buttons on the machine: local control panel, **line entry** (start of the belt, at the labeling station) and **line exit** (end of the belt, at the sort diverter) (`config.safety.eStopButtons`: `PANEL`, `ENTRY`, `EXIT`) | Red **E-STOP** button in the HMI nav bar (every screen) and on the Controls screen; FUXA's Line overview has the same button (`Cmd.DigitalEStop`) when its project is built with command buttons (`FUXA_COMMANDS=1`) |
 | How it stops the hardware | The button's **safety contacts** open the safety relay's input circuit directly | The PLC de-energizes **`O_Safety_RemoteEStopOK`**. That output drives an interposing safety relay whose **force-guided NO contacts sit in series with the E-Stop chain**, so the safety circuit opens |
 | How the control system learns about it | The button's **monitoring contact** (NC) → PLC input `I_EStop_<Location>_Mon` → `Sys.PhysicalEStopMask` / `LineState.PHYSICAL_ESTOP` | Latched in the PLC (`LineState.DIGITAL_ESTOP`) |
 | What the HMI shows | Red banner on every screen: **"EMERGENCY STOP — Physical E-Stop pressed at *location*"**, plus an active alarm per button | Red banner: **"EMERGENCY STOP — Digital E-Stop active (activated from the HMI)"** |
@@ -18,7 +18,7 @@ The line has **two ways to trigger an emergency stop**. Both end in the same har
 
 ### The rules
 
-1. **Either E-Stop opens the safety circuit.** The safety relay removes power from every actuator: belt drive, tank valves (and their shutoff solenoids), the capping arm's servo supply, the lid press, the label applicator, both diverters, any refill valves, and the pneumatic supply (dump valve) if pneumatics are used. That includes the actuators the ESP32 nodes drive (§2a).
+1. **Either E-Stop opens the safety circuit.** The safety relay removes power from every actuator: belt drive, tank valves (and their shutoff solenoids), the capping arm's servo supply, the label applicator, both diverters, any refill valves, and the pneumatic supply (dump valve) if pneumatics are used. That includes the actuators the ESP32 nodes drive (§2a).
 2. **Either E-Stop puts the control system into E-Stop.** The PLC drops the run command and `Station.RunPermit`, stops all sequences (timers pause), and refuses every operational command. The HMI shows the alert and disables Start, Jog, Fire reject diverter, and tank changes. Both can be active at once, and the HMI lists every active source.
 3. **Releasing never restarts.** Releasing a physical button, or the digital E-Stop, leaves the line in **"Safety reset required"**. Nothing moves.
 4. **Reset closes the safety circuit, and only when no E-Stop is active.** Every physical button must be released and the digital E-Stop released first; otherwise the reset is refused, with the reason shown.
@@ -66,14 +66,16 @@ On the physical line the "local control station" is the PLC's touch-panel HMI (t
 
 ## 2a. Actuators driven by the ESP32 nodes
 
-The BOM puts the label applicator, the robotic capping arm and the lid press under ESP32 control (the PLC only sequences them through the station handshake in [io-map.md §4](io-map.md#4-register-map-modbus-tcp)). That's acceptable for a prototype only with these rules:
+The BOM puts the label applicator (ESP32 #1, scanner node) and the robotic capping arm (ESP32 #2, station node: a Hiwonder xArm that lifts a lid from the lid magazine, places it on the container at CAP and presses it down) under ESP32 control. The **PLC makes every decision**: it requests each label, issues each arm command (`HOME`, `PICK_LID`, `PLACE_LID`) through the station handshake in [io-map.md §4](io-map.md#4-register-map-modbus-tcp), and decides retries and faults. The nodes only execute and report. The firmware is in [`firmware/`](../../firmware) and described in [esp32.md](esp32.md). That's acceptable for a prototype only with these rules:
 
 | Rule | Why |
 | --- | --- |
-| The **power** for the arm's servo driver, the press actuator and the label applicator comes from a supply switched by the **safety relay**, never straight from the ESP32's USB/5 V supply | An E-Stop must stop them even if the ESP32 firmware hangs or the Wi-Fi link is down |
-| The ESP32 drives actuators only while `Station.RunPermit` = 1 **and** `Sys.PlcHeartbeat` keeps changing (stop within 1 s of either failing) | A controlled stop and a lost link stop the stations too. This is a functional stop, not the safety function |
-| The ESP32 finishes or aborts a motion into a safe pose on permit loss (arm parked clear of the belt, press retracted) and reports a fault bit instead of resuming on its own | No surprise motion when the permit comes back |
-| The arm is guarded or its reach is kept clear of the operator's hands while running; check whether the arm drops its load when servo power is cut | Hobby arms have no brakes and no force limiting |
+| The **power** for the arm's servo bus and the label applicator comes from a supply switched by the **safety relay**, never straight from the ESP32's USB/5 V supply | An E-Stop must stop them even if the ESP32 firmware hangs or the Wi-Fi link is down |
+| The ESP32 drives actuators only while `Station.RunPermit` = 1 **and** `Sys.PlcHeartbeat` keeps changing (stop within 1 s of either failing). The PLC drops `RunPermit` whenever the line isn't running, including on an E-Stop, a controlled stop and a latched station fault | A controlled stop and a lost link stop the stations too. This is a functional stop, not the safety function |
+| On permit loss the arm stops where it is and reports `ArmResult` = `ABORTED`; it doesn't resume on its own. The PLC re-homes it (`HOME`) on the next start, and rejects a container whose lid was released during an aborted `PLACE_LID` | No surprise motion when the permit comes back |
+| **Teach mode interlock.** The station node's serial-console teach mode (used to store the arm poses and gripper positions) can be switched on only while `Station.RunPermit` = 0 (line stopped). While it's on, the node ignores PLC commands and sets its arm fault bit, so the PLC latches `ARM_SERVO` and refuses START. The same fault bit is set while the poses haven't been taught. Leaving teach mode un-homes the arm, so the PLC re-homes it before the next command | Nobody can run the line while someone is moving the arm by hand, and an untaught arm can't be started |
+| **Station faults are not safety functions.** The PLC latches a fault (`Sys.FaultCode`, `LineState` bit3 FAULT) and stops the line when a node reports a fault bit, when the arm reports a servo error or a lost lid, when a lid pick fails three times, or when a node's heartbeat stops for 3 s. The fault refuses START until RESET, once the cause is gone. It's a functional stop through the PLC and Wi-Fi; the E-Stops and the safety relay remain the safety function | A fault stop depends on software and a network, so it can't be credited as a safety function |
+| The arm is guarded or its reach is kept clear of the operator's hands while running; check whether the arm drops a held lid when servo power is cut | Hobby arms have no brakes and no force limiting |
 | Wireless link: PLC ↔ ESP32 over a dedicated access point on the control network ([communication.md](communication.md)) | Wi-Fi drops are expected, so the heartbeat rules above must hold |
 
 ## 3. Control authority: LOCAL vs REMOTE
@@ -98,13 +100,13 @@ The BOM puts the label applicator, the robotic capping arm and the lid press und
 | Rule | Why |
 | --- | --- |
 | Safety relay (or safety PLC) sized for the E-Stop category chosen in the risk assessment; **dual-channel** E-Stop wiring with cross-monitoring | A single short or open fault must not defeat the stop |
-| Safety relay contacts switch **actuator power** (conveyor motor driver, valve and shutoff-solenoid supply, arm servo supply, press, labeler, diverters, pneumatic dump). The PLC, ESP32 logic and the monitoring PC stay powered | The control system must stay alive to report *why* the line stopped |
+| Safety relay contacts switch **actuator power** (conveyor motor driver, valve and shutoff-solenoid supply, arm servo supply, labeler, diverters, pneumatic dump). The PLC, ESP32 logic and the monitoring PC stay powered | The control system must stay alive to report *why* the line stopped |
 | A **normally-closed shutoff solenoid** in series with each servo-driven proportional valve, powered through the safety relay | A servo valve holds its last position when power is lost, so on its own it can keep pouring during an E-Stop |
 | `O_Safety_RemoteEStopOK` → **interposing safety relay with force-guided contacts**, NO contacts in series in **both** E-Stop channels, feedback NC into the reset/feedback loop | The digital E-Stop opens the same circuit without creating a channel discrepancy; welded contacts are detected |
 | Manual reset with **edge detection** (the relay resets on the release of RESET, not while it's held) | A stuck RESET button can't auto-reset |
 | STOP wired **NC** to the PLC | A broken wire stops the line |
 | Monitoring contacts from each E-Stop to separate PLC inputs | The HMI can name the exact button pressed |
-| Stoppers spring-extended, shutoff and refill valves normally closed, reject diverter, sort diverter and lid press spring-return | De-energized state is the safe state |
+| Stoppers spring-extended, shutoff and refill valves normally closed, reject diverter and sort diverter spring-return | De-energized state is the safe state |
 | Independent high-level float switch wired to cut refill valve power | Overflow is prevented even if the PLC fails |
 
 ## 5. Design rules the control software follows
@@ -117,15 +119,16 @@ Implemented in [`twin/src/safety.ts`](../../twin/src/safety.ts): the twin, virtu
 4. **Refusals are explicit.** A refused command produces event `COMMAND_REFUSED` (with command and reason codes), and the HMI shows the reason.
 5. **Tank-enable changes are bounded.** The last tank can't be disabled. An in-flight container that still needs a disabled tank is under-filled and rejected, never dispensed from the wrong tank. Change tank modules while the line is stopped and empty; in LOCAL mode, tank changes from the HMI are refused.
 6. **The simulated panel is simulation-only.** `Sim.*` registers/coils (and the HMI's "Local control panel & field E-Stops" card) are honoured only while `LineState.SIMULATION = 1`. A PLC must never act on them with real outputs powered.
+7. **Station faults latch and stop.** A station fault (`Sys.FaultCode` 1–8) stops the line, refuses START with `FAULT_ACTIVE`, and clears only on RESET once the cause is gone (`FAULT_CLEARED`). The PLC never retries a faulted station on its own; the only automatic retry is a failed lid pick, up to three attempts. This is a functional stop, not a safety function (§2a).
 
 ## 6. Other hazards and measures
 
 | Hazard | Where | Minimum measures |
 | --- | --- | --- |
-| Entanglement / pinch | Belt rollers, stoppers, reject and sort diverters, lid press, label applicator | Guard rollers and the press; limit actuator force/speed; E-Stop within reach at both ends of the line; interlocked guards in the same safety circuit |
-| Impact / pinch from the robot | Capping arm | Keep hands out of its reach while running (guard or marked zone); park pose on permit loss; servo power through the safety relay |
+| Entanglement / pinch | Belt rollers, stoppers, reject and sort diverters, label applicator | Guard the rollers and the label applicator; limit actuator force/speed; E-Stop within reach at both ends of the line; interlocked guards in the same safety circuit |
+| Impact / pinch from the robot | Capping arm: its whole reach, the gripper, the lid magazine, and the container mouth while it presses a lid down | Keep hands out of its reach while running (guard or marked zone); refill the lid magazine only with the line stopped; the arm stops on permit loss and is re-homed by the PLC; teach mode only with the line stopped (§2a); servo power through the safety relay |
 | Unexpected start-up | Anything the PLC can energize | Manual reset + separate START; lockout/tagout (§8); PLC outputs OFF on power-up and in Program mode |
-| Stored energy | Pneumatics (lid press, if pneumatic); tank head pressure; a servo valve that holds its position unpowered | Lockable dump/isolation valve on the air supply; NC shutoff solenoid per tank; close the tank outlet valve before opening a fitting |
+| Stored energy | Pneumatics (if used); tank head pressure; a servo valve that holds its position unpowered | Lockable dump/isolation valve on the air supply; NC shutoff solenoid per tank; close the tank outlet valve before opening a fitting |
 | Chemical exposure / fire | Paints, solvents, cleaning agents | Ventilation; SDS available; spill tray; water-based paints for the prototype, or a hazardous-area assessment for solvents |
 | Electrical + liquid | Pumps, valves and sensors near liquid | Electronics enclosure above and away from liquids; IP65+ field devices; drip loops; RCD/GFCI on mains |
 | Overflow | Tank refill, container over-fill | NC refill valves; PLC refill timeout; hardwired high-level float |

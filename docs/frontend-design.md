@@ -94,7 +94,7 @@ schematic, and 3D views all update in sync.
 ### Mock feed (`src/lib/twin/mock-engine.ts`)
 
 `MockTwinEngine` simulates the line: it spawns containers, walks them through
-`label → scan → fill-1..N → cap → press → qc → sort → output` (lane A or B by
+`label → scan → fill-1..N → cap → qc → sort → output` (lane A or B by
 the engine's 250 ml rule) or `rejected`, with bad barcodes riding through as
 `label → scan → qc → scan-rejected`. It drains tanks per recipe,
 refills tanks when low, computes OEE, and emits events. It ticks every 500ms.
@@ -133,16 +133,17 @@ they share one geometric model. `computeLayout(tanks)` returns station
 positions in "line units" (~1m each) along the X axis:
 
 ```
-                                                                                      ┌─▶ [output-b] Lane B (branch up)
-[label] [scan] [fill bay 1] ... [fill bay N] [cap] [press] [qc] [gate] [sort] ────────┴─▶ [output-a] Lane A
-                                                                  │
-                                                               [reject]  (branch down)
+                                                                              ┌─▶ [output-b] Lane B (branch up)
+[label] [scan] [fill bay 1] ... [fill bay N] [cap] [qc] [gate] [sort] ────────┴─▶ [output-a] Lane A
+                                                          │
+                                                       [reject]  (branch down)
 ```
 
 - **Labeling** at X=0.6 and **Barcode Scan** at 1.6; **fill bays** (internal
   kind `nozzle`) start at 2.7 and space 1.1 apart, one per tank; **Capping
-  Arm**, **Lid Press**, **Sort Sensor** (`qc`), **Reject Diverter** (`gate`)
-  and **Sort Diverter** follow at fixed offsets.
+  Arm** (the robotic arm that places and presses the lid), **Sort Sensor**
+  (`qc`), **Reject Diverter** (`gate`) and **Sort Diverter** follow at fixed
+  offsets. There is no lid press station.
 - Tanks sit above their fill bay (Y=+1.6); the reject lane branches down from
   the reject diverter (Y=−1.7); Lane B branches up after the sort diverter
   (Y=+1.3) while Lane A runs straight on.
@@ -172,7 +173,7 @@ it scales responsively and scrolls horizontally on narrow screens.
 
 **Every component is identified with a label/callout:**
 - **Labeling**, **Barcode Scan**, each **Fill Bay** (labeled with its tank),
-  **Capping Arm**, **Lid Press**, **Sort Sensor**, **Reject Diverter**, **Sort
+  **Capping Arm**, **Sort Sensor**, **Reject Diverter**, **Sort
   Diverter**, **Reject Lane**, **Lane A** and **Lane B** (each output lane with
   its name and accepted count when the engine sends `sortLanes`), and every
   **Tank** (labeled "TANK n · Name" with fill %).
@@ -194,7 +195,7 @@ The viewBox reserves `TOP_PAD` (tank half-height + label space) above the
 tank row, so the tank tops and their "TANK n" / name labels are never clipped.
 
 **State handling:** when `tanks[]` is empty the schematic still renders the
-fixed stations (label, scan, cap, press, sort sensor, diverters, lanes) with no fill bays; when containers are
+fixed stations (label, scan, cap, sort sensor, diverters, lanes) with no fill bays; when containers are
 absent the belt and stations simply show idle. No empty view is needed here
 because the belt itself is the empty state — the dashboard tab covers the
 explicit empty/loading/error states.
@@ -215,8 +216,9 @@ to zoom, right-drag to pan; polar angle clamped so you stay above the floor).
 - **Tanks** as cylinders above each fill bay, with an inner liquid cylinder
   scaled to `levelMl/capacityMl` in the tank color, a feed pipe to the bay,
   and a torus ring that glows amber/red when low/critical.
-- **Station props** — small animated parts for the label applicator, capping
-  arm, lid press, reject diverter (extends toward the reject lane while a
+- **Station props** — small animated parts for the label applicator, the
+  robotic capping arm (its boom swings from the lid stack beside the belt to
+  over the container and lowers to seat the lid), the reject diverter (extends toward the reject lane while a
   bottle is rejected) and sort diverter (swings toward Lane B when a large
   bottle arrives), all tweened in `useFrame`.
 - **Containers** as translucent cups with a liquid cylinder whose height tracks
@@ -257,7 +259,7 @@ Controls screen can also add/remove tanks on demand (see §8).
 
 The bill of materials has no scan diverter, so a container that **fails the
 scan** (bad/no barcode) can't leave the belt early. It gets no recipe, is not
-filled, capped or pressed, and rides through to the reject diverter:
+filled or capped, and rides through to the reject diverter:
 
 - **Status `scan-rejected`** in `ContainerStatus` is its final status. On the
   way it reports `label`, `scan` and then `qc` (target 0, no lane), so the
@@ -305,7 +307,7 @@ filled, capped or pressed, and rides through to the reject diverter:
   them to the simulated core or pulses the PLC command coils (docs/api.md). Every
   command resolves to `null` or its refusal message.
 - **Safety UI** (`components/safety/safety-banner.tsx`, nav bar, `/manual` "Controls", `lib/twin/safety.ts`), driven by `state.safety`:
-  - a **global banner under the nav bar on every screen**: red "EMERGENCY STOP — LINE SHUT DOWN" naming each pressed physical button and/or "Digital E-Stop active", with recovery steps; amber "Safety reset required"; blue "LOCAL CONTROL — HMI is view-only"; grey "Line stopped";
+  - a **global banner under the nav bar on every screen**: red "EMERGENCY STOP — LINE SHUT DOWN" naming each pressed physical button and/or "Digital E-Stop active", with recovery steps; amber "Safety reset required"; orange "Station fault — the PLC stopped the line" while `safety.faultActive` is set, quoting the cause from the latest `FAULT` event in `recentEvents` and telling the operator to fix it, press RESET, then START; blue "LOCAL CONTROL — HMI is view-only"; grey "Line stopped";
   - a red **E-STOP** button in the nav bar on every screen (the digital E-Stop; no confirmation dialog, since an emergency stop must be one action) and a LOCAL/REMOTE badge;
   - **Controls** screen: large DIGITAL E-STOP, release, reset, safety circuit and per-button status, Start/Stop, Jog / Fire reject diverter, and tank modules. Each control is enabled from `refusal(state.safety, command)`, a client mirror of `twin/src/safety.ts`, and shows the reason when disabled. Commands return their refusal message, which appears in a feedback alert;
   - a dashed **"Local control panel & field E-Stops — SIMULATION"** card that appears only when `safety.simulated`, so the physical-control behaviour can be exercised from the browser.

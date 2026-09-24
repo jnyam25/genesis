@@ -4,11 +4,9 @@ Every design decision in the Captsone digital twin, with specific reasoning. Com
 
 ## 1. System overview
 
-A container enters the belt and gets a label carrying a **preprinted custom barcode**. A scanner reads it. The controller parses the barcode into per-tank volumes, turns those into an ordered **mix_sequence** dispense plan, routes the container through the dispense bays it needs (one per tank, in belt order), dispenses with a small jitter, caps and presses it, checks it at the sort sensor (QC), rejects it at the reject diverter (GATE) or sends it to the sort diverter (SORT), which splits accepted containers into two lanes by bottle size. The default station list (`LABEL, SCAN, BAY-1..3, CAP, PRESS, QC, GATE, SORT`) follows the team's bill of materials (docs/prototype/bom.md); `LABEL`, `CAP`, `PRESS`, `SORT` and an optional `MIX` are configuration, not code. There's no scan diverter: a container with a bad barcode visits no service station and is rejected at GATE. Multiple containers do this **concurrently** — each has its own record and its own sequence of operations. Tanks auto-refill when low. Every wait is bounded by a timeout (paused while the line is halted); a jam rejects the container and frees the station.
+A container enters the belt and gets a label carrying a **preprinted custom barcode**. A scanner reads it. The controller parses the barcode into per-tank volumes, turns those into an ordered **mix_sequence** dispense plan, routes the container through the dispense bays it needs (one per tank, in belt order), dispenses with a small jitter, caps it (a robotic arm lifts a lid from the lid magazine, places it and presses it down), checks it at the sort sensor (QC), rejects it at the reject diverter (GATE) or sends it to the sort diverter (SORT), which splits accepted containers into two lanes by bottle size. The default station list (`LABEL, SCAN, BAY-1..3, CAP, QC, GATE, SORT`) follows the team's bill of materials (docs/prototype/bom.md); `LABEL`, `CAP`, `SORT` and an optional `MIX` are configuration, not code. There is no separate lid press: the arm seats the lid itself. There's no scan diverter: a container with a bad barcode visits no service station and is rejected at GATE. Multiple containers do this **concurrently** — each has its own record and its own sequence of operations. Tanks auto-refill when low. Every wait is bounded by a timeout (paused while the line is halted); a jam rejects the container and frees the station.
 
-Two faces, one model: `core.ts` + `run.ts` (the runnable Node twin), and the physical line's PLC (the team's Allen-Bradley Micro850), specified by the register map in `plc/tag-map.ts` with `plc/virtual-plc.ts` as its reference implementation and docs/prototype/micro850-plc.md as the program specification. The twin shares `config.ts`, `barcode.ts`, `recipe.ts`, `events.ts`, `safety.ts` and `metrics.ts`, and the PLC program implements the same rules. See docs/prototype/ for the hardware integration.
-
-An earlier revision also carried a 3D model of the line as ProtoTwin components (`PaintLineController`, `TankModule`, `BarcodeMockSensor`). ProtoTwin is a subscription product, so the team dropped it: the Node twin, the virtual PLC and the HMI's 2D/3D views cover simulation and virtual commissioning without a licence.
+Two faces, one model: `core.ts` + `run.ts` (the runnable Node twin), and the physical line's PLC (the team's Allen-Bradley Micro850), specified by the register map in `plc/tag-map.ts` with `plc/virtual-plc.ts` as its reference implementation and docs/prototype/micro850-plc.md as the program specification. The twin shares `config.ts`, `barcode.ts`, `recipe.ts`, `events.ts`, `safety.ts` and `metrics.ts`, and the PLC program implements the same rules. The PLC makes every line decision; the two ESP32 field nodes only execute its requests and report back (§6b). See docs/prototype/ for the hardware integration. The Node twin, the virtual PLC and the HMI's 2D/3D views cover simulation and virtual commissioning without any licensed simulator.
 
 ## 2. Custom preprinted barcode format
 
@@ -40,7 +38,7 @@ PT1|T<totalMl>|<v1>,<v2>,...,<vN>[|I<rounds>]
 
 ### Validation (in `barcode.ts`)
 
-`parseBarcode(raw, config, toleranceMl = 1)` returns a `ParsedBarcode` or throws a `BarcodeError` with one of: `BAD_HEADER`, `BAD_TOTAL`, `TANK_COUNT_MISMATCH`, `NEGATIVE_VOLUME`, `VOLUME_SUM_MISMATCH`, `MALFORMED`. The controller force-rejects the container on any error and logs the code, so a misprint never silently produces the wrong paint.
+`parseBarcode(raw, config, toleranceMl = 1)` returns a `ParsedBarcode` or throws a `BarcodeError` with one of: `BAD_HEADER`, `BAD_TOTAL`, `TANK_COUNT_MISMATCH`, `NEGATIVE_VOLUME`, `VOLUME_SUM_MISMATCH`, `MALFORMED`. The controller force-rejects the container on any error and logs the code, so a misprint never silently produces the wrong paint. When the scanner returns nothing at all, the core records `NO_READ` (code 7) and rejects the container the same way. On the physical line this validation runs in the PLC, on the raw text the scanner node forwards; the node never interprets the barcode.
 
 ### Why not a recipe-ID lookup
 
@@ -81,7 +79,7 @@ A single sequence processing containers one at a time would serialize the line �
 
 The Node harness models the same pipelining with a tick loop and station occupancy:
 
-- Each container has an ordered `ops` list (LABEL → SCAN → dispense steps → CAP → PRESS → QC → GATE → SORT, skipping stations that aren't configured; a bad barcode gets LABEL → SCAN → GATE only) and a state (`ENTERING`, `MOVING`, `SERVING`, `BLOCKED`, `ACCEPTED`, `REJECTED`, `JAMMED`).
+- Each container has an ordered `ops` list (LABEL → SCAN → dispense steps → CAP → QC → GATE → SORT, skipping stations that aren't configured; the ops after SCAN are planned once the label is read, and a bad barcode or no-read gets LABEL → SCAN → GATE only) and a state (`ENTERING`, `MOVING`, `SERVING`, `BLOCKED`, `ACCEPTED`, `REJECTED`, `JAMMED`).
 - A station serves one container at a time (`occupancy: Map<stationId, containerId>`). A container that reaches an occupied station enters `BLOCKED` and races a timeout; if the timeout wins, it is force-rejected and the station is released.
 - `maxConcurrentContainers` caps how many containers may be on the belt at once, modeling the physical belt length.
 - Transit between stations takes `hops × stationSpacingM / beltSpeedMPerSec` (hops = how many station positions apart they are, so skipping stations costs belt time), so belt speed is the single global flow knob — raise it and the line speeds up (until a station becomes the bottleneck, which is exactly Little's Law).
@@ -131,7 +129,7 @@ Interleaving splits a volume into `R` parts; `100 / 3` is not exact in millilite
 
 ### (b) Barcodes arrive from the scanner, not from the controller
 
-**Decision:** the controller never invents barcodes; it consumes them from a scanner source. In the Node twin that source is the mock feeder (`feeder.ts`), which queues a preprinted sample barcode every `mockSensorPeriodSec`. On the physical prototype the ESP32 scanner node reads the label, parses it and writes the PLC recipe mailbox; a sequence number (`Recipe.Seq`) makes two identical consecutive barcodes two containers (docs/prototype/esp32.md).
+**Decision:** the controller never invents barcodes; it consumes them from a scanner source. In the Node twin that source is the mock feeder (`feeder.ts`), which queues a preprinted sample barcode every `mockSensorPeriodSec`. On the physical prototype the PLC holds the container at SCAN and writes its id to `Scan.Request`; the ESP32 scanner node triggers one read and writes the raw text (or a no-read status) into the scan mailbox (`Scan.*`, registers 300–338), then echoes the id in `Scan.Done`. The PLC validates the text, publishes `Scan.ParseResult`, and plans the container's route. Keying the handshake on the container id makes two identical consecutive barcodes two containers (docs/prototype/esp32.md). The virtual PLC does the same through `applyScan` in `core.ts`, with the text coming from a simulated or real scanner node.
 
 **Reasoning:** the scanner is a physical device with its own timing; keeping it a separate source keeps the controller free of scanner timing and lets the mock be swapped for the real scanner without touching the control logic. It also makes the "preprinted barcode enters the line" story explicit: the scanner emits, the controller consumes.
 
@@ -163,6 +161,23 @@ Implemented once in `safety.ts` (`LineSafety` state machine plus the pure `autho
 - **Simulation of physical controls is explicit.** `SafetyState.simulated` (virtual PLC: `LineState.SIMULATION`) gates the `sim*` commands and the HMI's simulated panel. A real PLC never exposes them.
 
 **Tests.** `twin/src/test/core.test.ts` (digital E-Stop, physical E-Stop, local mode, remote reset config) and `plc.test.ts` (the same sequences through Modbus and the bridge).
+
+## 6b. Station drivers and station faults
+
+**Decision: the PLC decides, the field nodes execute.** The ESP32 scanner node (label applicator + barcode scanner) and station node (Hiwonder xArm robotic arm + sort sensor) never make a line decision. They act on a PLC request, report a result through the register map, and set fault bits. Everything that decides a container's fate stays in the PLC, where it is deterministic and visible to the PLC programmer.
+
+**Station drivers.** In the plain Node twin, LABEL, SCAN, CAP and QC complete on the core's own timers (`stationTimesSec`). The virtual PLC attaches a `StationDriver` to the core (`core.driver`), and those four stations then finish only when the driver reports back, exactly as on the real PLC:
+
+- **LABEL**: `Station.LabelRequest` / `LabelDone` handshake with the scanner node.
+- **SCAN**: the scan mailbox (§6 (b)). The node forwards raw text; the core validates it in `applyScan` and plans the route.
+- **CAP**: `plc/arm-sequencer.ts` sends the arm one command at a time (`HOME`, `PICK_LID` while the belt moves, `PLACE_LID` once a container is held at CAP, which places the lid, presses it down and releases). `NO_LID` is retried up to three times; a lid that was released during an aborted move rejects that container (`STATION_FAULT`), since the PLC can't tell whether it is seated.
+- **QC**: the station node reports the measured bottle height (`Station.SortHeightMm`). The PLC picks the lane whose `bottleHeightMm` is nearest and within `sort.heightToleranceMm`, and rejects the container with `BOTTLE_TYPE_MISMATCH` if that isn't the lane its recipe calls for.
+
+A driven station that doesn't report within `config.stationNodeTimeoutSec` (15 s) jams its container, like any other bounded wait (§6 (c)). By default `plc/simulated-nodes.ts` plays both nodes in-process with the same register contract as the firmware; `VPLC_NODES` swaps either one for a real ESP32.
+
+**Station faults.** The PLC latches a fault (`Sys.FaultCode`, `LineState` bit 3 `FAULT`) when a node sets a fault bit, the arm reports a servo error, fails to pick a lid three times in a row (`ARM_NO_LID`), or loses a lid (`ARM_LID_LOST`), or a real node's heartbeat stops for 3 s (`SCANNER_NODE_OFFLINE`, `STATION_NODE_OFFLINE`). `TwinCore.raiseFault` records a `FAULT` event (code 22, arg1 = `FaultCode`, arg2 = station) and `LineSafety.latchFault` stops the line. While `SafetyState.faultActive` is set, START is refused (`RefusalReason.FAULT_ACTIVE`, "a station fault is latched — fix it, then press RESET"). RESET clears the latch and records `FAULT_CLEARED` (code 33); a cause that is still present latches again on the next PLC scan. A fault is not a safety function: the safety circuit stays closed, and the E-Stops keep their own path (§6a).
+
+**Why latch.** A failed arm or a silent node can't be fixed by retrying forever, and letting containers pile up behind it would turn one fault into many rejects. Stopping the line and requiring RESET makes the operator look at the cause, and the refusal message says what to do.
 
 ## 7. HMI data contract
 
@@ -218,7 +233,7 @@ Implemented once in `metrics.ts` (`computeOee`, `RollingRate`, `idealCycleSec`) 
 
 The twin emits the snapshot over two transports it can produce without the simulator:
 
-1. **HTTP** — `GET http://127.0.0.1:43124/snapshot` returns the latest snapshot JSON with `Access-Control-Allow-Origin: *` so an HMI worker on any origin can poll it. `GET /` returns a tiny HTML dashboard that polls `/snapshot`. Port is configurable via `CAPTSONE_PORT`.
+1. **HTTP** — `GET http://127.0.0.1:43124/snapshot` returns the latest snapshot JSON with `Access-Control-Allow-Origin: *` so an HMI worker on any origin can poll it. `GET /` returns a tiny HTML dashboard (tank levels, KPIs, containers, event timeline) that polls `/snapshot` and `/hmi/state`. Port is configurable via `CAPTSONE_PORT`.
 2. **File write** — `twin/runtime/snapshot.json` is overwritten every `config.snapshotPeriodSec` (0.5 s), for file-watch integrations.
 
 3. **PLC bridge** — with `CAPTSONE_MODE=plc`, the same HTTP endpoints are fed from a physical (or virtual) PLC over Modbus TCP instead of the simulated core (`plc/bridge.ts`); see docs/prototype/.
@@ -237,9 +252,9 @@ The operator HMI (`hmi/`) renders a visualization-oriented shape (`hmi/src/lib/t
 Mapping decisions:
 
 - **Container id** → `C-0001` (zero-padded string).
-- **Status** is derived from the station of the container's current op: `LABEL` → `label`, `SCAN` → `scan`, `BAY-n` → `fill-n`, `MIX` → `mix`, `CAP` → `cap`, `PRESS` → `press`, `QC`/`GATE` → `qc`, `SORT` → `sort`; `ACCEPTED` → `output` (with `lane`, and per-lane counts in `sortLanes`); `REJECTED` with a barcode parse error → `scan-rejected`; other `REJECTED`/`JAMMED` → `rejected`. A container travelling between stations reports its destination; the HMI tweens toward it.
+- **Status** is derived from the station of the container's current op: `LABEL` → `label`, `SCAN` → `scan`, `BAY-n` → `fill-n`, `MIX` → `mix`, `CAP` → `cap`, `QC`/`GATE` → `qc`, `SORT` → `sort`; `ACCEPTED` → `output` (with `lane`, and per-lane counts in `sortLanes`); `REJECTED` with a barcode parse error → `scan-rejected`; other `REJECTED`/`JAMMED` → `rejected`. A container travelling between stations reports its destination; the HMI tweens toward it.
 - **Finished containers** stay in the list for 1.5 s (sim) so the HMI can show them reaching the output/reject lane, then drop out (the engine keeps its own history).
-- **Safety**: `safety` carries `SafetyState` (§6a). The HMI's global banner, the nav E-STOP button, the Controls screen and the Alarms screen are driven from it.
+- **Safety**: `safety` carries `SafetyState` (§6a), including `faultActive` (§6b). The HMI's global banner (with an orange station-fault banner that quotes the latest `FAULT` event), the nav E-STOP button, the Controls screen and the Alarms screen are driven from it.
 - **Events**: the core keeps a bounded log of `{ seq, simTimeSec, severity, message, code, arg1, arg2 }`; the latest becomes `lastEvent` (id `e<seq>`, wall-clock `at`) and the last 20 are sent newest-first as `recentEvents`, so the HMI's log has no gaps when several events happen between 500 ms polls.
 - **OEE** is the engine's, except that while E-Stopped `availability` and `overall` report 0 — the line is not available *now*, and the HMI keys its "Line halted" state off `availability === 0`. `timestamp` is wall-clock ms.
 
@@ -257,7 +272,7 @@ The HMI reaches these endpoints through its own `/api/twin/*` route handlers (a 
 
 ## 8. Verification
 
-- `npm test` (twin) runs the automated suite: line flow past the pipelining cap, every status visited, forward-only belt order, E-Stop latching, tank slots and stale-barcode handling, rolling throughput, structured events, the Modbus TCP client/server, virtual PLC ↔ bridge parity with the core, command handshakes, the recipe mailbox, and bridge offline handling.
+- `npm test` (twin) runs the automated suite: line flow past the pipelining cap, every status visited, forward-only belt order, E-Stop latching, tank slots and stale-barcode handling, rolling throughput, structured events, the Modbus TCP client/server, virtual PLC ↔ bridge parity with the core, command handshakes, the scan mailbox, the robotic arm handshake, bottle-type classification, station faults and their RESET, bridge offline handling, and (`generated.test.ts`) that the firmware header and the FUXA project match the register map.
 
 - `npm run typecheck` (`tsc --noEmit`) passes clean.
 - `npm run build` emits `dist/`.
@@ -284,8 +299,11 @@ The HMI reaches these endpoints through its own `/api/twin/*` route handlers (a 
 | `twin/src/run.ts` | HTTP service: simulated line (`sim`) or PLC bridge (`plc`); `/snapshot`, `/hmi/state`, `/hmi/command`, `/health`, snapshot file, tank colours file. |
 | `twin/src/plc/tag-map.ts` | PLC register map (Modbus TCP / OPC UA names) — the hardware contract. |
 | `twin/src/plc/modbus.ts` | Dependency-free Modbus TCP client + server. |
-| `twin/src/plc/virtual-plc.ts` | The core exposed on the register map — reference PLC for development and tests. |
+| `twin/src/plc/virtual-plc.ts` | The core exposed on the register map — reference PLC for development and tests. The `StationDriver` for LABEL/SCAN/CAP/QC, node supervision and station faults (§6b). |
+| `twin/src/plc/arm-sequencer.ts` | PLC-side robotic arm sequencing: HOME, PICK_LID, PLACE_LID, retries and arm faults. |
+| `twin/src/plc/simulated-nodes.ts` | Simulated ESP32 scanner and station nodes, on the same register contract as the firmware. |
 | `twin/src/plc/bridge.ts` | Bridge (monitoring PC or Pi): PLC registers ↔ HMI state and commands; `coilBase` for PLCs whose coils don't start at 0 (0 for the Micro850). |
-| `twin/src/plc/print-tag-map.ts` | Generates the register tables in docs/prototype/io-map.md. |
+| `twin/src/plc/print-tag-map.ts` | Generates the register tables in docs/prototype/io-map.md and the firmware header `firmware/lib/captsone_node/src/captsone_registers.h`. |
+| `twin/src/plc/fuxa-project.ts` | Generates the FUXA SCADA project (`deploy/fuxa/captsone-project.json`) from the register map. |
 | `twin/src/test/*.test.ts` | Automated tests (`npm test`). |
 

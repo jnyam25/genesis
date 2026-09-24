@@ -10,7 +10,7 @@ The Micro850 has **one Ethernet port and no Wi-Fi**, so everything reaches it th
  Monitoring PC/laptop ──┐                                              ┌── ESP32 #1 scanner node (label + scan)
  (bridge + web HMI,     ├── switch ──┬── Micro850 PLC (Ethernet)       │
   FUXA SCADA)           │            └── access point (bridge mode) ····┤
- Engineering laptop ────┘                 all on 192.168.10.x           └── ESP32 #2 station node (arm, press, sort sensor)
+ Engineering laptop ────┘                 all on 192.168.10.x           └── ESP32 #2 station node (robotic arm, sort sensor)
                                      Touch panel (if used): Ethernet on the switch, or RS-232/485 to the PLC's serial port
 ```
 
@@ -22,7 +22,7 @@ Suggested addressing (adjust to your site):
 | Monitoring PC/laptop (or Raspberry Pi), control side | `192.168.10.20` | Client only |
 | Touch panel on Ethernet (optional) | `192.168.10.40` | Client only |
 | Engineering laptop | `192.168.10.50` | CCW Standard |
-| FUXA SCADA ([scada.md](scada.md)), if not on the monitoring PC | `192.168.10.60` | Client to the PLC; 1881 (FUXA web UI) |
+| FUXA SCADA ([scada.md](scada.md)), if not on the monitoring PC | `192.168.10.60` | Client to the PLC; 1881 (FUXA web UI, loopback only unless `FUXA_HOST=0.0.0.0` is set after enabling FUXA login) |
 | Access point (bridge mode, DHCP off, no uplink) | `192.168.10.2` (management) | — |
 | ESP32 #1 scanner node | `192.168.10.31` | Client only |
 | ESP32 tank-level node (optional) | `192.168.10.32` | Client only |
@@ -31,7 +31,7 @@ Suggested addressing (adjust to your site):
 
 - Use **static IPs** (or DHCP reservations) for the PLC and the nodes. Set the Micro850's address in CCW (Controller → Ethernet → Internet Protocol).
 - The access point is for the ESP32 nodes only: WPA2/WPA3 with its own passphrase, no internet uplink, SSID not shared with anything else. A spare home router works if you turn off its DHCP server and plug the switch into a **LAN** port, not the WAN port.
-- **Expect Wi-Fi drops.** Node heartbeats are supervised by the PLC, and a lost link holds the affected station; it never moves anything ([safety.md §2a](safety.md#2a-actuators-driven-by-the-esp32-nodes)). E-Stops are hardwired and never depend on Wi-Fi. Wired Ethernet ESP32 boards (LAN8720/W5500) remove the problem if the team can route cables.
+- **Expect Wi-Fi drops.** Node heartbeats are supervised by the PLC. A node whose heartbeat stops for 3 s latches a station fault and stops the line; the node itself stops its actuators when it loses the PLC heartbeat for 1 s. A lost link never moves anything ([safety.md §2a](safety.md#2a-actuators-driven-by-the-esp32-nodes)). E-Stops are hardwired and never depend on Wi-Fi. Wired Ethernet ESP32 boards (LAN8720/W5500) remove the problem if the team can route cables.
 - If operators reach the HMI from the site network, the monitoring PC is the **only** device on both networks. Don't enable IP forwarding on it, and firewall everything except 43123 on the operator side ([raspberry-pi.md](raspberry-pi.md#5-firewall) shows the rules for a Pi).
 
 ## 2. Modbus TCP profile
@@ -49,16 +49,23 @@ Suggested addressing (adjust to your site):
 
 ### Who writes what
 
-Each register has exactly one writer. The PLC must reject, ignore or overwrite writes to its read-only (**R**) registers.
+Each register has exactly one writer. The command coils are the only exception: both the bridge and FUXA (only when its project is built with command buttons, `FUXA_COMMANDS=1`) may pulse them, which is safe because the PLC acts on the rising edge and clears the coil itself. The PLC must reject, ignore or overwrite writes to its read-only (**R**) registers.
+
+**The PLC makes every decision.** The ESP32 nodes only execute the PLC's requests and report what happened: the scanner node forwards the raw barcode text and never validates it, and the station node reports the measured bottle height and never classifies the bottle. The PLC validates the barcode (`Scan.ParseResult`), classifies the bottle type from `Station.SortHeightMm`, sequences the robotic arm, and decides retries, rejects and faults.
 
 | Writer | Registers / coils |
 | --- | --- |
-| PLC | Everything marked **R**, including `Station.RunPermit` and `Station.*Request` |
+| PLC | Everything marked **R**: `Sys.*` including `Sys.FaultCode` and `LineState` bit3 FAULT, `Scan.Request`, `Scan.ParseResult`, `Scan.ResultId`, `Scan.TotalMl`, `Station.RunPermit`, `Station.LabelRequest`, `Station.ArmCmd`, `Station.ArmCmdSeq`, `Station.SortRequest` |
 | Bridge (monitoring PC) | `Sys.HmiHeartbeat`, `Sys.TankEnableMask`, all coils |
-| ESP32 #1 scanner node | `Recipe.*` (300–311), `Station.LabelDone`, `Station.ScannerNodeFaults`, `Field.ScannerNodeHeartbeat` |
-| ESP32 #2 station node | `Station.CapDone`, `Station.PressDone`, `Station.SortSensorType`, `Station.SortSensorContainer`, `Station.StationNodeFaults`, `Field.StationNodeHeartbeat` |
+| ESP32 #1 scanner node | `Scan.Done`, `Scan.Status`, `Scan.Length`, `Scan.Text1..32` (301–335, `Scan.Done` written last), `Station.LabelDone`, `Station.ScannerNodeFaults`, `Field.ScannerNodeHeartbeat` |
+| ESP32 #2 station node | `Station.ArmDoneSeq`, `Station.ArmResult`, `Station.ArmStatus`, `Station.SortDone`, `Station.SortHeightMm`, `Station.StationNodeFaults`, `Field.StationNodeHeartbeat` |
 | ESP32 tank node (optional) | `Field.Tank<k>LevelMl`, `Field.TankNodeHeartbeat` |
-| SCADA (FUXA) | Nothing: **read-only** |
+| SCADA (FUXA) | Nothing by default: the generated project is read-only. With `FUXA_COMMANDS=1`, only the command coils `Cmd.Start`, `Cmd.Stop`, `Cmd.Reset`, `Cmd.Jog`, `Cmd.DigitalEStop`, `Cmd.ReleaseEStop`, `Cmd.FirePusher`. Never holding registers. The PLC applies the same authority rules as for the bridge, so it refuses FUXA's commands in LOCAL mode |
+
+**Handshakes.** For label, scan and sort, a request is new while `Request ≠ 0` and `Request ≠ Done`; neither side stores sequence numbers. The node writes its results first and the `Done` id last. The robotic arm takes one command at a time: the PLC writes `Station.ArmCmd` (1 HOME, 2 PICK_LID, 3 PLACE_LID), then a new `Station.ArmCmdSeq`; the station node runs it, writes `Station.ArmResult`, then `Station.ArmDoneSeq` = `ArmCmdSeq`. The full sequences are in [io-map.md §5](io-map.md#5-handshakes).
+
+**Station faults.** The PLC latches a fault in `Sys.FaultCode` and sets `LineState` bit3 FAULT when a node sets a bit in its `Station.*NodeFaults` register (labeler, scanner, arm servo bus, sort sensor), when the arm reports `SERVO_ERROR` or `LID_LOST`, when `PICK_LID` returns `NO_LID` three times in a row, or when a node's heartbeat stops changing for 3 s (codes 7 and 8, node offline). A latched fault stops the line (`LINE_STOPPED` with source 3, "station fault"), refuses START (`COMMAND_REFUSED` reason 9, `FAULT_ACTIVE`), and is cleared only by RESET once the cause is gone (`FAULT_CLEARED`, event 33). A station node that doesn't report within `stationNodeTimeoutSec` (15 s) jams its container instead. Faults are not safety functions: the E-Stops and the safety relay remain the safety function ([safety.md §2a](safety.md#2a-actuators-driven-by-the-esp32-nodes)).
+
 ### Timing
 
 | Item | Value | Where configured |
@@ -66,11 +73,13 @@ Each register has exactly one writer. The PLC must reject, ignore or overwrite w
 | Bridge poll period | 250 ms | `PLC_POLL_MS` |
 | Bridge request timeout | max(500 ms, 2 × poll) | `twin/src/plc/bridge.ts` |
 | Bridge reconnect delay | 2 s | `twin/src/plc/modbus.ts` |
+| PLC heartbeat (`Sys.PlcHeartbeat`) | +1 every 100 ms | PLC program |
 | PLC heartbeat timeout (seen by bridge) | 3 s | `heartbeatTimeoutMs` |
-| PLC heartbeat timeout (seen by ESP32 nodes) | 1 s: stop actuators | ESP32 firmware |
+| PLC heartbeat timeout (seen by ESP32 nodes) | 1 s: stop actuators | ESP32 firmware (`PLC_HEARTBEAT_TIMEOUT_MS`) |
 | HMI heartbeat timeout (seen by PLC) | 3 s | PLC program |
-| Field node heartbeat timeout (seen by PLC) | 3 s | PLC program |
-| ESP32 poll of `Station.*` | 100 ms | ESP32 firmware |
+| Field node heartbeat timeout (seen by PLC) | 3 s: node offline, station fault latched | PLC program |
+| Station node report timeout | 15 s: container jammed | `stationNodeTimeoutSec` |
+| ESP32 poll of `Scan.*` / `Station.*` | 100 ms (scanner node), 50 ms (station node) | ESP32 firmware |
 | HMI stale-feed banner | 3 s without data | `hmi/src/lib/twin/useTwinState.ts` |
 
 End-to-end, an operator command reaches the PLC within one HTTP round trip (under 50 ms on a PC or Pi). Its effect appears on the HMI within about 1 s: one bridge poll plus one HMI poll of 500 ms.
@@ -87,7 +96,7 @@ This starts the virtual PLC on `0.0.0.0:5020`, the twin in bridge mode against i
 
 - `http://127.0.0.1:43124/health` shows the PLC link and the `LineState` bits.
 - Any Modbus tool (e.g. *Modbus Poll*, *QModMaster*, or `mbpoll -m tcp -p 5020 -a 1 -r 1 -c 20 127.0.0.1`) can read the same registers the PLC will expose.
-- Point ESP32 firmware at `<dev PC IP>:5020`. Allow the port through the PC firewall. The virtual PLC publishes `Station.RunPermit` and the `Station.*Request` ids, so the station node's handshake can be tested before the PLC exists (it completes stations on its own timer and ignores `Done`).
+- Point ESP32 firmware ([esp32.md](esp32.md), sources in [`firmware/`](../../firmware)) at `<dev PC IP>:5020`. Allow the port through the PC firewall. By default the virtual PLC runs its own simulated nodes, which follow the same register contract as the firmware. Start it with `VPLC_NODES=scanner`, `station`, `scanner,station` or `all` to hand those stations to real ESP32 nodes instead: the virtual PLC then watches their heartbeats and fault bits and waits for their `Done` / `ArmDoneSeq` exactly as the Micro850 will. `VPLC_FEED=0` turns off bottle arrivals.
 
 ## 3. OPC UA mapping
 
@@ -96,16 +105,16 @@ The register map's tag names are the OPC UA **browse names**. An OPC UA server f
 ```
 Objects/
   Captsone/                         (ns = the server's namespace for the PLC tags)
-    Sys/        ProtocolVersion, PlcHeartbeat, LineState, TankCount, TankEnableMask, HmiHeartbeat, UptimeS, ActiveContainers, PhysicalEStopMask
+    Sys/        ProtocolVersion, PlcHeartbeat, LineState, TankCount, TankEnableMask, HmiHeartbeat, UptimeS, ActiveContainers, PhysicalEStopMask, FaultCode
     Counts/     Accepted, Rejected, Total, LaneA, LaneB
     Perf/       ThroughputCpm
     Oee/        Availability, Performance, Quality, Overall
     Tank1..8/   LevelMl, CapacityMl, Flags, RefillThresholdMl, DispenseRate, ValveOpeningPct
     Container1..8/  Id, Status, FillMl, TargetMl
     Event1..8/  Seq, Code, Arg1, Arg2        + Events/LastSeq
-    Recipe/     Seq, ParseResult, TotalMl, Rounds, Vol1..Vol8, AckSeq
+    Scan/       Request, Done, Status, Length, Text1..Text32, ParseResult, ResultId, TotalMl
     Field/      Tank1..8LevelMl, TankNodeHeartbeat, ScannerNodeHeartbeat, StationNodeHeartbeat
-    Station/    RunPermit, LabelRequest, LabelDone, CapRequest, CapDone, PressRequest, PressDone, SortSensorType, SortSensorContainer, ScannerNodeFaults, StationNodeFaults
+    Station/    RunPermit, LabelRequest, LabelDone, ArmCmd, ArmCmdSeq, ArmDoneSeq, ArmResult, ArmStatus, SortRequest, SortDone, SortHeightMm, ScannerNodeFaults, StationNodeFaults
     Cmd/        DigitalEStop, ReleaseEStop, Jog, FirePusher, Start, Stop, Reset   (Boolean; same one-shot semantics)
 ```
 
@@ -125,10 +134,10 @@ Objects/
 
 ## 4. SCADA alongside the bridge
 
-The SCADA, FUXA, is an extra Modbus TCP client of the PLC. Rules:
+The SCADA, FUXA, is an extra Modbus TCP client of the PLC. It runs natively on the monitoring PC (no Docker): `npm run fuxa` from the repo root installs FUXA 1.3.4 into `deploy/fuxa` on first use and loads a project generated from the register map, pointing at `PLC_HOST:PLC_PORT` (default the virtual PLC, `127.0.0.1:5020`). Rules:
 
-- **Read-only by default.** Only the bridge writes commands. If SCADA must issue commands later, route them through the bridge's `/hmi/command` API so the same authority rules (LOCAL/REMOTE, E-Stop refusals) apply.
-- Poll no faster than 500 ms, and read the same blocks the bridge reads.
+- **Read-only by default; commands only through the command coils.** The generated project writes nothing. Built with `FUXA_COMMANDS=1`, it adds buttons that write only `Cmd.Start`, `Cmd.Stop`, `Cmd.Reset`, `Cmd.Jog`, `Cmd.DigitalEStop`, `Cmd.ReleaseEStop` and `Cmd.FirePusher`, never a holding register. The PLC applies the same authority rules as for the bridge (LOCAL/REMOTE, E-Stop and fault refusals), so it refuses FUXA's commands in LOCAL mode. FUXA displays and forwards; every decision stays in the PLC.
+- Poll no faster than 500 ms (the generated project polls every 1000 ms, `FUXA_POLL_MS`). The generated device reads every holding register of the map except the 32 raw barcode text registers (plus the command coils with `FUXA_COMMANDS=1`).
 - Record the event ring by `Seq` (de-duplicate like the bridge) to get a line history.
 
 Installation, tag addressing (FUXA addresses are the register number + 1) and alarms are in [scada.md](scada.md).

@@ -4,10 +4,27 @@ import { once } from "node:events";
 
 import { ModbusException, ModbusTcpClient, ModbusTcpServer } from "../plc/modbus";
 import { PlcBridge } from "../plc/bridge";
-import { VirtualPlc } from "../plc/virtual-plc";
-import { COIL, LINE_STATE_BITS, RECIPE, STATION, SYS, TANK_FIELD, bit, tankRegister } from "../plc/tag-map";
+import { NODE_HEARTBEAT_TIMEOUT_SEC, VirtualPlc } from "../plc/virtual-plc";
+import {
+  ARM_CMD,
+  ARM_RESULT,
+  ARM_STATUS_BITS,
+  COIL,
+  FIELD,
+  LINE_STATE_BITS,
+  SCAN,
+  SCAN_STATUS,
+  STATION,
+  SYS,
+  TANK_FIELD,
+  bit,
+  packScanText,
+  tankRegister,
+  unpackScanText,
+} from "../plc/tag-map";
 import { toHmiState } from "../hmi";
 import { DEFAULT_CONFIG } from "../config";
+import { EventCode, FaultCode, RefusalReason, RejectReason } from "../events";
 
 async function connectedClient(port: number): Promise<ModbusTcpClient> {
   const client = new ModbusTcpClient({ host: "127.0.0.1", port, timeoutMs: 1000 });
@@ -118,24 +135,159 @@ test("bridge decodes the virtual PLC into the same HMI state as the core", async
   }
 });
 
-test("virtual PLC publishes the microcontroller station handshake: run permit and label/cap/press requests", async () => {
+test("PLC supervises the simulated nodes: label, scan (PLC validates), arm HOME → PICK_LID → PLACE_LID, sort height", () => {
   const plc = new VirtualPlc({ feed: false });
   const r = plc.server.registers;
   plc.core.enqueueBarcode("PT1|T250|100,80,70");
   const requested = new Set<string>();
+  const armCmds: number[] = [];
+  let lastSeq = 0;
   for (let i = 0; i < 600 && plc.core.counts.total === 0; i++) {
     plc.scan(0.1);
     assert.equal(r[STATION.RUN_PERMIT], 1);
     if (r[STATION.LABEL_REQUEST] === 1) requested.add("label");
-    if (r[STATION.CAP_REQUEST] === 1) requested.add("cap");
-    if (r[STATION.PRESS_REQUEST] === 1) requested.add("press");
+    if (r[SCAN.REQUEST] === 1) requested.add("scan");
+    if (r[STATION.SORT_REQUEST] === 1) requested.add("sort");
+    if (r[STATION.ARM_CMD_SEQ] !== lastSeq) {
+      lastSeq = r[STATION.ARM_CMD_SEQ];
+      armCmds.push(r[STATION.ARM_CMD]);
+    }
   }
   assert.equal(plc.core.counts.accepted, 1);
-  assert.deepEqual([...requested].sort(), ["cap", "label", "press"]);
+  assert.deepEqual([...requested].sort(), ["label", "scan", "sort"]);
+  assert.deepEqual(armCmds, [ARM_CMD.HOME, ARM_CMD.PICK_LID, ARM_CMD.PLACE_LID, ARM_CMD.PICK_LID], "pre-picks the next lid after placing");
+  assert.deepEqual([r[SCAN.PARSE_RESULT], r[SCAN.RESULT_ID], r[SCAN.TOTAL_ML]], [0, 1, 250]);
+  assert.equal(r[STATION.SORT_HEIGHT_MM], DEFAULT_CONFIG.sort.lanes[0].bottleHeightMm);
   assert.equal(r[SYS.COUNT_LANE_A], 1, "a 250 ml recipe is a small bottle (lane A)");
+  assert.equal(r[SYS.FAULT_CODE], 0);
   plc.core.eStop();
   plc.scan(0.1);
   assert.equal(r[STATION.RUN_PERMIT], 0, "E-Stop drops the run permit");
+});
+
+test("scan text packing: 2 ASCII characters per register, first in the high byte", () => {
+  const regs = packScanText("PT1|T250|100,80,70");
+  assert.equal(regs.length, 32);
+  assert.equal(regs[0], ("P".charCodeAt(0) << 8) | "T".charCodeAt(0));
+  assert.equal(unpackScanText(regs, 18), "PT1|T250|100,80,70");
+  assert.equal(unpackScanText(packScanText("x".repeat(80)), 80).length, 64, "truncated to 64 characters");
+});
+
+/** A scripted ESP32 station node (arm + sort sensor) writing straight into the PLC's register image. */
+class FakeStationNode {
+  homed = false;
+  lidHeld = false;
+  alive = true;
+  heightMm = DEFAULT_CONFIG.sort.lanes[0].bottleHeightMm;
+  /** Results for the next PICK_LID commands (default OK). */
+  pickResults: number[] = [];
+  readonly armLog: number[] = [];
+  private hb = 0;
+
+  constructor(private readonly r: Uint16Array) {}
+
+  step(): void {
+    const r = this.r;
+    if (!this.alive) return;
+    r[FIELD.STATION_NODE_HEARTBEAT] = this.hb = (this.hb + 1) & 0xffff;
+    const seq = r[STATION.ARM_CMD_SEQ];
+    if (seq !== 0 && seq !== r[STATION.ARM_DONE_SEQ]) {
+      const cmd = r[STATION.ARM_CMD];
+      this.armLog.push(cmd);
+      let result: number = ARM_RESULT.OK;
+      if (cmd === ARM_CMD.HOME) this.homed = true;
+      if (cmd === ARM_CMD.PICK_LID) {
+        result = this.pickResults.shift() ?? ARM_RESULT.OK;
+        if (result === ARM_RESULT.OK) this.lidHeld = true;
+      }
+      if (cmd === ARM_CMD.PLACE_LID) this.lidHeld = false;
+      r[STATION.ARM_RESULT] = result;
+      r[STATION.ARM_DONE_SEQ] = seq;
+    }
+    r[STATION.ARM_STATUS] = (this.homed ? 1 << ARM_STATUS_BITS.HOMED : 0) | (this.lidHeld ? 1 << ARM_STATUS_BITS.LID_HELD : 0);
+    const req = r[STATION.SORT_REQUEST];
+    if (req !== 0 && req !== r[STATION.SORT_DONE]) {
+      r[STATION.SORT_HEIGHT_MM] = this.heightMm;
+      r[STATION.SORT_DONE] = req;
+    }
+  }
+}
+
+function runWith(plc: VirtualPlc, node: FakeStationNode, seconds: number, until: () => boolean = () => false): void {
+  for (let i = 0; i < seconds * 10 && !until(); i++) {
+    node.step();
+    plc.scan(0.1);
+  }
+}
+
+test("arm: a failed lid pick is retried, then latches ARM_NO_LID — line stopped, START refused, RESET recovers", () => {
+  const plc = new VirtualPlc({ feed: false, externalNodes: { station: true } });
+  const r = plc.server.registers;
+  const node = new FakeStationNode(r);
+  node.pickResults = [ARM_RESULT.NO_LID, ARM_RESULT.NO_LID];
+  runWith(plc, node, 2);
+  assert.deepEqual(node.armLog, [ARM_CMD.HOME, ARM_CMD.PICK_LID, ARM_CMD.PICK_LID, ARM_CMD.PICK_LID], "two misses, then a good pick");
+  assert.ok(node.lidHeld);
+  assert.equal(r[SYS.FAULT_CODE], 0);
+
+  node.lidHeld = false;
+  node.pickResults = [ARM_RESULT.NO_LID, ARM_RESULT.NO_LID, ARM_RESULT.NO_LID];
+  runWith(plc, node, 2, () => r[SYS.FAULT_CODE] !== 0);
+  assert.equal(r[SYS.FAULT_CODE], FaultCode.ARM_NO_LID);
+  assert.ok(bit(r[SYS.LINE_STATE], LINE_STATE_BITS.FAULT) && !bit(r[SYS.LINE_STATE], LINE_STATE_BITS.RUNNING));
+  assert.equal(r[STATION.RUN_PERMIT], 0);
+  assert.match(plc.core.events.find((e) => e.code === EventCode.FAULT)!.message, /lid magazine/);
+  const issued = node.armLog.length;
+  runWith(plc, node, 1);
+  assert.equal(node.armLog.length, issued, "no arm commands while faulted");
+
+  assert.equal(plc.core.start("remote")?.reason, RefusalReason.FAULT_ACTIVE);
+  plc.server.coils[COIL.SIM_LOCAL_RESET] = 1;
+  runWith(plc, node, 0.2);
+  assert.equal(r[SYS.FAULT_CODE], 0);
+  assert.equal(plc.core.start("remote"), null);
+  runWith(plc, node, 1);
+  assert.equal(node.armLog.at(-2), ARM_CMD.HOME, "re-homes after RESET");
+  assert.ok(node.lidHeld);
+});
+
+test("sort sensor: the PLC classifies the raw height and rejects a bottle whose type does not match its recipe", () => {
+  const plc = new VirtualPlc({ feed: false, externalNodes: { station: true } });
+  const node = new FakeStationNode(plc.server.registers);
+  node.heightMm = DEFAULT_CONFIG.sort.lanes[1].bottleHeightMm; // a large bottle …
+  plc.core.enqueueBarcode("PT1|T250|100,80,70"); // … carrying a small-bottle recipe
+  runWith(plc, node, 60, () => plc.core.counts.total > 0);
+  assert.equal(plc.core.counts.rejected, 1);
+  assert.equal(plc.core.events.find((e) => e.code === EventCode.CONTAINER_REJECTED)?.arg2, RejectReason.BOTTLE_TYPE_MISMATCH);
+  assert.ok(node.armLog.includes(ARM_CMD.PLACE_LID), "it was capped before the sort sensor");
+
+  assert.equal(plc.classifyBottle(0), -1, "no reading");
+  assert.equal(plc.classifyBottle(DEFAULT_CONFIG.sort.lanes[0].bottleHeightMm + 5), 0);
+  assert.equal(plc.classifyBottle(DEFAULT_CONFIG.sort.lanes[1].bottleHeightMm - 5), 1);
+  assert.equal(plc.classifyBottle(400), -1, "out of range of both bottle types");
+});
+
+test("node supervision: a silent node or a node fault bit latches a fault and stops the line", () => {
+  const plc = new VirtualPlc({ feed: false, externalNodes: { station: true } });
+  const r = plc.server.registers;
+  const node = new FakeStationNode(r);
+  runWith(plc, node, 1);
+  node.alive = false;
+  runWith(plc, node, NODE_HEARTBEAT_TIMEOUT_SEC + 0.5);
+  assert.equal(r[SYS.FAULT_CODE], FaultCode.STATION_NODE_OFFLINE);
+  assert.ok(!plc.core.safety.lineEnabled);
+
+  node.alive = true;
+  plc.server.coils[COIL.SIM_LOCAL_RESET] = 1;
+  runWith(plc, node, 0.5);
+  assert.equal(r[SYS.FAULT_CODE], 0, "heartbeat back: RESET clears it");
+
+  r[STATION.STATION_NODE_FAULTS] = 1 << 1;
+  runWith(plc, node, 0.2);
+  assert.equal(r[SYS.FAULT_CODE], FaultCode.SORT_SENSOR);
+  plc.server.coils[COIL.SIM_LOCAL_RESET] = 1;
+  runWith(plc, node, 0.2);
+  assert.equal(r[SYS.FAULT_CODE], FaultCode.SORT_SENSOR, "RESET does not clear a fault whose cause is still present");
 });
 
 test("bridge commands drive the PLC: digital E-Stop, release, reset, start, tank enable/disable", async () => {
@@ -247,24 +399,48 @@ test("physical E-Stop and local mode through the PLC: register bits, button name
   }
 });
 
-test("recipe mailbox: scanner node writes fields then Seq; PLC queues and acknowledges", async () => {
-  const plc = new VirtualPlc({ feed: false });
+test("scan mailbox over Modbus: a real scanner node forwards raw text; the PLC validates it", async () => {
+  const plc = new VirtualPlc({ feed: false, externalNodes: { scanner: true } });
   await plc.server.listen(0, "127.0.0.1");
   const client = await connectedClient(plc.server.address!.port);
+  let hb = 0;
+  /** One scanner-node cycle, as the firmware does it: heartbeat, label, then scan (text first, Done last). */
+  const nodeCycle = async (text: string | null) => {
+    await client.writeSingleRegister(FIELD.SCANNER_NODE_HEARTBEAT, ++hb);
+    const [labelReq, labelDone] = await client.readHoldingRegisters(STATION.LABEL_REQUEST, 2);
+    if (labelReq !== 0 && labelReq !== labelDone) await client.writeSingleRegister(STATION.LABEL_DONE, labelReq);
+    const [scanReq, scanDone] = await client.readHoldingRegisters(SCAN.REQUEST, 2);
+    if (scanReq === 0 || scanReq === scanDone) return;
+    if (text === null) {
+      await client.writeMultipleRegisters(SCAN.STATUS, [SCAN_STATUS.NO_READ, 0]);
+    } else {
+      await client.writeMultipleRegisters(SCAN.STATUS, [SCAN_STATUS.OK, text.length, ...packScanText(text)]);
+    }
+    await client.writeSingleRegister(SCAN.DONE, scanReq);
+  };
+  const runBottle = async (text: string | null) => {
+    plc.core.enqueueBottle();
+    const before = plc.core.counts.total;
+    for (let i = 0; i < 900 && plc.core.counts.total === before; i++) {
+      await nodeCycle(text);
+      plc.scan(0.1);
+    }
+  };
   try {
-    await client.writeMultipleRegisters(RECIPE.PARSE_RESULT, [0, 250, 0, 100, 80, 70]);
-    await client.writeSingleRegister(RECIPE.SEQ, 1);
-    plc.scan(0.1);
-    assert.equal(plc.server.registers[RECIPE.ACK_SEQ], 1);
-    for (let i = 0; i < 600; i++) plc.scan(0.1);
+    await runBottle("PT1|T250|100,80,70");
+    const r = plc.server.registers;
     assert.equal(plc.core.counts.accepted, 1);
+    assert.deepEqual([r[SCAN.PARSE_RESULT], r[SCAN.TOTAL_ML]], [0, 250]);
+    assert.equal(plc.core.containers[0].barcodeRaw, "PT1|T250|100,80,70");
 
-    // A scanner-side parse failure rides through and is rejected at the reject diverter.
-    await client.writeSingleRegister(RECIPE.PARSE_RESULT, 3);
-    await client.writeSingleRegister(RECIPE.SEQ, 2);
-    for (let i = 0; i < 600; i++) plc.scan(0.1);
-    assert.equal(plc.server.registers[RECIPE.ACK_SEQ], 2);
-    assert.equal(plc.core.counts.rejected, 1);
+    await runBottle("PT1|T200|200");
+    assert.equal(plc.core.counts.rejected, 1, "wrong tank count rides through and is rejected");
+    assert.equal(r[SCAN.PARSE_RESULT], 3);
+
+    await runBottle(null);
+    assert.equal(plc.core.counts.rejected, 2);
+    assert.equal(r[SCAN.PARSE_RESULT], 7, "NO_READ");
+    assert.equal(r[SYS.FAULT_CODE], 0, "the heartbeat kept the scanner node online");
   } finally {
     client.close();
     await plc.stop();

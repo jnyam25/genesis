@@ -317,7 +317,6 @@ const GLYPHS: Record<StationPosition["kind"], { glyph: string; size: number; cla
   scan: { glyph: "⌖", size: 14, className: "fill-sky-300" },
   nozzle: { glyph: "▼", size: 14, className: "fill-slate-200" },
   cap: { glyph: "◓", size: 14, className: "fill-teal-300" },
-  press: { glyph: "⇊", size: 14, className: "fill-indigo-300" },
   qc: { glyph: "✓", size: 13, className: "fill-emerald-300" },
   gate: { glyph: "↧", size: 14, className: "fill-amber-300" },
   sort: { glyph: "⇉", size: 14, className: "fill-amber-300" },

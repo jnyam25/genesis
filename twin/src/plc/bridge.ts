@@ -106,8 +106,6 @@ export function hmiStatusFromCode(code: number): HmiContainerStatus | null {
       return "mix";
     case CONTAINER_STATUS.CAP:
       return "cap";
-    case CONTAINER_STATUS.PRESS:
-      return "press";
     case CONTAINER_STATUS.QC:
       return "qc";
     case CONTAINER_STATUS.SORT:
@@ -273,6 +271,7 @@ export class PlcBridge {
       controlMode: bit(ls, LINE_STATE_BITS.LOCAL_MODE) ? "local" : "remote",
       remoteResetAllowed: bit(ls, LINE_STATE_BITS.REMOTE_RESET_ALLOWED),
       simulated: bit(ls, LINE_STATE_BITS.SIMULATION),
+      faultActive: bit(ls, LINE_STATE_BITS.FAULT),
     };
   }
 

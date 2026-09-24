@@ -10,9 +10,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/run.js",
     "dev": "tsc -p tsconfig.json && node dist/run.js",
-    "test": "tsc -p tsconfig.json && node --test dist/test/core.test.js dist/test/plc.test.js",
+    "test": "tsc -p tsconfig.json && node --test dist/test/core.test.js dist/test/plc.test.js dist/test/generated.test.js",
     "virtual-plc": "tsc -p tsconfig.json && node dist/plc/virtual-plc.js",
     "tag-map": "tsc -p tsconfig.json && node dist/plc/print-tag-map.js",
+    "fuxa-project": "tsc -p tsconfig.json && node dist/plc/fuxa-project.js",
     "start:virtual-plc": "node dist/plc/virtual-plc.js"
   },
   "engines": {

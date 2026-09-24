@@ -43,11 +43,9 @@ export interface StationTimesConfig {
   label: number;
   /** SCAN: barcode scanner reads the label (microcontroller). */
   scan: number;
-  /** CAP: robotic arm places the lid (microcontroller). */
+  /** CAP: robotic arm places a pre-picked lid on the container and presses it down to seat it (microcontroller). */
   cap: number;
-  /** PRESS: lid press seats the lid (microcontroller). */
-  press: number;
-  /** QC: sort sensor re-confirms the bottle type; the fill check happens here. */
+  /** QC: sort sensor measures the bottle height; the PLC checks the bottle type and the fill here. */
   qc: number;
   /** GATE: reject diverter decision. */
   gate: number;
@@ -59,18 +57,23 @@ export interface StationTimesConfig {
 export interface SortLaneConfig {
   id: string;
   name: string;
+  /** Nominal height (mm) of this lane's bottle type, as the sort sensor measures it. */
+  bottleHeightMm: number;
 }
 
 /**
  * Two-path sort after the reject diverter. The bottle type (and so the lane)
- * follows from the recipe total; the sort sensor at QC re-confirms it on the
- * physical line.
+ * follows from the recipe total. At QC the sort sensor reports the raw bottle
+ * height; the PLC classifies it against the lanes' nominal heights and rejects
+ * a bottle whose type does not match its recipe.
  */
 export interface SortConfig {
   /** lanes[0] = diverter at rest, lanes[1] = diverter actuated. */
   lanes: [SortLaneConfig, SortLaneConfig];
   /** Recipes totalling at most this (ml) are small bottles → lanes[0]; larger → lanes[1]. */
   smallBottleMaxMl: number;
+  /** A measured height within ± this of a lane's bottleHeightMm is that lane's bottle type. */
+  heightToleranceMm: number;
 }
 
 /** Ordering policy for turning per-tank volumes into ordered dispense steps. */
@@ -89,13 +92,19 @@ export interface TwinConfig {
   maxConcurrentContainers: number;
   /** Sensor-wait timeout (s). A jam past this forces a reject. */
   sensorWaitTimeoutSec: number;
+  /**
+   * Time (s) a microcontroller station (labeler, scanner, robotic arm, sort
+   * sensor) has to report done before the PLC jams the container. Applies when
+   * the stations are driven through the register map (virtual PLC, real PLC).
+   */
+  stationNodeTimeoutSec: number;
   /** Dispense-volume jitter, as a fraction of target (0.02 = ±2%). */
   dispenseVariance: number;
   /** Tanks / paint sources. Order = tank index used in barcodes. */
   tanks: TankConfig[];
   /**
    * Stations along the belt, in travel order: optional LABEL, SCAN, BAY-1..N,
-   * optional MIX, optional CAP, optional PRESS, QC, GATE, optional SORT.
+   * optional MIX, optional CAP, QC, GATE, optional SORT.
    * SCAN, QC and GATE are required.
    */
   stations: StationConfig[];
@@ -158,6 +167,7 @@ export const DEFAULT_CONFIG: TwinConfig = {
   stationSpacingM: 0.50,
   maxConcurrentContainers: 4,
   sensorWaitTimeoutSec: 6.0,
+  stationNodeTimeoutSec: 15.0,
   dispenseVariance: 0.02,
   tanks: TANK_SLOTS.slice(0, 3),
   stations: [
@@ -167,18 +177,19 @@ export const DEFAULT_CONFIG: TwinConfig = {
     { id: "BAY-2",   name: "Fill Bay 2",       positionM: 1.5 },
     { id: "BAY-3",   name: "Fill Bay 3",       positionM: 2.0 },
     { id: "CAP",     name: "Capping Arm",      positionM: 2.5 },
-    { id: "PRESS",   name: "Lid Press",        positionM: 3.0 },
-    { id: "QC",      name: "Sort Sensor",      positionM: 3.5 },
-    { id: "GATE",    name: "Reject Diverter",  positionM: 4.0 },
-    { id: "SORT",    name: "Sort Diverter",    positionM: 4.5 },
+    { id: "QC",      name: "Sort Sensor",      positionM: 3.0 },
+    { id: "GATE",    name: "Reject Diverter",  positionM: 3.5 },
+    { id: "SORT",    name: "Sort Diverter",    positionM: 4.0 },
   ],
-  stationTimesSec: { label: 1.0, scan: 0.5, cap: 2.5, press: 0.8, qc: 0.4, gate: 0.3, sort: 0.3 },
+  stationTimesSec: { label: 1.0, scan: 0.5, cap: 2.5, qc: 0.4, gate: 0.3, sort: 0.3 },
   sort: {
+    // Measure the real bottles and set their heights here.
     lanes: [
-      { id: "A", name: "Lane A (small bottles)" },
-      { id: "B", name: "Lane B (large bottles)" },
+      { id: "A", name: "Lane A (small bottles)", bottleHeightMm: 120 },
+      { id: "B", name: "Lane B (large bottles)", bottleHeightMm: 180 },
     ],
     smallBottleMaxMl: 250,
+    heightToleranceMm: 15,
   },
   mixPolicy: { kind: "interleaved", rounds: 2 },
   mixDurationSec: 1.5,

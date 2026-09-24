@@ -17,7 +17,8 @@
  *   GET  /hmi/state    — live state in the HMI's TwinState shape (see hmi.ts)
  *   POST /hmi/command  — operator command { "command": "eStop" | ..., "tankId"? }
  *   GET  /health       — mode, source status (PLC link, line state bits)
- *   GET  /             — tiny HTML dashboard polling /snapshot
+ *   GET  /             — tiny HTML dashboard (tanks, KPIs, containers, event timeline)
+ *                        polling /snapshot and /hmi/state
  *
  * While the source has no data (PLC offline), data endpoints answer 503 with
  * { ok: false, error } so the HMI shows a stale feed instead of wrong numbers.
@@ -169,28 +170,64 @@ function writeSnapshotFile(snap: Snapshot): void {
   fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(snap, null, 2));
 }
 
+// Client script is plain concatenation: no `${` or backslash escapes inside this template literal.
 function dashboardHtml(): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Captsone Twin</title>
 <style>body{font:14px/1.4 system-ui,sans-serif;margin:24px;background:#0d1117;color:#e6edf3}
-h1{font-size:18px}pre{background:#161b22;padding:12px;border-radius:8px;overflow:auto;max-height:70vh}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin:12px 0}
-.tank{padding:10px;border-radius:8px;border:1px solid #30363d}
+h1{font-size:18px}h2{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:#8b949e;margin:20px 0 8px}
+a{color:#58a6ff}small,.muted{color:#8b949e;font-weight:normal}.err{color:#f85149}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+.card{padding:10px;border-radius:8px;border:1px solid #30363d;background:#161b22}
+.card b{display:block;font-size:20px}
 .bar{height:8px;background:#30363d;border-radius:4px;margin-top:6px;overflow:hidden}
-.bar>i{display:block;height:100%;background:#58a6ff}.err{color:#f85149}</style>
+.bar>i{display:block;height:100%;background:#58a6ff}
+.cols{display:grid;grid-template-columns:minmax(280px,1fr) minmax(320px,1.3fr);gap:24px}
+@media(max-width:800px){.cols{grid-template-columns:1fr}}
+.ctr{display:grid;grid-template-columns:64px 110px 1fr 110px;gap:8px;align-items:center;padding:4px 0}
+.ctr .bar{margin:0}.num{text-align:right;font-variant-numeric:tabular-nums}
+.tlwrap{max-height:60vh;overflow:auto;padding-left:6px}
+.tl{list-style:none;margin:0;padding:0 0 0 14px;border-left:2px solid #30363d}
+.tl li{position:relative;padding:0 0 12px 12px}
+.tl li::before{content:'';position:absolute;left:-20px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--c);box-shadow:0 0 0 3px #0d1117}
+.tl time{font:12px ui-monospace,monospace;color:#8b949e;margin-right:6px}</style>
 </head><body><h1>Captsone Industrial Paint Mixing — Digital Twin <small id="mode"></small></h1>
+<p id="err" class="err" hidden></p>
 <div id="tanks" class="grid"></div>
-<pre id="snap"></pre>
+<h2>Production</h2><div id="kpis" class="grid"></div>
+<div class="cols">
+<section><h2>Containers on the line</h2><div id="ctrs"></div></section>
+<section><h2>Event timeline <small id="clock"></small></h2><div class="tlwrap"><ol id="tl" class="tl"></ol></div></section>
+</div>
+<p class="muted">Raw data: <a href="/snapshot">/snapshot</a> · <a href="/hmi/state">/hmi/state</a> · <a href="/health">/health</a></p>
 <script>
-async function poll(){try{const r=await fetch('/snapshot');const s=await r.json();
-const tanks=document.getElementById('tanks');tanks.innerHTML='';
-if(!r.ok){document.getElementById('snap').innerHTML='<span class=err>'+(s.error||'unavailable')+'</span>';return;}
-for(const t of s.tanks){const pct=Math.max(0,Math.min(1,t.levelMl/t.capacityMl));
-const d=document.createElement('div');d.className='tank';
-d.innerHTML='<b>'+t.id+'</b> '+t.name+'<br>'+Math.round(t.levelMl)+'/'+t.capacityMl+' ml'+
-'<div class=bar><i style="width:'+(pct*100)+'%;background:'+t.colorCode+'"></i></div>';
-tanks.appendChild(d);}
-document.getElementById('snap').textContent=JSON.stringify(s,null,2);}catch(e){}}
-fetch('/health').then(r=>r.json()).then(h=>{document.getElementById('mode').textContent='('+h.mode+')';});
+const $=id=>document.getElementById(id);
+const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+const pct=v=>Math.round(v*1000)/10+'%';
+const SEV={info:'#58a6ff',success:'#3fb950',warn:'#d29922',error:'#f85149'};
+const STATUS={idle:'Idle',label:'Label',scan:'Scan','scan-rejected':'Scan rejected',mix:'Mix',cap:'Arm (lid)',qc:'QC',sort:'Sort',output:'Accepted',rejected:'Rejected'};
+const statusText=s=>STATUS[s]||s.replace(/^fill-([0-9]+)$/,'Fill bay $1');
+const hms=ms=>new Date(ms).toLocaleTimeString([],{hour12:false});
+function ago(ms){const s=Math.max(0,Math.round((Date.now()-ms)/1000));return s<60?s+' s ago':Math.floor(s/60)+' min '+(s%60)+' s ago';}
+function bar(frac,color){return '<div class=bar><i style="width:'+Math.max(0,Math.min(1,frac||0))*100+'%;background:'+esc(color)+'"></i></div>';}
+function card(label,value,sub){return '<div class=card><span class=muted>'+esc(label)+'</span><b>'+esc(value)+'</b>'+(sub?'<span class=muted>'+esc(sub)+'</span>':'')+'</div>';}
+async function getJson(u){const r=await fetch(u,{cache:'no-store'});const b=await r.json();if(!r.ok)throw new Error(b.error||'unavailable');return b;}
+function render(s,h){
+$('tanks').innerHTML=s.tanks.map(t=>'<div class=card><span class=muted>'+esc(t.id)+'</span> '+esc(t.name)+'<br>'+Math.round(t.levelMl)+' / '+esc(t.capacityMl)+' ml'+bar(t.levelMl/t.capacityMl,t.colorCode)+'</div>').join('');
+const o=s.oee;
+$('kpis').innerHTML=card('Accepted',s.counts.accepted)+card('Rejected',s.counts.rejected)+card('Total',s.counts.total)+
+card('Throughput',s.throughputCpm+' /min')+card('OEE',pct(o.overall),'A '+pct(o.availability)+' · P '+pct(o.performance)+' · Q '+pct(o.quality))+
+(s.sortLanes||[]).map(l=>card(l.name,l.count)).join('');
+$('ctrs').innerHTML=h.containers.length?h.containers.map(c=>{
+const color=c.status==='output'?SEV.success:/rejected/.test(c.status)?SEV.error:SEV.info;
+return '<div class=ctr><b>'+esc(c.id)+'</b><span>'+esc(statusText(c.status))+'</span>'+bar(c.targetMl?c.fillMl/c.targetMl:0,color)+
+'<span class="num muted">'+(c.targetMl?esc(c.fillMl)+' / '+esc(c.targetMl)+' ml':'—')+'</span></div>';}).join(''):'<p class=muted>No containers on the belt.</p>';
+const ev=h.recentEvents||(h.lastEvent?[h.lastEvent]:[]);
+$('clock').textContent='· line time '+Math.round(s.timestamp)+' s';
+$('tl').innerHTML=ev.length?ev.map(e=>'<li style="--c:'+(SEV[e.severity]||SEV.info)+'"><time>'+hms(e.at)+'</time><span class=muted>'+ago(e.at)+'</span><div>'+esc(e.message)+'</div></li>').join(''):'<li style="--c:#30363d" class=muted>No events yet.</li>';
+}
+async function poll(){try{const [s,h]=await Promise.all([getJson('/snapshot'),getJson('/hmi/state')]);$('err').hidden=true;render(s,h);}
+catch(e){$('err').textContent='Line data unavailable: '+e.message;$('err').hidden=false;}}
+fetch('/health').then(r=>r.json()).then(h=>{$('mode').textContent='('+h.mode+')';});
 poll();setInterval(poll,500);
 </script></body></html>`;
 }

@@ -55,7 +55,8 @@ Live line state in the HMI's `TwinState` shape (mirrors `hmi/src/lib/twin/types.
     "running": true,
     "controlMode": "remote",
     "remoteResetAllowed": false,
-    "simulated": true
+    "simulated": true,
+    "faultActive": false
   },
   "timestamp": 1789650000456,
   "connected": true
@@ -67,12 +68,12 @@ Live line state in the HMI's `TwinState` shape (mirrors `hmi/src/lib/twin/types.
 | `tanks[]` | Enabled tanks in slot order (`T1..T8`). `levelMl` 0.1 ml resolution. `name`/`colorCode` are the operator's current choice for that slot |
 | `tankSlots[]` | All eight slots, enabled or not, with their editable `name`/`colorCode`. `custom` = edited away from the default; `enabled` = on the line. Optional (the HMI hides the colour editor without it) |
 | `containers[].id` | `C-` + zero-padded id |
-| `containers[].status` | In belt order: `label`, `scan`, `fill-<bay>`, `mix` (only if a mixer is configured), `cap`, `press`, `qc` (sort sensor and reject diverter), `sort` (sort diverter), then `output` (accepted) or `rejected`. `scan-rejected` = bad barcode, rejected at the reject diverter. Finished containers stay listed for about 1.5 s |
+| `containers[].status` | In belt order: `label`, `scan`, `fill-<bay>`, `mix` (only if a mixer is configured), `cap` (robotic capping arm), `qc` (sort sensor and reject diverter), `sort` (sort diverter), then `output` (accepted) or `rejected`. `scan-rejected` = bad barcode or no read, rejected at the reject diverter. Finished containers stay listed for about 1.5 s |
 | `containers[].lane` | Index into `sortLanes` the container is (or will be) sorted to. The simulated twin knows it from the recipe; from a PLC it appears once the container is sorted. Optional |
 | `sortLanes[]` | Output lanes after the sort diverter (`config.sort.lanes`) with accepted counts. Optional |
 | `throughputCpm` | Accepted containers per minute over a rolling 60 s window |
 | `oee.*` | 0..1. `availability` (and `overall`) read **0 while the line isn't running** (stopped, E-Stop, reset pending) |
-| `safety` | Emergency-stop and control-authority state ([prototype/safety.md](prototype/safety.md)). `eStopActive` = digital latched **or** any physical button pressed; `resetRequired` = no E-Stop active but the safety circuit not yet reset; `controlMode` = local panel key switch; `simulated` = the physical controls can be operated through the `sim*` commands |
+| `safety` | Emergency-stop and control-authority state ([prototype/safety.md](prototype/safety.md)). `eStopActive` = digital latched **or** any physical button pressed; `resetRequired` = no E-Stop active but the safety circuit not yet reset; `controlMode` = local panel key switch; `simulated` = the physical controls can be operated through the `sim*` commands; `faultActive` = a station fault is latched (robotic arm, labeler, scanner, sort sensor, or an ESP32 node offline): the PLC stopped the line and refuses `start` until a `reset` after the cause is fixed. From a PLC it is `LineState` bit 3 (`FAULT`), and `Sys.FaultCode` holds the first fault. The cause is in the latest `FAULT` event in `recentEvents` |
 | `lastEvent` / `recentEvents` | `recentEvents` is newest first (20 in sim mode, 8 from a PLC). `id` is unique per event: `e<seq>` (sim) or `p<epoch>-<seq>` (PLC); `at` is epoch ms |
 | `timestamp` | Epoch ms when the state was produced |
 
@@ -88,8 +89,8 @@ Body: `{ "command": <name>, ...args }`
 | --- | --- | --- | --- |
 | `eStop` | **Digital E-Stop.** Opens the safety circuit (hardware shutdown) and puts the control system in E-Stop. Latched | Always, any mode | `Cmd.DigitalEStop` |
 | `releaseEStop` (alias `clearEStop`) | Release the digital E-Stop latch. Doesn't reset or start | While the digital E-Stop is active | `Cmd.ReleaseEStop` |
-| `reset` | Safety reset from the HMI | Only if `safety.remoteResetAllowed`, REMOTE mode, no E-Stop active. **Refused by default: reset at the machine** | `Cmd.Reset` |
-| `start` | Run the line | REMOTE mode, safety circuit reset, no E-Stop | `Cmd.Start` |
+| `reset` | Safety reset from the HMI. Also clears latched station faults whose cause is gone | Only if `safety.remoteResetAllowed`, REMOTE mode, no E-Stop active. **Refused by default: reset at the machine** | `Cmd.Reset` |
+| `start` | Run the line | REMOTE mode, safety circuit reset, no E-Stop, no station fault latched | `Cmd.Start` |
 | `stop` | Controlled stop | Always, any mode | `Cmd.Stop` |
 | `jogBelt` | Advance the belt one short step | REMOTE, stopped, safety reset, no E-Stop | `Cmd.Jog` |
 | `firePusher` | Fire the reject diverter on the container at the sort sensor (QC) or reject diverter (GATE) | REMOTE, no E-Stop, safety reset | `Cmd.FirePusher` |
@@ -111,7 +112,7 @@ Body: `{ "command": <name>, ...args }`
 | Status | Body |
 | --- | --- |
 | 200 | `{ "ok": true }`: accepted |
-| 400 | `{ "ok": false, "error": "…" }`: unknown command, bad arguments, invalid JSON, or a **refusal with its reason**, e.g. `"start refused: local control is active — the HMI is view-only (switch the panel key to REMOTE)"` or `"reset refused: reset must be done at the local control panel"` |
+| 400 | `{ "ok": false, "error": "…" }`: unknown command, bad arguments, invalid JSON, or a **refusal with its reason**, e.g. `"start refused: local control is active — the HMI is view-only (switch the panel key to REMOTE)"`, `"start refused: a station fault is latched — fix it, then press RESET"` or `"reset refused: reset must be done at the local control panel"` |
 | 405 | Not a POST |
 
 In PLC mode, the bridge pre-checks commands against the PLC's `LineState` with the same rules. The PLC re-checks on the rising edge and records `COMMAND_REFUSED` if it disagrees. A 400 is also returned when the PLC is offline (`"PLC offline: …"`), a Modbus write fails, or a `sim*` command is sent to a real PLC.
@@ -150,7 +151,7 @@ Always 200.
 
 ### `GET /`
 
-A minimal HTML dashboard that polls `/snapshot`. Use it for diagnostics without the HMI.
+A minimal HTML dashboard that polls `/snapshot` and `/hmi/state` every 0.5 s. It shows tank levels, counts, throughput, OEE, sort-lane counts, the containers on the line with their fill progress, and a timeline of the last 20 events (newest first, coloured by severity). Links to the raw JSON endpoints are at the bottom. Use it for diagnostics without the HMI.
 
 ---
 

@@ -3,7 +3,7 @@
  *
  * Produces a live `TwinState` stream that mimics the real digital twin so the
  * HMI runs standalone before the engine is wired in. It advances containers
- * through the line (label → scan → fill bays → cap → press → sort sensor /
+ * through the line (label → scan → fill bays → capping arm → sort sensor /
  * reject diverter → sort diverter → Lane A/B), drains/refills tanks, computes
  * OEE, and emits events.
  *
@@ -51,8 +51,7 @@ const INITIAL_TANKS = 3;
 const STATUS_DWELL_MS: Record<string, number> = {
   label: 1000,
   scan: 800,
-  cap: 1600,
-  press: 900,
+  cap: 2000,
   qc: 1200,
   sort: 800,
 };
@@ -392,11 +391,8 @@ export class MockTwinEngine {
         return;
       }
       case "cap":
-        c.status = "press";
-        return;
-      case "press":
         c.status = "qc";
-        this.lastEvent = ev("info", `${c.id} → sort sensor`, now);
+        this.lastEvent = ev("info", `${c.id} lid placed → sort sensor`, now);
         return;
       case "qc":
         if (c.badBarcode) this.reject(c, "scan-rejected", "bad barcode", now);

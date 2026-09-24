@@ -13,6 +13,8 @@
     "dev:twin": "npm run dev --prefix twin",
     "dev:hmi": "npm run dev --prefix hmi",
     "virtual-plc": "npm run virtual-plc --prefix twin",
+    "fuxa": "node scripts/fuxa.mjs",
+    "fuxa:project": "npm run fuxa-project --prefix twin -- --push",
     "build": "node scripts/build.mjs",
     "build:mock": "node scripts/build.mjs --mock",
     "start": "node scripts/run-all.mjs start",

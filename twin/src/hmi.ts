@@ -24,7 +24,6 @@ export type HmiContainerStatus =
   | `fill-${number}`
   | "mix"
   | "cap"
-  | "press"
   | "qc"
   | "sort"
   | "output"
@@ -139,8 +138,6 @@ export function hmiStatus(c: CoreContainer): HmiContainerStatus {
       return "mix";
     case "CAP":
       return "cap";
-    case "PRESS":
-      return "press";
     case "QC":
     case "GATE":
       return "qc";

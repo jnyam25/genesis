@@ -53,7 +53,6 @@ export function idealCycleSec(config: TwinConfig): number {
     SCAN: t.scan,
     MIX: config.mixDurationSec,
     CAP: t.cap,
-    PRESS: t.press,
     QC: t.qc,
     GATE: t.gate,
     SORT: t.sort,

@@ -1,5 +1,3 @@
-# FUXA runtime data (project database, history, logs, uploaded images)
-appdata/
-db/
-logs/
-images/
+# FUXA install (npm) and runtime data (project database, history, logs, images)
+node_modules/
+data/

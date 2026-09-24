@@ -2,17 +2,17 @@
 
 Two layers:
 
-1. **Field IO**: the physical sensors and actuators, and which controller each one is wired to (§1–§3). The split follows the team's bill of materials ([bom.md](bom.md)): the team's **Allen-Bradley Micro850 PLC** supervises the line, and two **ESP32** station nodes run the labeling, scanning, capping, pressing and sort-sensing stations.
+1. **Field IO**: the physical sensors and actuators, and which controller each one is wired to (§1–§3). The split follows the team's bill of materials ([bom.md](bom.md)): the team's **Allen-Bradley Micro850 PLC** supervises the line, and two **ESP32** station nodes run the labeling, scanning, robotic capping and sort-sensing stations. The PLC makes every decision; the nodes only execute its requests and report back.
 2. **Register map**: the data the PLC exchanges with the monitoring PC (bridge + web HMI, FUXA SCADA) and the ESP32 nodes over Modbus TCP (§4). This section is **generated from [`twin/src/plc/tag-map.ts`](../../twin/src/plc/tag-map.ts)**; regenerate it with `npm run tag-map` after changing the map.
 
 The line layout it assumes (from [`twin/src/config.ts`](../../twin/src/config.ts)):
 
 ```
  E-Stop ENTRY                                                                                   E-Stop EXIT
- load ─▶[LABEL]─▶[SCAN]─▶[BAY-1]─▶[BAY-2]─▶[BAY-3]─▶ … ─▶[CAP]─▶[PRESS]─▶[QC]─▶[GATE]─▶[SORT]─▶ lane A (small)
-                                                                     sort    │ reject      └──▶ lane B (large)
-                                                                     sensor  ▼ diverter
-                                                                          reject lane
+ load ─▶[LABEL]─▶[SCAN]─▶[BAY-1]─▶[BAY-2]─▶[BAY-3]─▶ … ─▶[CAP]─▶[QC]─▶[GATE]─▶[SORT]─▶ lane A (small)
+                                                           ▲    sort   │ reject └──▶ lane B (large)
+                                                  lid magazine  sensor ▼ diverter
+                                                  (robotic arm)      reject lane
 ```
 
 - **One-way belt, one fill bay per tank.** A container passes each station once, in belt order. See "Belt order" in [../engine-design.md](../engine-design.md#belt-order).
@@ -32,11 +32,10 @@ The line layout it assumes (from [`twin/src/config.ts`](../../twin/src/config.ts
 | Sort diverter (2-path split) | Path select | DO | PLC | Wired |
 | Presence sensors | Bottle at station | DI | PLC | Wired |
 | Labeling station | Apply-label trigger | GPIO → driver | ESP32 #1 (scanner node) | Wired |
-| Barcode scanner | Read label ID | UART | ESP32 #1 (scanner node) | Wired |
-| Robotic arm (lid placement) | Multi-axis servo sequence | Servo bus / arm controller | ESP32 #2 (station node) | Wired to driver |
-| Lid press | Press actuate | GPIO → relay/MOSFET | ESP32 #2 (station node) | Wired |
-| Sort sensor | Re-confirm bottle type | GPIO / UART | ESP32 #2 (station node) | Wired |
-| PLC ↔ ESP32 nodes | Recipe data, station handshake, heartbeats | Modbus TCP (`Recipe.*`, `Station.*`, `Field.*`) | Supervisor link | Wireless (dedicated AP) |
+| Barcode scanner (GM65-class) | Read the label text (forwarded raw; the PLC validates it) | UART | ESP32 #1 (scanner node) | Wired |
+| Robotic arm (Hiwonder xArm ESP32, 6-DOF with gripper) | Lift a lid from the lid magazine, place it on the container at CAP, press it down, release, return HOME | LX servo bus | ESP32 #2 (station node) | Wired |
+| Sort sensor (VL53L1X time-of-flight) | Measure bottle height (the PLC classifies the bottle type) | I²C | ESP32 #2 (station node) | Wired |
+| PLC ↔ ESP32 nodes | Scan text, station handshakes, arm commands, fault bits, heartbeats | Modbus TCP (`Scan.*`, `Station.*`, `Field.*`) | Supervisor link | Wireless (dedicated AP) |
 | PLC ↔ monitoring PC | Bridge + web HMI, logging, FUXA SCADA | Modbus TCP | Supervisor link | Wired Ethernet |
 
 ## 1. Field inputs (PLC)
@@ -58,13 +57,12 @@ Tag names follow `I_<Area>_<Device>_<Signal>`. Counts are for the default 3-tank
 | `I_Scan_Present` | Presence sensor at SCAN | DI | 1 = present | |
 | `I_Bay<k>_Present` | Presence sensor at BAY-k | DI | 1 = present | One per tank (k = 1..N) |
 | `I_Cap_Present` | Presence sensor at CAP | DI | 1 = present | |
-| `I_Press_Present` | Presence sensor at PRESS | DI | 1 = present | |
 | `I_QC_Present` | Presence at the sort sensor (QC) | DI | 1 = present | Can be the sort sensor's own "object present" output via ESP32 #2 if it has one |
 | `I_Gate_Present` | Presence at the reject diverter | DI | 1 = present | |
 | `I_Sort_Present` | Presence at the sort diverter | DI | 1 = present | Optional if the diverter is timed from `I_Gate_Present` |
 | `I_LaneA_Full` / `I_LaneB_Full` / `I_Reject_Full` | Sensors at the end of each output lane | DI | 1 = lane full | Recommended: PLC halts admission when full |
 | `I_RejectDiverter_Home` / `I_SortDiverter_Home` | Limit or reed switches | DI | 1 = retracted | Recommended: fault if not home within 1 s |
-| `I_Belt_Drive_Fault` | Motor driver fault output | DI | 1 = fault | → `LINE_STATE.FAULT`, event `FAULT` |
+| `I_Belt_Drive_Fault` | Motor driver fault output | DI | 1 = fault | Optional. Stops the line (`RunCmd := 0`). It has no fault code yet: if it's wired, add one to `FaultCode` in [`events.ts`](../../twin/src/events.ts) so it latches `LINE_STATE.FAULT` like the station faults |
 | `I_Tank<k>_Low` | Low-level float switch, per tank | DI | 1 = low | Recommended: the BOM has no level sensor, so the PLC estimates the level from dispensed volume and this float confirms it (see [bom.md](bom.md#3-gaps-between-the-bom-and-the-software)) |
 | `AI_Tank<k>_Level` | Level transmitter (4–20 mA) | AI | 4 mA = empty, 20 mA = capacity | Optional upgrade, or an ESP32 tank node (`Field.Tank<k>LevelMl`); pick one per tank |
 
@@ -76,7 +74,7 @@ Tag names follow `I_<Area>_<Device>_<Signal>`. Counts are for the default 3-tank
 | `AO_Belt_SpeedRef` | Motor driver speed input | AO 0–10 V (or PWM) | Speed ∝ `beltSpeedMPerSec` | 0. Omit for a fixed-speed motor |
 | `O_Valve_T<k>_Open` | NC shutoff solenoid in series with tank k's proportional valve, and the valve's enable | DO | Tank k may flow | Closed (spring) |
 | `AO_Valve_T<k>_Angle` | Proportional (servo-driven) valve position input | AO 0–10 V (or servo positioner) | Opening = `Tank<k>.ValveOpeningPct` while dispensing | 0 % (but a servo valve holds its last position without power, hence the shutoff solenoid) |
-| `O_<Station>_Stopper` | Stopper actuator, one per holding station (LABEL, SCAN, BAY-k, CAP, PRESS, QC, GATE) | DO | **Retract** (release container) | Extended, holding (spring return). Only if stoppers are fitted; on a single-bottle line the belt stop does this job |
+| `O_<Station>_Stopper` | Stopper actuator, one per holding station (LABEL, SCAN, BAY-k, CAP, QC, GATE) | DO | **Retract** (release container) | Extended, holding (spring return). Only if stoppers are fitted; on a single-bottle line the belt stop does this job |
 | `O_RejectDiverter_Extend` | Reject diverter slide (solenoid) | DO | Push to reject lane | Retracted (spring) |
 | `O_SortDiverter_LaneB` | Sort diverter gate (solenoid) | DO | Route to lane B | Lane A (spring) |
 | `O_Refill_T<k>_Valve` | Normally-closed refill solenoid | DO | Refill flowing | Closed. Not in the BOM: refill is manual unless added |
@@ -87,19 +85,18 @@ Tag names follow `I_<Area>_<Device>_<Signal>`. Counts are for the default 3-tank
 
 Running, E-Stop and REMOTE indications can live on the touch panel instead of separate lamps; the RESET lamp stays a real lamp because it sits in the button.
 
-The **safety relay** switches power to the conveyor motor driver, the valve shutoff solenoids and valve servos, both diverters, the lid press, the label applicator and the capping arm's servo supply (the last three are driven by the ESP32 nodes). It does **not** switch the PLC, the ESP32 logic supply or the monitoring PC, so the control system stays alive to report which E-Stop was pressed. See [safety.md §1](safety.md#1-emergency-stop-physical-and-digital-working-together), [§2a](safety.md#2a-actuators-driven-by-the-esp32-nodes) and [§4](safety.md#4-hardware-design-rules).
+The **safety relay** switches power to the conveyor motor driver, the valve shutoff solenoids and valve servos, both diverters, the label applicator and the capping arm's servo supply (the last two are driven by the ESP32 nodes). It does **not** switch the PLC, the ESP32 logic supply or the monitoring PC, so the control system stays alive to report which E-Stop was pressed. See [safety.md §1](safety.md#1-emergency-stop-physical-and-digital-working-together), [§2a](safety.md#2a-actuators-driven-by-the-esp32-nodes) and [§4](safety.md#4-hardware-design-rules).
 
 ### ESP32 station node IO (not PLC IO)
 
 | Node | Device | Interface | Notes |
 | --- | --- | --- | --- |
-| ESP32 #1 scanner node | Barcode scanner (Waveshare 1D/2D module) | UART 3.3 V | Parses `PT1` barcodes → `Recipe.*` mailbox |
+| ESP32 #1 scanner node | Barcode scanner (Waveshare 1D/2D, GM65-class module) | UART 3.3 V | On a new `Scan.Request` it triggers one read and writes the **raw** text (`Scan.Status`, `Scan.Length`, `Scan.Text1..32`), then `Scan.Done`. It never parses the barcode; the PLC validates it (`Scan.ParseResult`) |
 | ESP32 #1 scanner node | Label applicator (servo or stepper + driver) | GPIO → driver | Runs on `Station.LabelRequest`, reports `Station.LabelDone`. Driver power via the safety relay |
-| ESP32 #2 station node | Robotic capping arm (xArm / MaxArm class) | Arm controller serial/bus | Runs on `Station.CapRequest`, reports `Station.CapDone`. Servo power via the safety relay |
-| ESP32 #2 station node | Lid press (linear actuator or pneumatic cylinder + solenoid) | GPIO → relay/MOSFET | Runs on `Station.PressRequest`, reports `Station.PressDone`. Spring-return, power via the safety relay |
-| ESP32 #2 station node | Sort sensor (bottle type: height/colour/ID) | GPIO or UART | Writes `Station.SortSensorType` + `Station.SortSensorContainer` |
+| ESP32 #2 station node | Robotic arm: Hiwonder xArm ESP32, 6 LX bus servos, servo 1 is the gripper | LX servo bus (half-duplex UART) | Runs one `Station.ArmCmd` per new `Station.ArmCmdSeq` (`HOME`, `PICK_LID` from the lid magazine, `PLACE_LID` at CAP including pressing the lid down), then writes `Station.ArmResult` and `Station.ArmDoneSeq`; keeps `Station.ArmStatus` current. Lid detection uses the gripper servo's position (closing on a lid stalls short of the empty-closed position). Poses are taught in the node's serial-console teach mode (line stopped only). Servo power via the safety relay |
+| ESP32 #2 station node | Sort sensor: VL53L1X time-of-flight, looking down at the bottle at QC | I²C 3.3 V | On a new `Station.SortRequest` it writes the measured height to `Station.SortHeightMm`, then `Station.SortDone`. It never classifies the bottle; the PLC does, against `config.sort` |
 
-ESP32 GPIO is 3.3 V: never connect 24 V field signals directly ([esp32.md](esp32.md)).
+ESP32 GPIO is 3.3 V: never connect 24 V field signals directly. The firmware is in [`firmware/`](../../firmware) and described in [esp32.md](esp32.md).
 
 ### Safety circuit wiring (overview)
 
@@ -108,7 +105,7 @@ ESP32 GPIO is 3.3 V: never connect 24 V field signals directly ([esp32.md](esp32
                └─ E-Stop PANEL (ch2) ─ E-Stop ENTRY (ch2) ─ E-Stop EXIT (ch2) ─ K_REMOTE NO (ch2) ─┴─▶ Safety relay S21/S22 (ch2)
  RESET PB ─────────────────────────────────────────────────────────────────────────────────────────▶ Safety relay reset (S33/S34, edge-triggered)
  K_REMOTE NC (feedback) ─┬─ motor driver/contactor feedback NC ────────────────────────────────────▶ Safety relay feedback loop
- Safety relay outputs 13/14, 23/24 ──▶ conveyor driver enable, valve shutoff + servo supply, diverters, press, labeler, arm servo supply
+ Safety relay outputs 13/14, 23/24 ──▶ conveyor driver enable, valve shutoff + servo supply, diverters, labeler, arm servo supply
  Safety relay aux 41/42 ──▶ I_Safety_OK
  PLC O_Safety_RemoteEStopOK ──▶ K_REMOTE coil (force-guided interposing safety relay)
  Each E-Stop NC monitoring contact ──▶ I_EStop_<Location>_Mon
@@ -122,14 +119,14 @@ For N tanks:
 
 | | Formula | N = 3 | N = 8 |
 | --- | --- | ---: | ---: |
-| Digital inputs, required | 15 + N (safety OK, 3 E-Stop monitors, relay feedback, key, STOP, RESET, 7 + N presence sensors) | 18 | 23 |
+| Digital inputs, required | 14 + N (safety OK, 3 E-Stop monitors, relay feedback, key, STOP, RESET, 6 + N presence sensors) | 17 | 22 |
 | Digital inputs, recommended extras | 5 + N (3 lane-full, 2 diverter-home, 1 low float per tank) | 8 | 13 |
 | Digital outputs, required | 4 + N (belt, reject diverter, sort diverter, remote E-Stop OK, 1 valve shutoff per tank) | 7 | 12 |
-| Digital outputs, stoppers (if fitted) | 6 + N | 9 | 14 |
+| Digital outputs, stoppers (if fitted) | 5 + N | 8 | 13 |
 | Digital outputs, indicators (optional) | 5 (stack light ×3, RESET lamp, buzzer) | 5 | 5 |
 | Analog outputs | N valve angles (+1 belt speed) | 3–4 | 8–9 |
 
-Size the Micro850's plug-in and expansion modules for the **largest tank count you plan to support**, plus about 20% spare ([micro850-plc.md §1](micro850-plc.md#io-against-the-requirement)). With stoppers fitted, a 3-tank line needs roughly 26 DI, 21 DO and 4 AO.
+Size the Micro850's plug-in and expansion modules for the **largest tank count you plan to support**, plus about 20% spare ([micro850-plc.md §1](micro850-plc.md#io-against-the-requirement)). With stoppers fitted, a 3-tank line needs roughly 25 DI, 20 DO and 4 AO.
 
 ### Calibration values per tank
 
@@ -154,15 +151,15 @@ These live in the PLC and are published in the tank register block. Keep [`confi
 - **Unit id** 1. **Port** 502 on the PLC (5020 on the virtual PLC).
 
 <!-- BEGIN GENERATED: tag-map -->
-<!-- Generated from twin/src/plc/tag-map.ts (protocol v3) by `npm run tag-map -- --write`. Do not edit by hand. -->
+<!-- Generated from twin/src/plc/tag-map.ts (protocol v4) by `npm run tag-map -- --write`. Do not edit by hand. -->
 
 ### Holding registers — system (0–19)
 
 | Address | Modicon | Tag (OPC UA browse name) | Access | Unit | Description |
 | ---: | ---: | --- | :---: | --- | --- |
-| 0 | 40001 | `Sys.ProtocolVersion` | R | — | Register map version (currently 3). Bridge refuses to run on a mismatch. |
+| 0 | 40001 | `Sys.ProtocolVersion` | R | — | Register map version (currently 4). Bridge refuses to run on a mismatch. |
 | 1 | 40002 | `Sys.PlcHeartbeat` | R | count | Incremented by the PLC at ≥ 1 Hz. Bridge marks the PLC offline if it stops changing for 3 s. |
-| 2 | 40003 | `Sys.LineState` | R | bits | bit0 RUNNING, bit1 ESTOP_ACTIVE, bit2 SAFETY_OK (safety relay closed), bit3 FAULT, bit4 HMI_LINK_OK, bit5 DIGITAL_ESTOP, bit6 PHYSICAL_ESTOP, bit7 RESET_REQUIRED, bit8 LOCAL_MODE, bit9 REMOTE_RESET_ALLOWED, bit10 SIMULATION. |
+| 2 | 40003 | `Sys.LineState` | R | bits | bit0 RUNNING, bit1 ESTOP_ACTIVE, bit2 SAFETY_OK (safety relay closed), bit3 FAULT (station fault latched, see Sys.FaultCode), bit4 HMI_LINK_OK, bit5 DIGITAL_ESTOP, bit6 PHYSICAL_ESTOP, bit7 RESET_REQUIRED, bit8 LOCAL_MODE, bit9 REMOTE_RESET_ALLOWED, bit10 SIMULATION. |
 | 3 | 40004 | `Sys.TankCount` | R | count | Enabled tank modules. |
 | 4 | 40005 | `Sys.TankEnableMask` | RW | bits | bit k-1 = tank slot k enabled. HMI add/remove tank writes this. PLC refuses a mask of 0; in-flight containers that still need a disabled tank are rejected (under-filled). Queued recipes with the old tank count are held back (event 19). |
 | 5 | 40006 | `Counts.Accepted` | R | count | Containers accepted since PLC start (wraps). |
@@ -179,6 +176,7 @@ These live in the PLC and are published in the tank register block. Keep [`confi
 | 16 | 40017 | `Sys.PhysicalEStopMask` | R | bits | bit i = physical E-Stop button i pressed, from the safety relay's monitoring contacts (bit0 local control panel, bit1 line entry, bit2 line exit — config.safety.eStopButtons). |
 | 17 | 40018 | `Counts.LaneA` | R | count | Accepted containers sorted to lane A (config.sort.lanes[0]) (wraps). |
 | 18 | 40019 | `Counts.LaneB` | R | count | Accepted containers sorted to lane B (config.sort.lanes[1]) (wraps). |
+| 19 | 40020 | `Sys.FaultCode` | R | code | First latched station fault, 0 = none: 1 labeler, 2 scanner, 3 arm servo, 4 arm could not pick a lid, 5 arm dropped the lid, 6 sort sensor, 7 scanner node offline, 8 station node offline. Cleared by RESET once the cause is gone. |
 
 ### Holding registers — tank slots (20–67)
 
@@ -242,7 +240,7 @@ Five registers per slot i = 1..8, base `100 + 5·(i−1)`. Live containers first
 | Address | Modicon | Tag (OPC UA browse name) | Access | Unit | Description |
 | ---: | ---: | --- | :---: | --- | --- |
 | 100 | 40101 | `Container1.Id` | R | — | Container id, 0 = empty slot. |
-| 101 | 40102 | `Container1.Status` | R | code | 0 none, 1 scan, 2 scan-rejected, 3 label, 11..18 fill at bay n (10+n), 20 mix, 21 sort sensor / reject diverter, 22 accepted to lane A, 23 rejected, 24 cap, 25 press, 26 sort diverter, 27 accepted to lane B. |
+| 101 | 40102 | `Container1.Status` | R | code | 0 none, 1 scan, 2 scan-rejected, 3 label, 11..18 fill at bay n (10+n), 20 mix, 21 sort sensor / reject diverter, 22 accepted to lane A, 23 rejected, 24 capping arm, 26 sort diverter, 27 accepted to lane B (25 reserved). |
 | 102 | 40103 | `Container1.FillMl` | R | ml × 10 | Dispensed so far. |
 | 103 | 40104 | `Container1.TargetMl` | R | ml × 10 | Recipe total. |
 | 105 | 40106 | `Container2.Id` | R | — |  |
@@ -312,23 +310,51 @@ Five registers per slot i = 1..8, base `100 + 5·(i−1)`. Live containers first
 | 231 | 40232 | `Event8.Arg1` | R | — |  |
 | 232 | 40233 | `Event8.Arg2` | R | — |  |
 
-### Holding registers — recipe mailbox (300–312)
+### Holding registers — scan mailbox (300–338)
+
+The PLC holds a container at SCAN and writes its id to `Scan.Request`. The scanner node triggers one read, writes `Scan.Status`, `Scan.Length` and the raw text, then writes the same id to `Scan.Done` last. The PLC validates the text itself, publishes `Scan.ParseResult`, clears `Scan.Request` and releases the container. A request is new while `Request ≠ 0` and `Request ≠ Done`.
 
 | Address | Modicon | Tag (OPC UA browse name) | Access | Unit | Description |
 | ---: | ---: | --- | :---: | --- | --- |
-| 300 | 40301 | `Recipe.Seq` | RW | count | Scanner node increments after writing the fields below (write fields first, SEQ last). |
-| 301 | 40302 | `Recipe.ParseResult` | RW | code | 0 OK, 1 BAD_HEADER, 2 BAD_TOTAL, 3 TANK_COUNT_MISMATCH, 4 NEGATIVE_VOLUME, 5 VOLUME_SUM_MISMATCH, 6 MALFORMED. Non-zero → the container rides through unfilled and the reject diverter rejects it. |
-| 302 | 40303 | `Recipe.TotalMl` | RW | ml |  |
-| 303 | 40304 | `Recipe.Rounds` | RW | count | Interleave rounds override, 0 = line policy. |
-| 304 | 40305 | `Recipe.Vol1` | RW | ml | Volume for the k-th enabled tank, in barcode order. |
-| 305 | 40306 | `Recipe.Vol2` | RW | ml |  |
-| 306 | 40307 | `Recipe.Vol3` | RW | ml |  |
-| 307 | 40308 | `Recipe.Vol4` | RW | ml |  |
-| 308 | 40309 | `Recipe.Vol5` | RW | ml |  |
-| 309 | 40310 | `Recipe.Vol6` | RW | ml |  |
-| 310 | 40311 | `Recipe.Vol7` | RW | ml |  |
-| 311 | 40312 | `Recipe.Vol8` | RW | ml |  |
-| 312 | 40313 | `Recipe.AckSeq` | R | count | PLC copies Recipe.Seq here once queued. Writer waits for AckSeq = Seq before the next recipe. |
+| 300 | 40301 | `Scan.Request` | R | id | Container id held at SCAN waiting for a read, 0 = none. A new non-zero value tells the scanner node to trigger one read. |
+| 301 | 40302 | `Scan.Done` | RW | id | Scanner node writes the container id after Status, Length and Text (always last). The PLC acts when Done = Request. |
+| 302 | 40303 | `Scan.Status` | RW | code | 0 OK, 1 NO_READ (nothing within the read timeout), 2 TOO_LONG (text truncated). |
+| 303 | 40304 | `Scan.Length` | RW | chars | Characters in Scan.Text (0..64). |
+| 304 | 40305 | `Scan.Text1` | RW | 2 × ASCII | Raw barcode text exactly as read, 2 characters per register, first character in the high byte, unused bytes 0. The node does not interpret it. |
+| 305 | 40306 | `Scan.Text2` | RW | 2 × ASCII |  |
+| 306 | 40307 | `Scan.Text3` | RW | 2 × ASCII |  |
+| 307 | 40308 | `Scan.Text4` | RW | 2 × ASCII |  |
+| 308 | 40309 | `Scan.Text5` | RW | 2 × ASCII |  |
+| 309 | 40310 | `Scan.Text6` | RW | 2 × ASCII |  |
+| 310 | 40311 | `Scan.Text7` | RW | 2 × ASCII |  |
+| 311 | 40312 | `Scan.Text8` | RW | 2 × ASCII |  |
+| 312 | 40313 | `Scan.Text9` | RW | 2 × ASCII |  |
+| 313 | 40314 | `Scan.Text10` | RW | 2 × ASCII |  |
+| 314 | 40315 | `Scan.Text11` | RW | 2 × ASCII |  |
+| 315 | 40316 | `Scan.Text12` | RW | 2 × ASCII |  |
+| 316 | 40317 | `Scan.Text13` | RW | 2 × ASCII |  |
+| 317 | 40318 | `Scan.Text14` | RW | 2 × ASCII |  |
+| 318 | 40319 | `Scan.Text15` | RW | 2 × ASCII |  |
+| 319 | 40320 | `Scan.Text16` | RW | 2 × ASCII |  |
+| 320 | 40321 | `Scan.Text17` | RW | 2 × ASCII |  |
+| 321 | 40322 | `Scan.Text18` | RW | 2 × ASCII |  |
+| 322 | 40323 | `Scan.Text19` | RW | 2 × ASCII |  |
+| 323 | 40324 | `Scan.Text20` | RW | 2 × ASCII |  |
+| 324 | 40325 | `Scan.Text21` | RW | 2 × ASCII |  |
+| 325 | 40326 | `Scan.Text22` | RW | 2 × ASCII |  |
+| 326 | 40327 | `Scan.Text23` | RW | 2 × ASCII |  |
+| 327 | 40328 | `Scan.Text24` | RW | 2 × ASCII |  |
+| 328 | 40329 | `Scan.Text25` | RW | 2 × ASCII |  |
+| 329 | 40330 | `Scan.Text26` | RW | 2 × ASCII |  |
+| 330 | 40331 | `Scan.Text27` | RW | 2 × ASCII |  |
+| 331 | 40332 | `Scan.Text28` | RW | 2 × ASCII |  |
+| 332 | 40333 | `Scan.Text29` | RW | 2 × ASCII |  |
+| 333 | 40334 | `Scan.Text30` | RW | 2 × ASCII |  |
+| 334 | 40335 | `Scan.Text31` | RW | 2 × ASCII |  |
+| 335 | 40336 | `Scan.Text32` | RW | 2 × ASCII |  |
+| 336 | 40337 | `Scan.ParseResult` | R | code | PLC's validation of the text: 0 OK, 1 BAD_HEADER, 2 BAD_TOTAL, 3 TANK_COUNT_MISMATCH, 4 NEGATIVE_VOLUME, 5 VOLUME_SUM_MISMATCH, 6 MALFORMED, 7 NO_READ. Non-zero → the container rides through unfilled and the reject diverter rejects it. |
+| 337 | 40338 | `Scan.ResultId` | R | id | Container id that Scan.ParseResult and Scan.TotalMl belong to. |
+| 338 | 40339 | `Scan.TotalMl` | R | ml | Recipe total the PLC decoded (0 when rejected). |
 
 ### Holding registers — field node inputs (400–419)
 
@@ -344,25 +370,27 @@ Five registers per slot i = 1..8, base `100 + 5·(i−1)`. Live containers first
 | 407 | 40408 | `Field.Tank8LevelMl` | RW | ml × 10 |  |
 | 410 | 40411 | `Field.TankNodeHeartbeat` | RW | count | ESP32 tank node increments ≥ 1 Hz. |
 | 411 | 40412 | `Field.ScannerNodeHeartbeat` | RW | count | ESP32 scanner node (labeling + barcode scanner) increments ≥ 1 Hz. |
-| 412 | 40413 | `Field.StationNodeHeartbeat` | RW | count | ESP32 station node (capping arm, lid press, sort sensor) increments ≥ 1 Hz. |
+| 412 | 40413 | `Field.StationNodeHeartbeat` | RW | count | ESP32 station node (robotic arm + sort sensor) increments ≥ 1 Hz. |
 
-### Holding registers — microcontroller station handshake (420–430)
+### Holding registers — microcontroller stations (420–432)
 
-The PLC holds a container at LABEL, CAP or PRESS and publishes its id in the station's `Request` register. The ESP32 runs the station only while `Station.RunPermit` = 1, then writes the same id to `Done`. The PLC releases the container when `Done` = `Request`, and rejects it with `STATION_FAULT` on a timeout or a fault bit. The virtual PLC publishes the requests and run permit but completes each station on its own timer.
+The PLC decides; the ESP32 nodes execute and report. Label and sort use the same request/done handshake as the scan mailbox. The robotic arm takes one command at a time: the PLC writes `ArmCmd`, then a new `ArmCmdSeq`; the station node runs it and writes `ArmResult`, then `ArmDoneSeq` = `ArmCmdSeq`. Nodes move actuators only while `Station.RunPermit` = 1 and `Sys.PlcHeartbeat` keeps changing. A station that does not report within `stationNodeTimeoutSec` jams its container; node fault bits, a lost heartbeat and arm failures latch a fault (`Sys.FaultCode`) and stop the line.
 
 | Address | Modicon | Tag (OPC UA browse name) | Access | Unit | Description |
 | ---: | ---: | --- | :---: | --- | --- |
 | 420 | 40421 | `Station.RunPermit` | R | 0/1 | 1 = line running with the safety circuit closed. ESP32 nodes must stop their actuators when 0 or when Sys.PlcHeartbeat stops changing for 1 s. Not a safety function: actuator power still goes through the safety relay. |
 | 421 | 40422 | `Station.LabelRequest` | R | id | Container id held at LABEL waiting for its label, 0 = none. |
 | 422 | 40423 | `Station.LabelDone` | RW | id | Scanner node writes the container id once the label is applied. |
-| 423 | 40424 | `Station.CapRequest` | R | id | Container id held at CAP waiting for the arm to place a lid, 0 = none. |
-| 424 | 40425 | `Station.CapDone` | RW | id | Station node writes the container id once the lid is placed and the arm is clear. |
-| 425 | 40426 | `Station.PressRequest` | R | id | Container id held at PRESS waiting for the lid press, 0 = none. |
-| 426 | 40427 | `Station.PressDone` | RW | id | Station node writes the container id once the press has retracted. |
-| 427 | 40428 | `Station.SortSensorType` | RW | code | Bottle type the sort sensor read: 0 unknown, 1 = lane A type, 2 = lane B type. PLC rejects on mismatch with the recipe (BOTTLE_TYPE_MISMATCH). |
-| 428 | 40429 | `Station.SortSensorContainer` | RW | id | Container id the sort-sensor reading belongs to. |
-| 429 | 40430 | `Station.ScannerNodeFaults` | RW | bits | Written only by the scanner node: bit0 labeler, bit1 scanner. Any bit → PLC raises FAULT and rejects the affected container (STATION_FAULT). |
-| 430 | 40431 | `Station.StationNodeFaults` | RW | bits | Written only by the station node: bit0 capping arm, bit1 lid press, bit2 sort sensor. Same handling. |
+| 423 | 40424 | `Station.ArmCmd` | R | code | Robotic arm command: 0 none, 1 HOME, 2 PICK_LID (lift the top lid from the magazine), 3 PLACE_LID (place the held lid on the container at CAP, press it down, release, return HOME). Written before ArmCmdSeq. |
+| 424 | 40425 | `Station.ArmCmdSeq` | R | count | PLC increments (1..65535, skips 0) to issue ArmCmd. The station node runs each sequence number once. |
+| 425 | 40426 | `Station.ArmDoneSeq` | RW | count | Station node copies ArmCmdSeq here when the command has finished, after writing ArmResult. |
+| 426 | 40427 | `Station.ArmResult` | RW | code | 1 OK, 2 NO_LID (gripper closed on nothing), 3 LID_LOST, 4 SERVO_ERROR, 5 ABORTED (RunPermit dropped mid-move), 6 REFUSED (not homed / unknown command). The PLC decides retries and faults. |
+| 427 | 40428 | `Station.ArmStatus` | RW | bits | bit0 HOMED, bit1 BUSY, bit2 LID_HELD. Kept current by the station node. |
+| 428 | 40429 | `Station.SortRequest` | R | id | Container id at the sort sensor (QC) waiting for a height reading, 0 = none. |
+| 429 | 40430 | `Station.SortDone` | RW | id | Station node writes the container id after SortHeightMm. |
+| 430 | 40431 | `Station.SortHeightMm` | RW | mm | Measured bottle height, 0 = no valid reading. The PLC classifies the bottle type (config.sort) and rejects a mismatch with the recipe (BOTTLE_TYPE_MISMATCH). |
+| 431 | 40432 | `Station.ScannerNodeFaults` | RW | bits | Written only by the scanner node: bit0 labeler, bit1 scanner module not answering. Any bit → the PLC latches a fault and stops the line. |
+| 432 | 40433 | `Station.StationNodeFaults` | RW | bits | Written only by the station node: bit0 arm servo bus, bit1 sort sensor. Same handling. |
 
 ### Holding registers — simulation inputs (450–451)
 
@@ -424,8 +452,23 @@ Honoured only while `LineState.SIMULATION` = 1 (virtual PLC, or a PLC in SimInpu
 | 29 | `LINE_STOPPED` | warn |
 | 30 | `CONTROL_MODE_CHANGED` | info |
 | 31 | `COMMAND_REFUSED` | warn |
+| 32 | `BARCODE_READ` | info |
+| 33 | `FAULT_CLEARED` | success |
 
 Argument meanings are documented on each code in `twin/src/events.ts`.
+
+### Fault codes (`FAULT` arg1, `Sys.FaultCode`)
+
+| Code | Name |
+| ---: | --- |
+| 1 | `LABELER` |
+| 2 | `SCANNER` |
+| 3 | `ARM_SERVO` |
+| 4 | `ARM_NO_LID` |
+| 5 | `ARM_LID_LOST` |
+| 6 | `SORT_SENSOR` |
+| 7 | `SCANNER_NODE_OFFLINE` |
+| 8 | `STATION_NODE_OFFLINE` |
 
 ### Reject reasons (`CONTAINER_REJECTED` arg2)
 
@@ -472,6 +515,7 @@ Argument meanings are documented on each code in `twin/src/events.ts`.
 | 6 | `REMOTE_RESET_NOT_ALLOWED` |
 | 7 | `ESTOP_STILL_PRESSED` |
 | 8 | `NOT_ACTIVE` |
+| 9 | `FAULT_ACTIVE` |
 
 <!-- END GENERATED: tag-map -->
 
@@ -495,31 +539,43 @@ Argument meanings are documented on each code in `twin/src/events.ts`.
 3. The HMI shows "EMERGENCY STOP — Physical E-Stop pressed at *location*" (e.g. "Line entry") and disables all operational commands.
 4. Releasing the button records `PHYSICAL_ESTOP_RELEASED` (26) and sets `RESET_REQUIRED`.
 
-**Microcontroller station (PLC ↔ ESP32 station)**
-1. A container arrives at LABEL, CAP or PRESS and is held. The PLC writes its id to `Station.<Label|Cap|Press>Request`.
-2. The ESP32 sees a new request id and runs the station (apply label, place lid, press), but only while `Station.RunPermit` = 1 and the PLC heartbeat is changing. If the permit drops mid-motion it parks safely and waits.
-3. When finished, the ESP32 writes the same id to `Station.<…>Done`.
-4. The PLC sees `Done = Request`, clears `Request` to 0 and releases the container. If `Done` doesn't match within `sensorWaitTimeoutSec` (running time only), or the node's `Station.*NodeFaults` register has the station's bit set, the PLC raises `FAULT` and rejects the container with `STATION_FAULT`.
+**Request/done station: label and sort (PLC ↔ ESP32 node)**
+1. A container arrives at LABEL (or at the sort sensor, QC) and is held. The PLC writes its id to `Station.LabelRequest` (or `Station.SortRequest`).
+2. A request is new while `Request ≠ 0` and `Request ≠ Done`; neither side stores sequence numbers. The node runs the station (apply the label, or measure the height), moving actuators only while `Station.RunPermit` = 1 and the PLC heartbeat is changing.
+3. When finished, the node writes its results (`Station.SortHeightMm` for sort), then the same id to `Station.LabelDone` (or `Station.SortDone`), always last.
+4. The PLC sees `Done = Request`, clears `Request` to 0 and releases the container. If `Done` doesn't match within `stationNodeTimeoutSec` (15 s, running time only), the container is JAMMED. A node fault bit latches a station fault (below).
 
-**Sort sensor (ESP32 #2 → PLC)**
-1. While a container is at QC, ESP32 #2 reads the sort sensor and writes `Station.SortSensorType` (1 = lane A type, 2 = lane B type), then `Station.SortSensorContainer` = container id.
-2. The PLC compares it with the lane the recipe calls for (total ≤ `sort.smallBottleMaxMl` → lane A). A mismatch rejects the container at the reject diverter with `BOTTLE_TYPE_MISMATCH`; a match sets `O_SortDiverter_LaneB` for lane B bottles when they reach SORT.
+**Sort sensor (ESP32 #2 → PLC decision)**
+1. The station node's VL53L1X measures the bottle height at QC and reports it in `Station.SortHeightMm` (0 = no valid reading). The node doesn't classify it.
+2. The PLC classifies the height against the lane heights in `config.sort` (lane A 120 mm, lane B 180 mm by default, ±15 mm) and compares the bottle type with the one the recipe calls for (total ≤ `sort.smallBottleMaxMl` → lane A). A mismatch, or no valid reading, rejects the container at the reject diverter with `BOTTLE_TYPE_MISMATCH`; a match sets `O_SortDiverter_LaneB` for lane B bottles when they reach SORT.
+
+**Robotic arm (PLC ↔ ESP32 #2)**
+1. The PLC writes `Station.ArmCmd` (1 HOME, 2 PICK_LID, 3 PLACE_LID), then a new `Station.ArmCmdSeq` (1..65535, skipping 0). It issues one command at a time.
+2. The station node runs that command once, only while `Station.RunPermit` = 1 and the PLC heartbeat is changing, then writes `Station.ArmResult` and, last, `Station.ArmDoneSeq` = `ArmCmdSeq`. It keeps `Station.ArmStatus` (bit0 HOMED, bit1 BUSY, bit2 LID_HELD) current.
+3. The PLC decides the next command: not homed → `HOME`; homed with no lid held → `PICK_LID` (a pre-pick while the belt moves); lid held and a container held at CAP → `PLACE_LID` (place the lid, press it down to seat it, release, return HOME). After `PLACE_LID` returns OK, the PLC releases the container.
+4. Results: `NO_LID` is retried up to 3 times, then latches `ARM_NO_LID`. `LID_LOST` latches `ARM_LID_LOST` and `SERVO_ERROR` latches `ARM_SERVO`; the container at CAP is rejected with `STATION_FAULT`. `ABORTED` (the permit dropped mid-move) and `REFUSED` make the PLC re-home the arm first; if the lid was already released during an aborted `PLACE_LID`, that container is rejected, because the PLC can't tell whether its lid is seated.
+
+**Station faults (PLC)**
+1. The PLC latches a fault when a node sets a bit in `Station.ScannerNodeFaults` (bit0 labeler → 1, bit1 scanner → 2) or `Station.StationNodeFaults` (bit0 arm servo bus, untaught poses or teach mode → 3, bit1 sort sensor → 6), when the arm reports a failure (codes 3, 4, 5, see above), or when a node's heartbeat doesn't change for 3 s (7 scanner node offline, 8 station node offline).
+2. It publishes the first latched code in `Sys.FaultCode`, sets `LineState` bit3 FAULT, records `FAULT` (22, arg1 = FaultCode), stops the line (`LINE_STOPPED` with source 3, "station fault") and drops `Station.RunPermit`.
+3. While a fault is latched, START is refused (`COMMAND_REFUSED` reason 9, `FAULT_ACTIVE`).
+4. RESET clears the faults (`FAULT_CLEARED`, 33) only once the cause is gone; a cause that is still present latches again on the next scan. Faults are not safety functions: the E-Stops and the safety relay remain the safety function.
 
 **Tank enable (bridge → PLC)**
 1. The bridge reads `Sys.TankEnableMask`, sets or clears one bit, and writes it back (FC06).
 2. The PLC validates the new mask. It refuses 0 and records `TANK_CHANGE_REFUSED`.
 3. The PLC applies the mask and republishes the effective mask.
 
-**Recipe mailbox (ESP32 scanner node → PLC)**
-1. Wait until `Recipe.AckSeq == Recipe.Seq`, meaning the previous recipe was consumed.
-2. Write `ParseResult, TotalMl, Rounds, Vol1..VolN` in one FC16 write, starting at 301.
-3. Write `Recipe.Seq = Seq + 1` (skip 0 on wrap).
-4. The PLC queues the container and sets `Recipe.AckSeq = Seq`. If there's no ack within 2 s, the node raises its own fault LED and retries the same Seq; the PLC ignores a Seq it has already acknowledged.
+**Scan mailbox (PLC ↔ ESP32 scanner node)**
+1. A container is held at SCAN. The PLC writes its id to `Scan.Request`.
+2. The scanner node sees a new request (`Scan.Request ≠ 0` and `≠ Scan.Done`) and triggers one read of the barcode scanner.
+3. It writes `Scan.Status` (0 OK, 1 NO_READ, 2 TOO_LONG), `Scan.Length` and the raw text in `Scan.Text1..32` (2 ASCII characters per register, first character in the high byte, up to 64 characters), in one FC16 write starting at 302. Then it writes `Scan.Done` = the request id, last.
+4. The PLC sees `Scan.Done = Scan.Request` and validates the text itself (PT1 format, tank count, volume sum). It publishes `Scan.ParseResult`, `Scan.ResultId` and `Scan.TotalMl`, records `BARCODE_READ` (32) or `BARCODE_REJECTED` (3), clears `Scan.Request` and releases the container. A rejected barcode rides through unfilled to the reject diverter. The node never interprets the barcode.
 
 **Heartbeats**
-- `Sys.PlcHeartbeat`: the PLC increments it at 1 Hz or faster. The bridge marks the PLC offline if it doesn't change for 3 s; the ESP32 nodes stop their actuators if it doesn't change for 1 s.
+- `Sys.PlcHeartbeat`: the PLC increments it every 100 ms. The bridge marks the PLC offline if it doesn't change for 3 s; the ESP32 nodes stop their actuators if it doesn't change for 1 s.
 - `Sys.HmiHeartbeat`: the bridge increments it on every poll. The PLC clears `HMI_LINK_OK` if it doesn't change for 3 s (alarm only).
-- `Field.*NodeHeartbeat`: the ESP32 nodes increment these at 1 Hz or faster. The PLC ignores a node's data, and raises `FAULT`, if its heartbeat stops for 3 s. Over Wi-Fi, expect occasional drops; a fault holds the affected station, it never energizes anything.
+- `Field.*NodeHeartbeat`: the ESP32 nodes increment these at 1 Hz or faster. If a node's heartbeat stops for 3 s, the PLC treats the node as offline, ignores its data and latches `SCANNER_NODE_OFFLINE` (7) or `STATION_NODE_OFFLINE` (8), which stops the line. Over Wi-Fi, expect occasional drops; a fault stops the line, it never energizes anything.
 
 **Event ring (PLC → bridge)**
 - When the PLC records an event, it shifts entries 1..7 to 2..8, writes the new one as Event1 with `Seq = LastSeq + 1` (skipping 0 on wrap), then updates `Events.LastSeq`.

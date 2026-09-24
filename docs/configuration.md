@@ -11,12 +11,14 @@
 | `stationSpacingM` | `0.50` | Distance between adjacent stations |
 | `maxConcurrentContainers` | `4` | Pipelining cap: containers on the belt at once |
 | `sensorWaitTimeoutSec` | `6.0` | Maximum wait for a station or sensor before a container is JAMMED (paused while halted) |
+| `stationNodeTimeoutSec` | `15.0` | Time a station driven by an ESP32 node (LABEL, SCAN, CAP, QC) has to report Done before the PLC jams its container. Applies when the stations run through the register map (virtual PLC, real PLC); the plain simulation uses `stationTimesSec` |
 | `dispenseVariance` | `0.02` | Dosing jitter in simulation (±2%). QC tolerance is `max(1 ml, target × (variance + 1%))` |
 | `tanks` | `TANK_SLOTS[0..2]` | Enabled tanks at start, in slot order. Barcode volume order = this order |
-| `stations` | LABEL, SCAN, BAY-1..3, CAP, PRESS, QC, GATE, SORT | Stations in belt order. One `BAY-k` per tank. `SCAN`, `QC` (sort sensor) and `GATE` (reject diverter) are required; `LABEL`, `MIX`, `CAP`, `PRESS` and `SORT` are optional. The default matches the bill of materials ([prototype/bom.md](prototype/bom.md)) and has no mixer |
-| `stationTimesSec` | label 1.0, scan 0.5, cap 2.5, press 0.8, qc 0.4, gate 0.3, sort 0.3 | Time a container spends at each non-dispense station. Each must stay below `sensorWaitTimeoutSec`. On the physical line, LABEL, CAP and PRESS end when the ESP32 station node reports Done ([prototype/io-map.md](prototype/io-map.md#4-register-map-modbus-tcp)) |
-| `sort.lanes` | `A` "Lane A (small bottles)", `B` "Lane B (large bottles)" | The two output lanes after the sort diverter. `lanes[0]` is the diverter at rest |
-| `sort.smallBottleMaxMl` | `250` | Bottle type rule: recipes totalling at most this go to `lanes[0]`, larger ones to `lanes[1]`. The sort sensor re-confirms the type on the physical line |
+| `stations` | LABEL 0.0 m, SCAN 0.5, BAY-1..3 1.0–2.0, CAP 2.5, QC 3.0, GATE 3.5, SORT 4.0 | Stations in belt order. One `BAY-k` per tank. `SCAN`, `QC` (sort sensor) and `GATE` (reject diverter) are required; `LABEL`, `MIX`, `CAP` and `SORT` are optional. The default matches the bill of materials ([prototype/bom.md](prototype/bom.md)) and has no mixer. There is no lid press station: the robotic arm at `CAP` places the lid and presses it down itself |
+| `stationTimesSec` | label 1.0, scan 0.5, cap 2.5, qc 0.4, gate 0.3, sort 0.3 | Time a container spends at each non-dispense station. Each must stay below `sensorWaitTimeoutSec`. On the physical line (and the virtual PLC), LABEL, SCAN, CAP and QC end when the ESP32 node reports Done, within `stationNodeTimeoutSec` ([prototype/io-map.md](prototype/io-map.md#4-register-map-modbus-tcp)) |
+| `sort.lanes` | `A` "Lane A (small bottles)" 120 mm, `B` "Lane B (large bottles)" 180 mm | The two output lanes after the sort diverter, `{ id, name, bottleHeightMm }`. `lanes[0]` is the diverter at rest. `bottleHeightMm` is the nominal height of that lane's bottle as the sort sensor measures it: measure the real bottles and set it here and in the PLC |
+| `sort.smallBottleMaxMl` | `250` | Bottle type rule: recipes totalling at most this go to `lanes[0]`, larger ones to `lanes[1]` |
+| `sort.heightToleranceMm` | `15` | The PLC classifies the height the sort sensor reports (`Station.SortHeightMm`): within ± this of a lane's `bottleHeightMm` is that lane's bottle type. A bottle whose type doesn't match its recipe's lane is rejected (`BOTTLE_TYPE_MISMATCH`) |
 | `mixPolicy` | interleaved, 2 rounds | Dispense ordering for a multi-nozzle manifold. On one-bay-per-tank lines, dispensing follows belt order ([engine-design.md](engine-design.md#belt-order)) |
 | `mixDurationSec` | `1.5` | Mixer run time (only if a `MIX` station is configured) |
 | `refillAmountMl` | `4000` | Refill target above the threshold |
@@ -59,7 +61,26 @@ The names and colours in `TANK_SLOTS` are only **defaults**. Operators rename an
 | `VPLC_PORT` | `5020` | Modbus TCP port (502 needs admin/root) |
 | `VPLC_HOST` | `0.0.0.0` | Bind address |
 | `VPLC_UNIT_ID` | `1` | Unit id it answers |
-| `VPLC_FEED` | on | `0` disables the built-in barcode feeder, so only recipes written to the mailbox (e.g. by the ESP32 scanner node) enter |
+| `VPLC_FEED` | on | `0` turns off bottle arrivals |
+| `VPLC_NODES` | none (both simulated) | Which ESP32 nodes are **real**: `scanner`, `station`, `scanner,station` or `all`. The others are simulated in-process. The virtual PLC watches a real node's heartbeat and latches a fault (`SCANNER_NODE_OFFLINE` or `STATION_NODE_OFFLINE`) when it stops. With a real scanner node, bottles arrive without a known label and the recipe comes only from what the scanner reads |
+
+`npm run dev:plc-sim` passes these variables through to its virtual PLC.
+
+### FUXA SCADA (`npm run fuxa`, `npm run fuxa:project`)
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `FUXA_PORT` | `1881` | FUXA web port (editor at `/editor`, operator view at `/home`) |
+| `FUXA_HOST` | `127.0.0.1` | FUXA bind address. `0.0.0.0` serves it on the network; enable authentication in FUXA's settings first |
+| `FUXA_DATA` | `deploy/fuxa/data` | FUXA's project, history and logs (gitignored) |
+| `PLC_HOST` | `127.0.0.1` | PLC the generated project points at (default: the virtual PLC) |
+| `PLC_PORT` | `5020` | PLC Modbus TCP port (`502` for the Micro850) |
+| `PLC_UNIT_ID` | `1` | Modbus unit id |
+| `FUXA_POLL_MS` | `1000` | Polling period of the generated FUXA device |
+| `FUXA_COMMANDS` | off | `1` adds the command coils and buttons to the generated project. By default the SCADA is read-only ([prototype/scada.md](prototype/scada.md)) |
+| `FUXA_URL` | `http://127.0.0.1:1881` | Running FUXA that `npm run fuxa:project` loads the project into |
+
+`npm run fuxa` loads the generated project only on FUXA's first start (or with `npm run fuxa -- --load`). After changing these variables or the register map, run `npm run fuxa:project`.
 
 ### HMI (`hmi/`)
 

@@ -6,7 +6,7 @@ import * as path from "node:path";
 
 import { DEFAULT_CONFIG, SAMPLE_BARCODES, TANK_SLOTS } from "../config";
 import { TwinCore } from "../core";
-import { EVENT_SEVERITY, EventCode, formatEvent } from "../events";
+import { EVENT_SEVERITY, EventCode, FaultCode, RejectReason, formatEvent } from "../events";
 import { applyHmiCommand, toHmiState } from "../hmi";
 import { TankPalette, loadTankColors, saveTankColors } from "../tank-colors";
 
@@ -32,20 +32,20 @@ test("line keeps flowing past the pipelining cap (regression: stalled after 4 co
   assert.ok(core.counts.accepted > 20);
 });
 
-test("containers visit label, scan, every bay, cap, press, sort sensor, sort diverter, output and reject", () => {
+test("containers visit label, scan, every bay, capping arm, sort sensor, sort diverter, output and reject", () => {
   const core = new TwinCore(DEFAULT_CONFIG);
   const statuses = new Set<string>();
   run(core, 120, (i) => SAMPLE_BARCODES[i % SAMPLE_BARCODES.length], statuses);
-  for (const s of ["label", "scan", "fill-1", "fill-2", "fill-3", "cap", "press", "qc", "sort", "output", "scan-rejected"]) {
+  for (const s of ["label", "scan", "fill-1", "fill-2", "fill-3", "cap", "qc", "sort", "output", "scan-rejected"]) {
     assert.ok(statuses.has(s), `missing status ${s}; saw ${[...statuses].join(", ")}`);
   }
   assert.ok(!statuses.has("mix"), "the default bottling line has no mixer");
 });
 
-test("default line matches the BOM: station order and E-Stops at the panel, line entry and line exit", () => {
+test("default line matches the BOM: station order (no lid press) and E-Stops at the panel, line entry and line exit", () => {
   assert.deepEqual(
     DEFAULT_CONFIG.stations.map((s) => s.id),
-    ["LABEL", "SCAN", "BAY-1", "BAY-2", "BAY-3", "CAP", "PRESS", "QC", "GATE", "SORT"],
+    ["LABEL", "SCAN", "BAY-1", "BAY-2", "BAY-3", "CAP", "QC", "GATE", "SORT"],
   );
   assert.deepEqual(DEFAULT_CONFIG.safety.eStopButtons.map((b) => b.id), ["PANEL", "ENTRY", "EXIT"]);
   const t = DEFAULT_CONFIG.stationTimesSec;
@@ -103,15 +103,78 @@ test("no scan diverter: a bad barcode rides through unfilled and the reject dive
   const c = core.containers[0];
   assert.equal(c.state, "REJECTED");
   assert.equal(c.fillMl, 0);
-  assert.ok(!c.ops.some((op) => op.tankId !== null || op.stationId === "CAP" || op.stationId === "PRESS"));
+  assert.ok(!c.ops.some((op) => op.tankId !== null || op.stationId === "CAP"));
   assert.deepEqual(seen, ["label", "scan", "qc", "scan-rejected"]);
   assert.ok(core.simTimeSec > 15, "it travels the belt instead of being diverted at the scanner");
+});
+
+test("the label is read at SCAN: the recipe and fill ops are unknown until the scan completes", () => {
+  const core = new TwinCore(DEFAULT_CONFIG);
+  core.enqueueBarcode("PT1|T250|100,80,70");
+  core.tick(0.1);
+  const c = core.containers[0];
+  assert.equal(c.occupyingStationId, "LABEL");
+  assert.deepEqual([c.parsed, c.barcodeRaw, c.targetMl], [null, null, 0]);
+  assert.deepEqual(c.ops.map((op) => op.stationId), ["LABEL", "SCAN"]);
+  for (let k = 0; k < 200 && c.opIndex < 2; k++) core.tick(0.1);
+  assert.equal(c.barcodeRaw, "PT1|T250|100,80,70");
+  assert.equal(c.targetMl, 250);
+  assert.deepEqual(c.ops.map((op) => op.stationId), ["LABEL", "SCAN", "BAY-1", "BAY-2", "BAY-3", "CAP", "QC", "GATE", "SORT"]);
+  assert.ok(core.events.some((e) => e.code === EventCode.BARCODE_READ && e.arg1 === c.id && e.arg2 === 250));
+});
+
+test("station driver: the core waits for an external station, applies its scan text and reject verdict", () => {
+  const core = new TwinCore(DEFAULT_CONFIG);
+  const polled: string[] = [];
+  let capReady = false;
+  core.driver = {
+    handles: (id) => id === "SCAN" || id === "CAP",
+    poll: (id) => {
+      polled.push(id);
+      if (id === "SCAN") return { scanText: "PT1|T300|120,90,90" };
+      return capReady ? { reject: RejectReason.STATION_FAULT } : null;
+    },
+  };
+  core.enqueueBottle();
+  for (let k = 0; k < 400 && !core.containers[0]?.occupyingStationId?.startsWith("CAP"); k++) core.tick(0.1);
+  const c = core.containers[0];
+  assert.equal(c.labelText, null, "an unlabelled bottle: only the scanner knows its recipe");
+  assert.equal(c.targetMl, 300);
+  for (let k = 0; k < 50; k++) core.tick(0.1);
+  assert.equal(c.occupyingStationId, "CAP", "held at CAP until the arm reports");
+  capReady = true;
+  for (let k = 0; k < 200 && c.completedAtSec === null; k++) core.tick(0.1);
+  assert.equal(c.state, "REJECTED");
+  assert.equal(core.events.find((e) => e.code === EventCode.CONTAINER_REJECTED)?.arg2, RejectReason.STATION_FAULT);
+  assert.ok(!c.ops.some((op) => op.stationId === "QC" || op.stationId === "SORT"), "a failed container goes straight to the reject diverter");
+  assert.ok(polled.includes("SCAN") && !polled.includes("LABEL"));
+});
+
+test("station driver timeout: a station node that never answers jams its container", () => {
+  const core = new TwinCore(DEFAULT_CONFIG);
+  core.driver = { handles: (id) => id === "LABEL", poll: () => null };
+  core.enqueueBarcode("PT1|T250|100,80,70");
+  for (let k = 0; k < (DEFAULT_CONFIG.stationNodeTimeoutSec + 1) * 10; k++) core.tick(0.1);
+  assert.equal(core.containers[0].state, "JAMMED");
+});
+
+test("station faults stop the line, refuse START until RESET", () => {
+  const core = new TwinCore(DEFAULT_CONFIG);
+  core.raiseFault(FaultCode.ARM_NO_LID, "CAP");
+  const s = toHmiState(core).safety!;
+  assert.ok(s.faultActive && !s.running);
+  assert.match(core.events.find((e) => e.code === EventCode.FAULT)!.message, /could not pick a lid/);
+  assert.match(applyHmiCommand(core, { command: "start" })!, /station fault is latched/);
+  assert.equal(applyHmiCommand(core, { command: "simLocalButton", button: "reset" }), null);
+  assert.ok(core.events.some((e) => e.code === EventCode.FAULT_CLEARED));
+  assert.equal(applyHmiCommand(core, { command: "start" }), null);
+  assert.ok(toHmiState(core).safety!.running);
 });
 
 test("containers only move forward along the belt, even with an interleaved mix policy", () => {
   assert.equal(DEFAULT_CONFIG.mixPolicy.kind, "interleaved");
   const core = new TwinCore(DEFAULT_CONFIG);
-  const order = ["label", "scan", "fill-1", "fill-2", "fill-3", "cap", "press", "qc", "sort", "output"];
+  const order = ["label", "scan", "fill-1", "fill-2", "fill-3", "cap", "qc", "sort", "output"];
   const lastPos = new Map<string, number>();
   let feed = 0;
   for (let k = 0; k < 1200; k++) {
@@ -249,7 +312,7 @@ test("tank slots keep ids and barcode order; stale queued barcodes are held back
   assert.equal(core.tanks[1].name, TANK_SLOTS[1].name);
   assert.deepEqual(
     core.config.stations.map((s) => s.id),
-    ["LABEL", "SCAN", "BAY-1", "BAY-2", "BAY-3", "BAY-4", "CAP", "PRESS", "QC", "GATE", "SORT"],
+    ["LABEL", "SCAN", "BAY-1", "BAY-2", "BAY-3", "BAY-4", "CAP", "QC", "GATE", "SORT"],
   );
 
   const c0 = core.counts.rejected;
