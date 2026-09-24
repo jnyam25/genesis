@@ -2,7 +2,7 @@
 
 import { useContainerPositions } from "@/lib/twin/useContainerPositions";
 import type { Container, Tank, TwinState } from "@/lib/twin/types";
-import type { LineLayout, StationPosition } from "@/lib/twin/layout";
+import { stationForStatus, type LineLayout, type StationPosition } from "@/lib/twin/layout";
 
 function parseHex(h: string): { r: number; g: number; b: number } {
   const s = h.replace("#", "");
@@ -28,7 +28,6 @@ function mixedColor(tanks: Tank[]): string {
   return tanks.length ? blend(tanks.map((t) => t.colorCode)) : "#9ca3af";
 }
 export function containerColor(c: Container, tanks: Tank[]): string {
-  if (c.status === "scan" || c.status === "idle") return "#cbd5e1";
   if (c.status === "scan-rejected") return "#fb923c";
   if (c.status === "rejected") return "#7f1d1d";
   const m = /^fill-(\d+)$/.exec(c.status);
@@ -36,28 +35,26 @@ export function containerColor(c: Container, tanks: Tank[]): string {
     const idx = parseInt(m[1], 10) - 1;
     return tanks[idx]?.colorCode ?? "#9ca3af";
   }
+  if (c.fillMl <= 0) return "#cbd5e1";
   return mixedColor(tanks);
 }
 
+const LANE_LETTER = ["A", "B"];
+
 const SCALE = 95;
 const MARGIN = 48;
+/** Tank body half-height (line units) around `layout.tankY`. */
+const TANK_HALF_HEIGHT = 0.9;
+/** Room above the tank bodies for the "TANK n" and name labels (px). */
+const TANK_LABEL_SPACE = 34;
+const TOP_PAD = TANK_HALF_HEIGHT * SCALE + TANK_LABEL_SPACE;
 
 function svgX(lineX: number, layout: LineLayout): number {
   return MARGIN + (lineX - layout.spanX[0]) * SCALE;
 }
 function svgY(lineY: number, layout: LineLayout): number {
-  const originY = MARGIN + layout.tankY * SCALE;
+  const originY = TOP_PAD + layout.tankY * SCALE;
   return originY - lineY * SCALE;
-}
-
-function statusMatchesStation(status: Container["status"], s: StationPosition): boolean {
-  if (status === s.kind) return true;
-  if (status === "scan-rejected" && s.kind === "scan-reject") return true;
-  const m = /^fill-(\d+)$/.exec(status);
-  if (m && s.kind === "nozzle") {
-    return s.id === `nozzle-tank-${m[1]}`;
-  }
-  return false;
 }
 
 export function LineSchematic({ state }: { state: TwinState }) {
@@ -65,16 +62,25 @@ export function LineSchematic({ state }: { state: TwinState }) {
   const tanks = state.tanks;
 
   const width = MARGIN * 2 + (layout.spanX[1] - layout.spanX[0]) * SCALE;
-  const height = MARGIN * 2 + (layout.tankY + Math.abs(layout.rejectY)) * SCALE;
+  const height = TOP_PAD + MARGIN + (layout.tankY + Math.abs(layout.rejectY)) * SCALE;
 
   const activeStationIds = new Set<string>();
-  for (const c of state.containers) {
-    const st = layout.stations.find((s) => statusMatchesStation(c.status, s));
-    if (st) activeStationIds.add(st.id);
-  }
-  const qcFlagged = state.containers.some((c) => c.status === "rejected");
-  const qcStation = layout.stations.find((s) => s.kind === "qc")!;
-  const scanStation = layout.stations.find((s) => s.kind === "scan")!;
+  for (const c of state.containers) activeStationIds.add(stationForStatus(c, layout).id);
+  const rejecting = state.containers.some((c) => c.status === "rejected" || c.status === "scan-rejected");
+  const sortingLane = state.containers.find((c) => c.status === "sort")?.lane;
+  const gateStation = layout.stations.find((s) => s.kind === "gate")!;
+  const sortStation = layout.stations.find((s) => s.kind === "sort")!;
+  const laneBStation = layout.stations.find((s) => s.kind === "output" && s.lane === 1)!;
+
+  const stationText = (s: StationPosition): { label?: string; sub?: string } => {
+    if (s.kind === "nozzle") return { sub: s.id.replace("nozzle-", "") };
+    if (s.kind === "sort" && sortingLane !== undefined) return { sub: `→ Lane ${LANE_LETTER[sortingLane] ?? sortingLane}` };
+    if (s.kind === "output" && s.lane !== undefined) {
+      const lane = state.sortLanes?.[s.lane];
+      if (lane) return { label: lane.name, sub: `${lane.count} accepted` };
+    }
+    return {};
+  };
 
   return (
     <div className="w-full overflow-x-auto">
@@ -94,6 +100,24 @@ export function LineSchematic({ state }: { state: TwinState }) {
             <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
           </marker>
         </defs>
+
+        {/* Lane B branch (sort diverter actuated); drawn under the main belt */}
+        {[layout.beltHalfHeight * 2 * SCALE + 2, layout.beltHalfHeight * 2 * SCALE].map((w, i) => (
+          <polyline
+            key={i}
+            points={[
+              [sortStation.x, 0],
+              [laneBStation.x - 0.5, laneBStation.y],
+              [layout.spanX[1], laneBStation.y],
+            ]
+              .map(([x, y]) => `${svgX(x, layout)},${svgY(y, layout)}`)
+              .join(" ")}
+            fill="none"
+            stroke={i === 0 ? "#334155" : "#111827"}
+            strokeWidth={w}
+            strokeLinejoin="round"
+          />
+        ))}
 
         {/* Main conveyor belt */}
         <rect
@@ -118,9 +142,9 @@ export function LineSchematic({ state }: { state: TwinState }) {
           />
         ))}
 
-        {/* Reject lane (QC) */}
+        {/* Reject lane (off the reject diverter) */}
         <rect
-          x={svgX(qcStation.x, layout) - 14}
+          x={svgX(gateStation.x, layout) - 14}
           y={svgY(0, layout)}
           width={28}
           height={Math.abs(layout.rejectY) * SCALE}
@@ -128,47 +152,41 @@ export function LineSchematic({ state }: { state: TwinState }) {
           fill="#1c0f12"
           stroke="#7f1d1d"
         />
-        {/* Scan-reject reroute lane (branches off scan, before the nozzles) */}
-        <rect
-          x={svgX(scanStation.x + 0.45, layout) - 14}
-          y={svgY(0, layout)}
-          width={28}
-          height={Math.abs(layout.rejectY) * SCALE}
-          rx={6}
-          fill="#1a1206"
-          stroke="#fb923c"
-        />
-        {/* Pusher */}
+        {/* Reject diverter */}
         <g>
           <rect
-            x={svgX(qcStation.x, layout) - 18}
+            x={svgX(gateStation.x, layout) - 18}
             y={svgY(-0.4, layout)}
             width={36}
             height={10}
             rx={3}
             fill="#f59e0b"
+            opacity={rejecting ? 1 : 0.7}
           />
           <text
-            x={svgX(qcStation.x, layout)}
+            x={svgX(gateStation.x, layout)}
             y={svgY(-0.55, layout)}
             textAnchor="middle"
             className="fill-amber-300 font-mono"
             fontSize={9}
           >
-            PUSHER
+            DIVERTER
           </text>
         </g>
 
-        {/* Flow direction arrow */}
-        <line
-          x1={svgX(layout.spanX[1] - 0.2, layout)}
-          y1={svgY(0, layout)}
-          x2={svgX(layout.spanX[1], layout)}
-          y2={svgY(0, layout)}
-          stroke="#64748b"
-          strokeWidth={2}
-          markerEnd="url(#arrow)"
-        />
+        {/* Flow direction arrows (Lane A and Lane B) */}
+        {[0, laneBStation.y].map((y) => (
+          <line
+            key={y}
+            x1={svgX(layout.spanX[1] - 0.2, layout)}
+            y1={svgY(y, layout)}
+            x2={svgX(layout.spanX[1], layout)}
+            y2={svgY(y, layout)}
+            stroke="#64748b"
+            strokeWidth={2}
+            markerEnd="url(#arrow)"
+          />
+        ))}
 
         {layout.stations.map((s) => (
           <StationGlyph
@@ -176,7 +194,8 @@ export function LineSchematic({ state }: { state: TwinState }) {
             station={s}
             layout={layout}
             active={activeStationIds.has(s.id)}
-            qcFlagged={s.kind === "qc" && qcFlagged}
+            flagged={s.kind === "gate" && rejecting}
+            {...stationText(s)}
           />
         ))}
 
@@ -189,8 +208,8 @@ export function LineSchematic({ state }: { state: TwinState }) {
               tank={tank}
               index={i}
               x={svgX(nozzle.x, layout)}
-              yTop={svgY(layout.tankY + 0.9, layout)}
-              yBottom={svgY(layout.tankY - 0.9, layout)}
+              yTop={svgY(layout.tankY + TANK_HALF_HEIGHT, layout)}
+              yBottom={svgY(layout.tankY - TANK_HALF_HEIGHT, layout)}
               nozzleX={svgX(nozzle.x, layout)}
               nozzleY={svgY(layout.beltHalfHeight, layout)}
             />
@@ -221,6 +240,11 @@ export function LineSchematic({ state }: { state: TwinState }) {
               <text x={cx} y={cy + 3} textAnchor="middle" className="fill-black/70 font-mono" fontSize={7}>
                 {p.id.replace("C-", "")}
               </text>
+              {c.status === "scan-rejected" && (
+                <text x={cx} y={cy - 17} textAnchor="middle" className="fill-orange-300 font-mono" fontSize={7}>
+                  BAD BARCODE
+                </text>
+              )}
             </g>
           );
         })}
@@ -230,27 +254,23 @@ export function LineSchematic({ state }: { state: TwinState }) {
 }
 
 function StationGlyph({
-  station, layout, active, qcFlagged,
+  station, layout, active, flagged, label, sub,
 }: {
   station: StationPosition;
   layout: LineLayout;
   active: boolean;
-  qcFlagged: boolean;
+  flagged: boolean;
+  label?: string;
+  sub?: string;
 }) {
   const cx = svgX(station.x, layout);
   const cy = svgY(station.y, layout);
-  const isReject = station.kind === "reject";
-  const isScanReject = station.kind === "scan-reject";
-  const isNozzle = station.kind === "nozzle";
-  const isScan = station.kind === "scan";
-  const isLane = isReject || isScanReject;
-  const color = isScanReject
-    ? active ? "#fb923c" : "#c2410c"
-    : qcFlagged
-      ? "#7f1d1d"
-      : active
-        ? "#22c55e"
-        : "#475569";
+  const isLane = station.kind === "reject";
+  const color = flagged
+    ? "#7f1d1d"
+    : active
+      ? "#22c55e"
+      : "#475569";
 
   return (
     <g>
@@ -272,31 +292,38 @@ function StationGlyph({
           width={60}
           height={28}
           rx={6}
-          fill={isScanReject ? "#1a1206" : "#1c0f12"}
-          stroke={isScanReject ? "#fb923c" : "#7f1d1d"}
+          fill="#1c0f12"
+          stroke="#7f1d1d"
           strokeWidth={active ? 2.5 : 1.5}
         />
       )}
 
-      {isScan && <text x={cx} y={cy + 4} textAnchor="middle" fontSize={14} className="fill-sky-300">⌖</text>}
-      {isNozzle && <text x={cx} y={cy + 5} textAnchor="middle" fontSize={14} className="fill-slate-200">▼</text>}
-      {station.kind === "mix" && <text x={cx} y={cy + 5} textAnchor="middle" fontSize={15} className="fill-violet-300">⟳</text>}
-      {station.kind === "qc" && (
-        <text x={cx} y={cy + 5} textAnchor="middle" fontSize={13} className={qcFlagged ? "fill-rose-400" : "fill-emerald-300"}>✓</text>
-      )}
-      {station.kind === "output" && <text x={cx} y={cy + 5} textAnchor="middle" fontSize={14} className="fill-emerald-300">▶</text>}
-      {isReject && <text x={cx} y={cy + 5} textAnchor="middle" fontSize={14} className="fill-rose-400">✕</text>}
-      {isScanReject && <text x={cx} y={cy + 5} textAnchor="middle" fontSize={13} className="fill-orange-300">↶</text>}
+      <text x={cx} y={cy + 5} textAnchor="middle" fontSize={GLYPHS[station.kind].size} className={flagged ? "fill-rose-400" : GLYPHS[station.kind].className}>
+        {station.kind === "output" ? `${LANE_LETTER[station.lane ?? 0]} ▶` : GLYPHS[station.kind].glyph}
+      </text>
 
       <LabelCallout
         x={cx}
         y={isLane ? cy + 30 : cy - 26}
-        text={station.label}
-        sub={isNozzle ? station.id.replace("nozzle-", "") : undefined}
+        text={label ?? station.label}
+        sub={sub}
       />
     </g>
   );
 }
+
+const GLYPHS: Record<StationPosition["kind"], { glyph: string; size: number; className: string }> = {
+  label: { glyph: "✎", size: 14, className: "fill-violet-300" },
+  scan: { glyph: "⌖", size: 14, className: "fill-sky-300" },
+  nozzle: { glyph: "▼", size: 14, className: "fill-slate-200" },
+  cap: { glyph: "◓", size: 14, className: "fill-teal-300" },
+  press: { glyph: "⇊", size: 14, className: "fill-indigo-300" },
+  qc: { glyph: "✓", size: 13, className: "fill-emerald-300" },
+  gate: { glyph: "↧", size: 14, className: "fill-amber-300" },
+  sort: { glyph: "⇉", size: 14, className: "fill-amber-300" },
+  output: { glyph: "▶", size: 12, className: "fill-emerald-300" },
+  reject: { glyph: "✕", size: 14, className: "fill-rose-400" },
+};
 
 function LabelCallout({ x, y, text, sub }: { x: number; y: number; text: string; sub?: string }) {
   return (

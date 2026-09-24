@@ -1,0 +1,17 @@
+# Dependencies (reinstalled per machine — native binaries are OS/CPU specific)
+node_modules/
+
+# Build output / runtime artifacts
+dist/
+.next/
+out/
+runtime/
+
+# Env files (keep the documented example)
+.env*
+!.env.example
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log

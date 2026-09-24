@@ -7,7 +7,7 @@ import * as THREE from "three";
 import { useContainerPositions } from "@/lib/twin/useContainerPositions";
 import { containerColor } from "@/components/schematic/line-schematic";
 import type { Container, Tank, TwinState } from "@/lib/twin/types";
-import type { LineLayout, StationPosition } from "@/lib/twin/layout";
+import { stationForStatus, type StationPosition } from "@/lib/twin/layout";
 
 const BELT_Y = 0;
 const BELT_HALF_H = 0.22;
@@ -19,7 +19,7 @@ const CONTAINER_H = 0.32;
 export function LineScene({ state }: { state: TwinState }) {
   return (
     <div className="h-[520px] w-full rounded-lg border border-border/60 bg-gradient-to-b from-slate-950 to-slate-900">
-      <Canvas camera={{ position: [4, 4.5, 6], fov: 50 }} dpr={[1, 2]}>
+      <Canvas camera={{ position: [6, 5, 8], fov: 50 }} dpr={[1, 2]}>
         <ambientLight intensity={0.55} />
         <directionalLight position={[6, 8, 4]} intensity={1.1} castShadow />
         <directionalLight position={[-6, 4, -4]} intensity={0.35} />
@@ -29,7 +29,7 @@ export function LineScene({ state }: { state: TwinState }) {
           minDistance={3}
           maxDistance={20}
           maxPolarAngle={Math.PI / 2.05}
-          target={[3, 0, 0]}
+          target={[6, 0, 0]}
         />
         <gridHelper args={[40, 40, "#1e293b", "#0f172a"]} position={[0, -0.6, 0]} />
       </Canvas>
@@ -39,23 +39,29 @@ export function LineScene({ state }: { state: TwinState }) {
 
 function SceneContents({ state }: { state: TwinState }) {
   const { layout, positions } = useContainerPositions(state);
-  const qcStation = layout.stations.find((s) => s.kind === "qc")!;
-  const mixStation = layout.stations.find((s) => s.kind === "mix")!;
-  const outputStation = layout.stations.find((s) => s.kind === "output")!;
-  const rejectStation = layout.stations.find((s) => s.kind === "reject")!;
-  const scanStation = layout.stations.find((s) => s.kind === "scan")!;
-  const scanRejectStation = layout.stations.find((s) => s.kind === "scan-reject")!;
+  const station = (kind: StationPosition["kind"]) => layout.stations.find((s) => s.kind === kind)!;
+  const labelStation = station("label");
+  const capStation = station("cap");
+  const pressStation = station("press");
+  const gateStation = station("gate");
+  const sortStation = station("sort");
+  const laneBStation = layout.stations.find((s) => s.kind === "output" && s.lane === 1)!;
 
   const activeStationIds = new Set<string>();
-  for (const c of state.containers) {
-    const m = /^fill-(\d+)$/.exec(c.status);
-    if (m) activeStationIds.add(`nozzle-tank-${m[1]}`);
-    else if (c.status === "scan-rejected") activeStationIds.add("scan-reject");
-    else activeStationIds.add(c.status);
-  }
-  const mixActive = state.containers.some((c) => c.status === "mix");
-  const qcFlagged = state.containers.some((c) => c.status === "rejected");
-  const pushing = state.containers.some((c) => c.status === "rejected");
+  for (const c of state.containers) activeStationIds.add(stationForStatus(c, layout).id);
+  const rejecting = state.containers.some((c) => c.status === "rejected" || c.status === "scan-rejected");
+  const sortingToB = state.containers.some((c) => c.status === "sort" && c.lane === 1);
+
+  const stationText = (s: StationPosition): { label?: string; sub?: string } => {
+    if (s.kind === "nozzle") return { sub: s.id.replace("nozzle-", "") };
+    const lane = s.kind === "output" && s.lane !== undefined ? state.sortLanes?.[s.lane] : undefined;
+    return lane ? { label: lane.name, sub: String(lane.count) } : {};
+  };
+
+  const branchStartX = sortStation.x;
+  const branchEndX = laneBStation.x - 0.5;
+  const branchLen = Math.hypot(branchEndX - branchStartX, laneBStation.y);
+  const branchAngle = -Math.atan2(laneBStation.y, branchEndX - branchStartX);
 
   return (
     <group>
@@ -72,33 +78,49 @@ function SceneContents({ state }: { state: TwinState }) {
         </mesh>
       ))}
 
-      {/* Reject lane (QC) */}
-      <mesh position={[qcStation.x, BELT_Y, layout.rejectY * 0.5 - 0.1]}>
+      {/* Reject lane (off the reject diverter) */}
+      <mesh position={[gateStation.x, BELT_Y, layout.rejectY * 0.5 - 0.1]}>
         <boxGeometry args={[0.5, BELT_HALF_H * 2, Math.abs(layout.rejectY)]} />
         <meshStandardMaterial color="#1c0f12" metalness={0.2} roughness={0.8} />
       </mesh>
-      {/* Scan-reject reroute lane (branches off scan, before the nozzles) */}
-      <mesh position={[scanStation.x + 0.45, BELT_Y, layout.rejectY * 0.5 - 0.1]}>
-        <boxGeometry args={[0.5, BELT_HALF_H * 2, Math.abs(layout.rejectY)]} />
-        <meshStandardMaterial color="#1a1206" metalness={0.2} roughness={0.8} />
+      {/* Lane B branch (sort diverter actuated), then its straight run */}
+      <mesh
+        position={[(branchStartX + branchEndX) / 2, BELT_Y - 0.005, laneBStation.y / 2]}
+        rotation={[0, branchAngle, 0]}
+      >
+        <boxGeometry args={[branchLen, BELT_HALF_H * 2, 0.8]} />
+        <meshStandardMaterial color="#1f2937" metalness={0.3} roughness={0.7} />
+      </mesh>
+      <mesh position={[(branchEndX + layout.spanX[1]) / 2, BELT_Y - 0.005, laneBStation.y]}>
+        <boxGeometry args={[layout.spanX[1] - branchEndX, BELT_HALF_H * 2, 0.8]} />
+        <meshStandardMaterial color="#1f2937" metalness={0.3} roughness={0.7} />
       </mesh>
 
       {/* Stations */}
-      <Station3D station={scanStation} active={activeStationIds.has("scan")} color="#0ea5e9" />
-      {layout.stations.filter((s) => s.kind === "nozzle").map((s) => (
-        <Station3D key={s.id} station={s} active={activeStationIds.has(s.id)} color="#64748b" />
+      {layout.stations.map((s) => (
+        <Station3D
+          key={s.id}
+          station={s}
+          active={s.kind === "gate" ? rejecting : activeStationIds.has(s.id)}
+          color={s.kind === "gate" && rejecting ? "#ef4444" : STATION_COLORS[s.kind]}
+          {...stationText(s)}
+        />
       ))}
-      <Station3D station={mixStation} active={mixActive} color="#8b5cf6" />
-      <Station3D station={qcStation} active={activeStationIds.has("qc")} color={qcFlagged ? "#ef4444" : "#10b981"} />
-      <Station3D station={outputStation} active={activeStationIds.has("output")} color="#10b981" />
-      <Station3D station={rejectStation} active={activeStationIds.has("rejected")} color="#ef4444" />
-      <Station3D station={scanRejectStation} active={activeStationIds.has("scan-reject")} color="#fb923c" />
 
-      {/* Mixer (spins when active) */}
-      <Mixer x={mixStation.x} active={mixActive} />
+      {/* Labeler roll (spins while labeling) */}
+      <LabelRoller x={labelStation.x} active={activeStationIds.has(labelStation.id)} />
 
-      {/* Pusher (extends when a container is being rejected) */}
-      <Pusher x={qcStation.x} active={pushing} />
+      {/* Capping arm (lowers a lid while capping) */}
+      <CapArm x={capStation.x} active={activeStationIds.has(capStation.id)} />
+
+      {/* Lid press (ram strokes down while pressing) */}
+      <LidPress x={pressStation.x} active={activeStationIds.has(pressStation.id)} />
+
+      {/* Reject diverter (extends when a container is being rejected) */}
+      <RejectDiverter x={gateStation.x} active={rejecting} />
+
+      {/* Sort diverter (swings toward Lane B for large bottles) */}
+      <SortDiverter x={sortStation.x} toLaneB={sortingToB} />
 
       {/* Tanks */}
       {state.tanks.map((tank, i) => {
@@ -129,15 +151,17 @@ function SceneContents({ state }: { state: TwinState }) {
 }
 
 function Station3D({
-  station, active, color,
+  station, active, color, label, sub,
 }: {
   station: StationPosition;
   active: boolean;
   color: string;
+  label?: string;
+  sub?: string;
 }) {
-  const z = station.kind === "reject" || station.kind === "scan-reject" ? station.y : 0;
+  const labelY = station.kind === "cap" || station.kind === "press" ? 1.25 : 0.45;
   return (
-    <group position={[station.x, 0, z]}>
+    <group position={[station.x, 0, station.y]}>
       <mesh position={[0, -0.18, 0]}>
         <boxGeometry args={[0.5, 0.12, 0.9]} />
         <meshStandardMaterial
@@ -148,12 +172,12 @@ function Station3D({
           roughness={0.6}
         />
       </mesh>
-      <Html position={[0, 0.45, 0]} center distanceFactor={8} occlude={false}>
+      <Html position={[0, labelY, 0]} center distanceFactor={8} occlude={false}>
         <div className="pointer-events-none select-none whitespace-nowrap rounded-md border border-border/70 bg-background/90 px-2 py-0.5 text-[11px] font-medium text-foreground shadow-md">
-          {station.label}
-          {station.kind === "nozzle" && (
+          {label ?? station.label}
+          {sub && (
             <span className="ml-1 font-mono text-[9px] text-muted-foreground">
-              {station.id.replace("nozzle-", "")}
+              {sub}
             </span>
           )}
         </div>
@@ -162,22 +186,105 @@ function Station3D({
   );
 }
 
-function Mixer({ x, active }: { x: number; active: boolean }) {
+const STATION_COLORS: Record<StationPosition["kind"], string> = {
+  label: "#8b5cf6",
+  scan: "#0ea5e9",
+  nozzle: "#64748b",
+  cap: "#14b8a6",
+  press: "#6366f1",
+  qc: "#10b981",
+  gate: "#f59e0b",
+  sort: "#f59e0b",
+  output: "#10b981",
+  reject: "#ef4444",
+};
+
+/** Tween a value toward a target in useFrame (frame-rate independent). */
+function approach(current: number, target: number, dt: number): number {
+  return current + (target - current) * Math.min(1, dt * 6);
+}
+
+function LabelRoller({ x, active }: { x: number; active: boolean }) {
   const ref = useRef<THREE.Mesh>(null);
   useFrame((_, dt) => {
     if (ref.current && active) ref.current.rotation.y += dt * 6;
   });
   return (
-    <group position={[x, 0.6, 0]}>
+    <group position={[x, 0.35, -0.45]}>
       <mesh ref={ref}>
-        <cylinderGeometry args={[0.22, 0.22, 0.08, 6]} />
-        <meshStandardMaterial color="#8b5cf6" emissive={active ? "#8b5cf6" : "#000000"} emissiveIntensity={active ? 0.6 : 0} metalness={0.5} roughness={0.4} />
+        <cylinderGeometry args={[0.14, 0.14, 0.3, 16]} />
+        <meshStandardMaterial color="#8b5cf6" emissive={active ? "#8b5cf6" : "#000000"} emissiveIntensity={active ? 0.6 : 0} metalness={0.3} roughness={0.5} />
       </mesh>
     </group>
   );
 }
 
-function Pusher({ x, active }: { x: number; active: boolean }) {
+function CapArm({ x, active }: { x: number; active: boolean }) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame((_, dt) => {
+    if (!ref.current) return;
+    ref.current.position.y = approach(ref.current.position.y, active ? 0.62 : 0.85, dt);
+  });
+  return (
+    <group position={[x, 0, 0]}>
+      {/* Column beside the belt */}
+      <mesh position={[0, 0.5, -0.55]}>
+        <boxGeometry args={[0.1, 1.0, 0.1]} />
+        <meshStandardMaterial color="#334155" metalness={0.5} roughness={0.5} />
+      </mesh>
+      <group ref={ref} position={[0, 0.85, 0]}>
+        <mesh position={[0, 0, -0.28]}>
+          <boxGeometry args={[0.08, 0.06, 0.56]} />
+          <meshStandardMaterial color="#14b8a6" emissive="#14b8a6" emissiveIntensity={active ? 0.5 : 0} metalness={0.4} roughness={0.5} />
+        </mesh>
+        {/* Lid in the gripper */}
+        <mesh position={[0, -0.06, 0]}>
+          <cylinderGeometry args={[CONTAINER_R, CONTAINER_R, 0.04, 20]} />
+          <meshStandardMaterial color="#e2e8f0" metalness={0.3} roughness={0.5} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+function LidPress({ x, active }: { x: number; active: boolean }) {
+  const ref = useRef<THREE.Mesh>(null);
+  useFrame((_, dt) => {
+    if (!ref.current) return;
+    ref.current.position.y = approach(ref.current.position.y, active ? 0.62 : 0.85, dt);
+  });
+  return (
+    <group position={[x, 0, 0]}>
+      {/* Crossbeam */}
+      <mesh position={[0, 1.0, 0]}>
+        <boxGeometry args={[0.3, 0.1, 1.0]} />
+        <meshStandardMaterial color="#334155" metalness={0.5} roughness={0.5} />
+      </mesh>
+      <mesh ref={ref} position={[0, 0.85, 0]}>
+        <cylinderGeometry args={[0.16, 0.16, 0.12, 20]} />
+        <meshStandardMaterial color="#6366f1" emissive="#6366f1" emissiveIntensity={active ? 0.5 : 0} metalness={0.5} roughness={0.4} />
+      </mesh>
+    </group>
+  );
+}
+
+function SortDiverter({ x, toLaneB }: { x: number; toLaneB: boolean }) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame((_, dt) => {
+    if (!ref.current) return;
+    ref.current.rotation.y = approach(ref.current.rotation.y, toLaneB ? -0.6 : 0, dt);
+  });
+  return (
+    <group ref={ref} position={[x - 0.45, 0.3, -0.45]}>
+      <mesh position={[0.45, 0, 0]}>
+        <boxGeometry args={[0.9, 0.16, 0.05]} />
+        <meshStandardMaterial color="#f59e0b" emissive="#f59e0b" emissiveIntensity={toLaneB ? 0.4 : 0} metalness={0.4} roughness={0.5} />
+      </mesh>
+    </group>
+  );
+}
+
+function RejectDiverter({ x, active }: { x: number; active: boolean }) {
   const ref = useRef<THREE.Group>(null);
   useFrame((_, dt) => {
     if (!ref.current) return;

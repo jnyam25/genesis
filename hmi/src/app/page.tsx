@@ -95,7 +95,7 @@ function DashboardView({
   return (
     <div className="space-y-4">
       <OeeGrid oee={state.oee} />
-      <CountsCard counts={state.counts} throughputCpm={state.throughputCpm} />
+      <CountsCard counts={state.counts} throughputCpm={state.throughputCpm} sortLanes={state.sortLanes} />
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Card className="h-full">
@@ -123,9 +123,9 @@ function SchematicLegend() {
   const items = [
     { c: "#22c55e", t: "Active station" },
     { c: "#475569", t: "Idle station" },
-    { c: "#ef4444", t: "QC reject / flagged" },
-    { c: "#f59e0b", t: "Reject pusher" },
-    { c: "#fb923c", t: "Scan-reject lane" },
+    { c: "#ef4444", t: "Reject in flight / reject lane" },
+    { c: "#f59e0b", t: "Reject & sort diverters" },
+    { c: "#fb923c", t: "Bad barcode (rejected unfilled)" },
   ];
   return (
     <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">

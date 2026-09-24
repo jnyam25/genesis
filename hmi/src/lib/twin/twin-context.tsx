@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useMemo, useRef, type ReactNode } from "react";
+import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
 import { useTwinState } from "./useTwinState";
 import { createTwinDataSource, type TwinDataSource } from "./source";
 import type { TwinCommands, TwinEvent, TwinState } from "./types";
@@ -22,9 +22,8 @@ const TwinContext = createContext<TwinContextValue | null>(null);
  * engine so every view stays in sync.
  */
 export function TwinProvider({ children }: { children: ReactNode }) {
-  const sourceRef = useRef<TwinDataSource | null>(null);
-  if (!sourceRef.current) sourceRef.current = createTwinDataSource();
-  const source = sourceRef.current;
+  // Lazy state initializer: created once per provider, stable across renders.
+  const [source] = useState<TwinDataSource>(createTwinDataSource);
 
   const { state, events, loading, stale } = useTwinState(source);
   const value = useMemo<TwinContextValue>(

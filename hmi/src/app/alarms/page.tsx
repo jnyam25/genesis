@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertTriangle, Bell, ShieldAlert, Droplet, WifiOff } from "lucide-react";
+import { AlertTriangle, Bell, ShieldAlert, WifiOff } from "lucide-react";
 import { useTwin } from "@/lib/twin/twin-context";
 import { clockTime } from "@/lib/format";
 import type { TwinEvent } from "@/lib/twin/types";
@@ -33,12 +33,48 @@ export default function AlarmsPage() {
       message: "Twin feed stale — no snapshot within freshness window",
     });
   }
-  if (state.oee.availability === 0 && state.connected) {
+  const safety = state.safety;
+  if (safety) {
+    for (const b of safety.eStopButtons.filter((x) => x.pressed)) {
+      active.push({
+        id: `estop-physical-${b.id}`,
+        severity: "error",
+        source: "Safety · physical E-Stop",
+        message: `PHYSICAL E-STOP pressed at ${b.name} — line shut down`,
+      });
+    }
+    if (safety.digitalEStop) {
+      active.push({
+        id: "estop-digital",
+        severity: "error",
+        source: "Safety · digital E-Stop",
+        message: "DIGITAL E-STOP active (from HMI) — safety circuit open, line shut down",
+      });
+    }
+    if (!safety.eStopActive && safety.resetRequired) {
+      active.push({
+        id: "reset-required",
+        severity: "warn",
+        source: "Safety",
+        message: safety.remoteResetAllowed
+          ? "Safety reset required — reset, then START"
+          : "Safety reset required at the local control panel, then START",
+      });
+    }
+    if (safety.controlMode === "local") {
+      active.push({
+        id: "local-mode",
+        severity: "info",
+        source: "Control mode",
+        message: "LOCAL control — HMI is view-only (Digital E-Stop and Stop available)",
+      });
+    }
+  } else if (state.oee.availability === 0 && state.connected) {
     active.push({
       id: "line-halted",
       severity: "error",
-      source: "Safety",
-      message: "Line halted — E-Stop or changeover active (availability 0)",
+      source: "Line",
+      message: "Line halted (availability 0)",
     });
   }
   for (const t of state.tanks) {

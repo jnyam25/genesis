@@ -1,0 +1,25 @@
+# systemd unit: Captsone twin service (PLC bridge + HTTP API on 127.0.0.1:43124).
+# Install: sudo cp captsone-twin.service /etc/systemd/system/ && sudo systemctl enable --now captsone-twin
+[Unit]
+Description=Captsone twin / PLC bridge
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=captsone
+Group=captsone
+WorkingDirectory=/opt/captsone/twin
+EnvironmentFile=/etc/captsone/captsone.env
+# If Node was installed with nvm, replace /usr/bin/node with the absolute path from `which node`.
+ExecStart=/usr/bin/node dist/run.js
+Restart=always
+RestartSec=3
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

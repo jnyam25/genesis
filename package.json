@@ -1,0 +1,28 @@
+{
+  "name": "captsone",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Captsone Industrial Paint Mixing System — digital twin (twin/) + operator HMI (hmi/). Root scripts orchestrate both sub-projects.",
+  "scripts": {
+    "postinstall": "node scripts/install.mjs",
+    "setup": "node scripts/install.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "dev": "node scripts/run-all.mjs dev",
+    "dev:mock": "node scripts/run-all.mjs dev --mock",
+    "dev:plc-sim": "node scripts/run-all.mjs dev --plc-sim",
+    "dev:twin": "npm run dev --prefix twin",
+    "dev:hmi": "npm run dev --prefix hmi",
+    "virtual-plc": "npm run virtual-plc --prefix twin",
+    "build": "node scripts/build.mjs",
+    "build:mock": "node scripts/build.mjs --mock",
+    "start": "node scripts/run-all.mjs start",
+    "test": "npm test --prefix twin",
+    "typecheck": "npm run typecheck --prefix twin && npm run typecheck --prefix hmi",
+    "lint": "npm run lint --prefix hmi",
+    "tag-map": "npm run tag-map --prefix twin -- --write",
+    "clean": "node scripts/clean.mjs"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  }
+}

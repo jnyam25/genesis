@@ -14,6 +14,7 @@ interface UseTwinStateResult {
 }
 
 const STALE_MS = 3000;
+const MAX_EVENTS = 60;
 
 /**
  * Subscribe to the twin data source and return the latest snapshot plus a
@@ -40,11 +41,16 @@ export function useTwinState(source?: TwinDataSource): UseTwinStateResult {
       setLoading(false);
       setStale(false);
       setState(snapshot);
-      if (snapshot.lastEvent && snapshot.lastEvent.id !== lastEventId.current) {
-        lastEventId.current = snapshot.lastEvent.id;
-        setEvents((prev) =>
-          [snapshot.lastEvent!, ...prev].slice(0, 60),
-        );
+      // Prefer the gap-free recent list; fall back to the single lastEvent.
+      const incoming =
+        snapshot.recentEvents ?? (snapshot.lastEvent ? [snapshot.lastEvent] : []);
+      if (incoming.length && incoming[0].id !== lastEventId.current) {
+        lastEventId.current = incoming[0].id;
+        setEvents((prev) => {
+          const known = new Set(prev.map((e) => e.id));
+          const fresh = incoming.filter((e) => !known.has(e.id));
+          return fresh.length ? [...fresh, ...prev].slice(0, MAX_EVENTS) : prev;
+        });
       }
     });
 

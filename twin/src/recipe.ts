@@ -86,3 +86,23 @@ export function buildDispensePlan(
   }
   return { steps, totalMl: parsed.totalMl, policy };
 }
+
+/**
+ * Physical dispense order for a linear line with one bay per tank.
+ *
+ * A container on a one-way conveyor passes each bay exactly once, so it cannot
+ * return to BAY-1 after BAY-3. This collapses any plan into one step per tank,
+ * in belt (tank index) order, with that tank's total volume. Interleaved plans
+ * therefore dispense sequentially on this layout; the plan's round-robin order
+ * only becomes physical with a multi-nozzle manifold at a single station.
+ */
+export function beltOrderSteps(plan: DispensePlan): MixStep[] {
+  const perTank = new Map<number, number>();
+  for (const step of plan.steps) {
+    perTank.set(step.tankIndex, (perTank.get(step.tankIndex) ?? 0) + step.volumeMl);
+  }
+  return [...perTank.entries()]
+    .filter(([, v]) => v > 0.0005)
+    .sort(([a], [b]) => a - b)
+    .map(([tankIndex, v], order) => ({ tankIndex, volumeMl: Math.round(v * 1000) / 1000, order }));
+}

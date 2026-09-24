@@ -2,3 +2,4 @@ node_modules/
 dist/
 runtime/snapshot.json
 *.log
+runtime/tank-colors.json

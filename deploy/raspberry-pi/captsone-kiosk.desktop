@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Captsone HMI kiosk
+Comment=Full-screen operator HMI on the local display
+# Waits for the HMI service, then opens it full screen. On older images the browser binary may be `chromium-browser`.
+Exec=sh -c 'until curl -sf http://localhost:43123 >/dev/null; do sleep 2; done; chromium --kiosk --noerrdialogs --disable-infobars --incognito http://localhost:43123'
+X-GNOME-Autostart-enabled=true

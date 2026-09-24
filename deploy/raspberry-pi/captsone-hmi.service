@@ -1,0 +1,24 @@
+# systemd unit: Captsone operator HMI (Next.js production server on 0.0.0.0:43123).
+# Requires `npm run build` at the repo root first (bakes NEXT_PUBLIC_TWIN_SOURCE=http).
+[Unit]
+Description=Captsone operator HMI
+Wants=network-online.target captsone-twin.service
+After=network-online.target captsone-twin.service
+
+[Service]
+Type=simple
+User=captsone
+Group=captsone
+WorkingDirectory=/opt/captsone/hmi
+EnvironmentFile=/etc/captsone/captsone.env
+# If Node was installed with nvm, replace /usr/bin/node with the absolute path from `which node`.
+ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -p 43123
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

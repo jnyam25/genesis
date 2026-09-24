@@ -2,21 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, SlidersHorizontal, Bell, Gauge } from "lucide-react";
+import { LayoutGrid, SlidersHorizontal, Bell, Gauge, KeyRound, OctagonX } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { useTwin } from "@/lib/twin/twin-context";
 import { clockTime } from "@/lib/format";
 
 const LINKS = [
   { href: "/", label: "Dashboard", icon: LayoutGrid },
-  { href: "/manual", label: "Manual / Jog", icon: SlidersHorizontal },
+  { href: "/manual", label: "Controls", icon: SlidersHorizontal },
   { href: "/alarms", label: "Alarms", icon: Bell },
 ];
 
 export function NavBar() {
   const pathname = usePathname();
-  const { state, stale, loading } = useTwin();
+  const { state, stale, loading, commands } = useTwin();
   const connected = state.connected && !stale && !loading;
+  const safety = state.safety;
 
   return (
     <header className="flex flex-col gap-3 border-b border-border/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
@@ -53,7 +54,29 @@ export function NavBar() {
         })}
       </nav>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {safety && (
+          <Badge variant="outline" className="gap-1 font-mono text-[10px] tracking-wide" title="Local/Remote key switch on the machine panel">
+            <KeyRound className="h-3 w-3" />
+            {safety.controlMode === "local" ? "LOCAL" : "REMOTE"}
+          </Badge>
+        )}
+        {commands && (
+          <button
+            type="button"
+            onClick={() => void commands.eStop()}
+            disabled={safety?.digitalEStop}
+            title="Digital E-Stop — opens the safety circuit and shuts down the physical line. Always available."
+            className={`inline-flex h-8 items-center gap-1.5 rounded-md border-2 px-3 text-xs font-extrabold tracking-wider transition-colors ${
+              safety?.eStopActive
+                ? "animate-pulse border-red-400 bg-red-600 text-white"
+                : "border-red-700 bg-red-600 text-white hover:bg-red-500 active:bg-red-700"
+            } disabled:cursor-not-allowed`}
+          >
+            <OctagonX className="h-4 w-4" />
+            {safety?.eStopActive ? "E-STOP ACTIVE" : "E-STOP"}
+          </button>
+        )}
         <Badge variant={connected ? "default" : "destructive"} className="gap-1.5">
           <Gauge className="h-3 w-3" />
           <span

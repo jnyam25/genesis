@@ -7,14 +7,16 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { CheckCircle2, XCircle, Gauge, Package } from "lucide-react";
-import type { Counts } from "@/lib/twin/types";
+import type { Counts, SortLane } from "@/lib/twin/types";
 
 export function CountsCard({
   counts,
   throughputCpm,
+  sortLanes,
 }: {
   counts: Counts;
   throughputCpm: number;
+  sortLanes?: SortLane[];
 }) {
   const acceptRate =
     counts.total > 0 ? counts.accepted / counts.total : 1;
@@ -32,6 +34,16 @@ export function CountsCard({
           <div className="font-mono text-3xl font-semibold tabular-nums text-emerald-400">
             {counts.accepted}
           </div>
+          {sortLanes && sortLanes.length > 0 && (
+            <ul className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+              {sortLanes.map((lane) => (
+                <li key={lane.id} className="flex justify-between gap-2">
+                  <span className="truncate">{lane.name}</span>
+                  <span className="font-mono tabular-nums text-foreground">{lane.count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
 

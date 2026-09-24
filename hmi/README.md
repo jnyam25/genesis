@@ -1,36 +1,41 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Captsone HMI
 
-## Getting Started
+Operator HMI for the Captsone Industrial Paint Mixing System. It has a live OEE dashboard, a 2D line schematic, a 3D scene, a Controls screen (digital E-Stop, start/stop/reset, jog, tanks, simulated local panel), a global E-Stop/local-mode safety banner, and an Alarms screen.
 
-First, run the development server:
+Stack: Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind CSS v4, shadcn/ui (Base UI), and react-three-fiber.
+
+## Run
+
+The usual way is from the repo root, which installs and runs the twin as well and connects the HMI to it. See [`../INSTALL.md`](../INSTALL.md).
+
+To work on the HMI by itself, on its built-in mock feed:
+
+```bash
+npm install
+```
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:43123.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` | Dev server on port 43123 |
+| `npm run build` | Production build |
+| `npm start` | Serves the production build on port 43123 |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` | ESLint (Next.js core-web-vitals + TypeScript rules) |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Data source
 
-## Learn More
+Set with `NEXT_PUBLIC_TWIN_SOURCE`. Copy `.env.example` to `.env.local` to change it.
 
-To learn more about Next.js, take a look at the following resources:
+| Value | Source |
+| --- | --- |
+| `mock` (default) | Built-in simulated line (`src/lib/twin/mock-engine.ts`) |
+| `http` | Live twin. The browser polls `/api/twin/state` and posts `/api/twin/command`, and those route handlers forward to the twin at `TWIN_HTTP_URL` (default `http://127.0.0.1:43124`). |
+| `ws` | Skeleton WebSocket bridge (`NEXT_PUBLIC_TWIN_URL`) |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See [`../docs/frontend-design.md`](../docs/frontend-design.md) for the architecture.
