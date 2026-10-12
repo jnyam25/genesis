@@ -8,58 +8,60 @@ Two layers:
 The line layout it assumes (from [`twin/src/config.ts`](../../twin/src/config.ts)):
 
 ```
- E-Stop ENTRY                                                                                   E-Stop EXIT
- load ─▶[LABEL]─▶[SCAN]─▶[BAY-1]─▶[BAY-2]─▶[BAY-3]─▶ … ─▶[CAP]─▶[QC]─▶[GATE]─▶[SORT]─▶ lane A (small)
-                                                           ▲    sort   │ reject └──▶ lane B (large)
-                                                  lid magazine  sensor ▼ diverter
-                                                  (robotic arm)      reject lane
+ E-Stop (line start)                                                                                 E-Stop (line end)
+ load ─▶[SCAN]─▶[BAY-1]─▶[BAY-2]─▶[CAP]─▶[PRESS]─▶[QC]─▶[GATE]─▶[SORT]─▶ lane 1
+            │ QR reject                              lid press        │ fill reject └──▶ lane 2
+            ▼ slide
 ```
 
 - **One-way belt, one fill bay per tank.** A container passes each station once, in belt order. See "Belt order" in [../engine-design.md](../engine-design.md#belt-order).
 - **Holding a container at a station.** The software assumes every station except SORT can hold a container in place (a stopper, or stopping the belt on a single-bottle line) and has a presence sensor. The BOM does not budget stoppers yet; see the open decision in [bom.md](bom.md#3-gaps-between-the-bom-and-the-software).
-- **No scan diverter.** A container whose barcode fails is not served anywhere; it rides through to the reject diverter.
-- **Tank slots** `T1..T8` are fixed. Slot k always has id `Tk`, bay `BAY-k`, and register block `Tank<k>.*`.
+- **QR reject slide at the scan gate.** A bad or missing QR is ejected before either fill valve opens. A bad fill or a bad cap uses the second reject slide at GATE.
+- **Lid press.** The arm lifts a lid from the magazine and places it. A separate cylinder at PRESS seats it.
+- **Two E-Stops**, one at the start of the line and one at the end. The QR is already printed on the can, so the default line has no labeling station.
+- **Tank slots** `T1` and `T2` are fixed. Slot k always has id `Tk`, bay `BAY-k`, and register block `Tank<k>.*`.
 
 ### Who controls what
 
 | Component | Signal | Type | Controller | Link |
 | --- | --- | --- | --- | --- |
-| E-Stop (line entry), E-Stop (line exit), E-Stop (panel) | Emergency stop | Safety contacts → safety relay; NC monitoring contact → DI | Safety relay; PLC monitors | Hardwired |
+| E-Stop (line start), E-Stop (line end) | Emergency stop | Safety contacts → safety relay; NC monitoring contact → DI | Safety relay; PLC monitors | Hardwired |
 | HMI touch panel (budget panel or C-more Micro; optional) | Recipe select, start/stop, status | Modbus TCP or serial Modbus RTU | PLC | Wired |
-| Conveyor motor | Run/stop, speed | DO + AO (or PWM) | PLC | Wired |
-| Tank 1 / 2 / 3 valves | Open/close + angle | DO + AO | PLC | Wired |
+| Conveyor motor + DC speed controller | Run/stop (controller enable), speed (0–10 V or PWM) | DO + AO (or PWM) | PLC | Wired |
+| Tank 1 / 2 valves | Open/close + angle | DO + AO | PLC | Wired |
 | Reject diverter (slide) | Actuate reject | DO | PLC | Wired |
 | Sort diverter (2-path split) | Path select | DO | PLC | Wired |
-| Presence sensors | Bottle at station | DI | PLC | Wired |
-| Labeling station | Apply-label trigger | GPIO → driver | ESP32 #1 (scanner node) | Wired |
-| Barcode scanner (GM65-class) | Read the label text (forwarded raw; the PLC validates it) | UART | ESP32 #1 (scanner node) | Wired |
-| Robotic arm (Hiwonder xArm ESP32, 6-DOF with gripper) | Lift a lid from the lid magazine, place it on the container at CAP, press it down, release, return HOME | LX servo bus | ESP32 #2 (station node) | Wired |
+| Presence sensors | Bottle at station. Touch sensors (24 V PNP) at SCAN, CAP, PRESS, QC, GATE and SORT; proximity sensors at the two fill bays | DI | PLC | Wired |
+| QR reject pusher | Pneumatic cylinder at the scan gate | DO | PLC | Wired |
+| Lid press | Vertical pneumatic cylinder after the capping arm | DO | PLC | Wired |
+| Label applicator (not on the default line) | STEPPERONLINE DM556Y Open Loop Stepper + NEMA 23 motor: one stroke out and back. The concept line uses a preprinted QR, so this station stays unwired unless a labeler is added | Step / dir / enable (5 V opto) | ESP32 #1 (scanner node) | Wired |
+| Barcode scanner (GM65-class) | Read the QR on the can (forwarded raw; the PLC validates it) | UART | ESP32 #1 (scanner node) | Wired |
+| Robotic arm (Hiwonder xArm ESP32, 6-DOF with gripper) | Lift a lid from the lid magazine, place it on the container at CAP, release, return HOME. The lid-press cylinder seats it | LX servo bus | ESP32 #2 (station node) | Wired |
 | Sort sensor (VL53L1X time-of-flight) | Measure bottle height (the PLC classifies the bottle type) | I²C | ESP32 #2 (station node) | Wired |
 | PLC ↔ ESP32 nodes | Scan text, station handshakes, arm commands, fault bits, heartbeats | Modbus TCP (`Scan.*`, `Station.*`, `Field.*`) | Supervisor link | Wireless (dedicated AP) |
 | PLC ↔ monitoring PC | Bridge + web HMI, logging, FUXA SCADA | Modbus TCP | Supervisor link | Wired Ethernet |
 
 ## 1. Field inputs (PLC)
 
-Tag names follow `I_<Area>_<Device>_<Signal>`. Counts are for the default 3-tank line; the notes say what changes with N tanks.
+Tag names follow `I_<Area>_<Device>_<Signal>`. Counts are for the 2-tank line.
 
 | PLC tag | Device | Type | Signal | Notes |
 | --- | --- | --- | --- | --- |
 | `I_Safety_OK` | Safety relay auxiliary (NO) contact | DI 24 V | 1 = safety circuit closed and reset | **Monitoring only** ([safety.md](safety.md)) → `LineState.SAFETY_OK` |
-| `I_EStop_Panel_Mon` | Monitoring contact (NC) of the E-Stop on the local control panel | DI | **0 = pressed** (NC opens) | → `Sys.PhysicalEStopMask` bit0, `LineState.PHYSICAL_ESTOP`. The button's safety contacts go to the safety relay, not the PLC |
-| `I_EStop_Entry_Mon` | Monitoring contact (NC) of the E-Stop at the **line entry** (labeling station, where bottles are loaded) | DI | 0 = pressed | → mask bit1 |
-| `I_EStop_Exit_Mon` | Monitoring contact (NC) of the E-Stop at the **line exit** (sort diverter / output lanes) | DI | 0 = pressed | → mask bit2. One input per button in `config.safety.eStopButtons` |
+| `I_EStop_Entry_Mon` | Monitoring contact (NC) of the E-Stop at the **start of the line** (infeed, where cans are loaded) | DI | **0 = pressed** (NC opens) | → `Sys.PhysicalEStopMask` bit0 (`ENTRY`, "Line start"). The button's safety contacts go to the safety relay, not the PLC |
+| `I_EStop_Exit_Mon` | Monitoring contact (NC) of the E-Stop at the **end of the line** (sort / output lanes) | DI | 0 = pressed | → mask bit1 (`EXIT`, "Line end"). One input per button in `config.safety.eStopButtons` |
 | `I_Safety_RemoteRelay_Fb` | Force-guided NC feedback of the remote E-Stop interposing relay | DI | 1 = relay de-energized | Welded-contact check: must be 1 while `O_Safety_RemoteEStopOK` = 0 |
 | `I_Panel_LocalMode` | LOCAL/REMOTE key selector | DI | 1 = LOCAL | → `LineState.LOCAL_MODE`. Changing position stops the line |
 | `I_Panel_Stop_PB` | STOP push-button (red) | DI (**NC**) | **0 = pressed** | Controlled stop, **any mode**; a broken wire stops the line. The touch panel's STOP is an extra, not a replacement |
 | `I_Panel_Reset_PB` | RESET push-button (blue, illuminated) | DI (NO) | 1 = pressed | Safety reset, any mode. Also wired to the safety relay reset input, so it must be a real button |
 | START / JOG | Touch-panel buttons (or hardwired NO push-buttons) | Panel bit (or DI) | 1 = pressed | LOCAL mode only. JOG is hold-to-run |
-| `I_Label_Present` | Presence sensor at LABEL | DI (PNP) | 1 = container present | First station; admission waits for it to clear |
-| `I_Scan_Present` | Presence sensor at SCAN | DI | 1 = present | |
-| `I_Bay<k>_Present` | Presence sensor at BAY-k | DI | 1 = present | One per tank (k = 1..N) |
-| `I_Cap_Present` | Presence sensor at CAP | DI | 1 = present | |
-| `I_QC_Present` | Presence at the sort sensor (QC) | DI | 1 = present | Can be the sort sensor's own "object present" output via ESP32 #2 if it has one |
-| `I_Gate_Present` | Presence at the reject diverter | DI | 1 = present | |
-| `I_Sort_Present` | Presence at the sort diverter | DI | 1 = present | Optional if the diverter is timed from `I_Gate_Present` |
+| `I_Scan_Present` | Touch sensor at SCAN | DI (24 V PNP) | 1 = container present | First station |
+| `I_Bay<k>_Present` | Proximity sensor at BAY-k (splash zone) | DI | 1 = present | One per tank (k = 1..2) |
+| `I_Cap_Present` | Touch sensor at CAP | DI | 1 = present | |
+| `I_Press_Present` | Touch sensor at the lid press | DI | 1 = present | |
+| `I_QC_Present` | Touch sensor at the sort sensor (QC) | DI | 1 = present | Can be the sort sensor's own "object present" output via ESP32 #2 if it has one |
+| `I_Gate_Present` | Touch sensor at the reject diverter | DI | 1 = present | |
+| `I_Sort_Present` | Touch sensor at the sort diverter | DI | 1 = present | Optional if the diverter is timed from `I_Gate_Present` |
 | `I_LaneA_Full` / `I_LaneB_Full` / `I_Reject_Full` | Sensors at the end of each output lane | DI | 1 = lane full | Recommended: PLC halts admission when full |
 | `I_RejectDiverter_Home` / `I_SortDiverter_Home` | Limit or reed switches | DI | 1 = retracted | Recommended: fault if not home within 1 s |
 | `I_Belt_Drive_Fault` | Motor driver fault output | DI | 1 = fault | Optional. Stops the line (`RunCmd := 0`). It has no fault code yet: if it's wired, add one to `FaultCode` in [`events.ts`](../../twin/src/events.ts) so it latches `LINE_STATE.FAULT` like the station faults |
@@ -70,20 +72,26 @@ Tag names follow `I_<Area>_<Device>_<Signal>`. Counts are for the default 3-tank
 
 | PLC tag | Device | Type | ON means | De-energized state |
 | --- | --- | --- | --- | --- |
-| `O_Belt_Run` | Conveyor motor driver enable / relay | DO 24 V | Belt runs | Stopped |
-| `AO_Belt_SpeedRef` | Motor driver speed input | AO 0–10 V (or PWM) | Speed ∝ `beltSpeedMPerSec` | 0. Omit for a fixed-speed motor |
+| `O_Belt_Run` | Conveyor speed-controller enable | DO 24 V | Controller enabled, belt may run | Stopped (controller disabled) |
+| `AO_Belt_SpeedRef` | Speed-controller speed input | AO 0–10 V (or a Micro850 PWM output) | Speed ∝ `beltSpeedMPerSec` | 0. Omit only if the controller's own knob is the speed setting |
 | `O_Valve_T<k>_Open` | NC shutoff solenoid in series with tank k's proportional valve, and the valve's enable | DO | Tank k may flow | Closed (spring) |
 | `AO_Valve_T<k>_Angle` | Proportional (servo-driven) valve position input | AO 0–10 V (or servo positioner) | Opening = `Tank<k>.ValveOpeningPct` while dispensing | 0 % (but a servo valve holds its last position without power, hence the shutoff solenoid) |
-| `O_<Station>_Stopper` | Stopper actuator, one per holding station (LABEL, SCAN, BAY-k, CAP, QC, GATE) | DO | **Retract** (release container) | Extended, holding (spring return). Only if stoppers are fitted; on a single-bottle line the belt stop does this job |
-| `O_RejectDiverter_Extend` | Reject diverter slide (solenoid) | DO | Push to reject lane | Retracted (spring) |
+| `O_<Station>_Stopper` | Stopper actuator, one per holding station (SCAN, BAY-k, CAP, PRESS, QC, GATE) | DO | **Retract** (release container) | Extended, holding (spring return). Only if stoppers are fitted; on a single-bottle line the belt stop does this job |
+| `O_QrReject_Extend` | Scan-gate ejector | DO | Push a bad QR onto the QR reject slide | Retracted (spring) |
+| `O_LidPress_Extend` | Lid-press cylinder | DO | Seat the lid | Retracted (spring) |
+| `O_RejectDiverter_Extend` | Fill-reject pusher | DO | Push a bad fill or bad cap onto the fill reject slide | Retracted (spring) |
 | `O_SortDiverter_LaneB` | Sort diverter gate (solenoid) | DO | Route to lane B | Lane A (spring) |
 | `O_Refill_T<k>_Valve` | Normally-closed refill solenoid | DO | Refill flowing | Closed. Not in the BOM: refill is manual unless added |
 | `O_Safety_RemoteEStopOK` | Coil of the interposing safety relay (force-guided contacts in series with **both** E-Stop channels) | DO | **Energized = OK.** De-energized when the digital E-Stop is latched, which opens the safety circuit | **De-energized = E-Stop** (fail-safe: PLC off/Program mode opens the circuit) |
-| `O_Stack_Green` / `O_Stack_Amber` / `O_Stack_Red` | Stack light (optional) | DO | Running / stopped, reset required or warning / E-Stop, fault | Off |
+| `O_Stack_Green` | ONN-M4W green layer | DO 24 V sourcing | Line running | Off |
+| `O_Stack_Amber` | ONN-M4W yellow layer | DO | Stopped, reset required, or warning (including HMI link lost) | Off |
+| `O_Stack_Red` | ONN-M4W red layer | DO | E-Stop or latched fault | Off |
 | `O_Panel_Lamp_Reset` | Blue lamp in the RESET button | DO | Flashing = reset required | Off |
-| `O_Buzzer` | Buzzer (optional) | DO | Audible alarm (E-Stop, jam) | Off |
+| `O_Buzzer` | ONN-M4W buzzer | DO | Audible alarm (E-Stop, jam). Pulse it; a steady >95 dB tone is too loud for a warning that can sit | Off |
 
-Running, E-Stop and REMOTE indications can live on the touch panel instead of separate lamps; the RESET lamp stays a real lamp because it sits in the button.
+The **ONN-M4W** is the wall-mounted tower (order the **DC 24 V** unit, not AC 220 V). Wire its common to 0 V and each color wire, plus the buzzer wire, to a sourcing PLC output. Leave a separate flash terminal unused: the PLC turns a layer on steady, and pulses the buzzer itself. Mount it where the operator can see it from the load end. It is indication only; the safety relay does not switch it, so it can still show which E-Stop was pressed after motion power is gone.
+
+Running, E-Stop and REMOTE indications can live on the touch panel as well as the tower. The RESET lamp stays a real lamp because it sits in the button.
 
 The **safety relay** switches power to the conveyor motor driver, the valve shutoff solenoids and valve servos, both diverters, the label applicator and the capping arm's servo supply (the last two are driven by the ESP32 nodes). It does **not** switch the PLC, the ESP32 logic supply or the monitoring PC, so the control system stays alive to report which E-Stop was pressed. See [safety.md §1](safety.md#1-emergency-stop-physical-and-digital-working-together), [§2a](safety.md#2a-actuators-driven-by-the-esp32-nodes) and [§4](safety.md#4-hardware-design-rules).
 
@@ -92,8 +100,8 @@ The **safety relay** switches power to the conveyor motor driver, the valve shut
 | Node | Device | Interface | Notes |
 | --- | --- | --- | --- |
 | ESP32 #1 scanner node | Barcode scanner (Waveshare 1D/2D, GM65-class module) | UART 3.3 V | On a new `Scan.Request` it triggers one read and writes the **raw** text (`Scan.Status`, `Scan.Length`, `Scan.Text1..32`), then `Scan.Done`. It never parses the barcode; the PLC validates it (`Scan.ParseResult`) |
-| ESP32 #1 scanner node | Label applicator (servo or stepper + driver) | GPIO → driver | Runs on `Station.LabelRequest`, reports `Station.LabelDone`. Driver power via the safety relay |
-| ESP32 #2 station node | Robotic arm: Hiwonder xArm ESP32, 6 LX bus servos, servo 1 is the gripper | LX servo bus (half-duplex UART) | Runs one `Station.ArmCmd` per new `Station.ArmCmdSeq` (`HOME`, `PICK_LID` from the lid magazine, `PLACE_LID` at CAP including pressing the lid down), then writes `Station.ArmResult` and `Station.ArmDoneSeq`; keeps `Station.ArmStatus` current. Lid detection uses the gripper servo's position (closing on a lid stalls short of the empty-closed position). Poses are taught in the node's serial-console teach mode (line stopped only). Servo power via the safety relay |
+| ESP32 #1 scanner node | Label applicator: **DM556Y** + NEMA 23 stepper | Step (PU), direction (DR), motor-free (MF), 5 V opto. Optional alarm input | On `Station.LabelRequest`, `label_steps` pulses out and the same number back, then `Station.LabelDone`. PU+/DR+/MF+ to the DevKit's +5 V; each minus pin is sunk by a small NPN or 2N7002 because the driver's high level is 5–24 V and an ESP32 pin is 3.3 V. GPIO high = opto on; a rising edge on the step pin is one step (falling edge on PU−). MF high = coils off. The **motor supply (20–50 V DC)** is switched by the safety relay, never taken from the ESP32 |
+| ESP32 #2 station node | Robotic arm: Hiwonder xArm ESP32, 6 LX bus servos, servo 1 is the gripper | LX servo bus (half-duplex UART) | Runs one `Station.ArmCmd` per new `Station.ArmCmdSeq` (`HOME`, `PICK_LID` from the lid magazine, `PLACE_LID` at CAP), then writes `Station.ArmResult` and `Station.ArmDoneSeq`; keeps `Station.ArmStatus` current. The lid-press cylinder, not the arm, seats the lid. Lid detection uses the gripper servo's position (closing on a lid stalls short of the empty-closed position). Poses are taught in the node's serial-console teach mode (line stopped only). Servo power via the safety relay |
 | ESP32 #2 station node | Sort sensor: VL53L1X time-of-flight, looking down at the bottle at QC | I²C 3.3 V | On a new `Station.SortRequest` it writes the measured height to `Station.SortHeightMm`, then `Station.SortDone`. It never classifies the bottle; the PLC does, against `config.sort` |
 
 ESP32 GPIO is 3.3 V: never connect 24 V field signals directly. The firmware is in [`firmware/`](../../firmware) and described in [esp32.md](esp32.md).
@@ -101,11 +109,11 @@ ESP32 GPIO is 3.3 V: never connect 24 V field signals directly. The firmware is 
 ### Safety circuit wiring (overview)
 
 ```
- +24V safety ──┬─ E-Stop PANEL (ch1) ─ E-Stop ENTRY (ch1) ─ E-Stop EXIT (ch1) ─ K_REMOTE NO (ch1) ─┬─▶ Safety relay S11/S12 (ch1)
-               └─ E-Stop PANEL (ch2) ─ E-Stop ENTRY (ch2) ─ E-Stop EXIT (ch2) ─ K_REMOTE NO (ch2) ─┴─▶ Safety relay S21/S22 (ch2)
+ +24V safety ──┬─ E-Stop START (ch1) ─ E-Stop END (ch1) ─ K_REMOTE NO (ch1) ─┬─▶ Safety relay S11/S12 (ch1)
+               └─ E-Stop START (ch2) ─ E-Stop END (ch2) ─ K_REMOTE NO (ch2) ─┴─▶ Safety relay S21/S22 (ch2)
  RESET PB ─────────────────────────────────────────────────────────────────────────────────────────▶ Safety relay reset (S33/S34, edge-triggered)
  K_REMOTE NC (feedback) ─┬─ motor driver/contactor feedback NC ────────────────────────────────────▶ Safety relay feedback loop
- Safety relay outputs 13/14, 23/24 ──▶ conveyor driver enable, valve shutoff + servo supply, diverters, labeler, arm servo supply
+ Safety relay outputs 13/14, 23/24 ──▶ conveyor speed controller, valve shutoff + servo supply, diverters, DM556Y supply, arm servo supply
  Safety relay aux 41/42 ──▶ I_Safety_OK
  PLC O_Safety_RemoteEStopOK ──▶ K_REMOTE coil (force-guided interposing safety relay)
  Each E-Stop NC monitoring contact ──▶ I_EStop_<Location>_Mon
@@ -117,16 +125,16 @@ Terminal names are generic. Follow your safety relay's manual.
 
 For N tanks:
 
-| | Formula | N = 3 | N = 8 |
-| --- | --- | ---: | ---: |
-| Digital inputs, required | 14 + N (safety OK, 3 E-Stop monitors, relay feedback, key, STOP, RESET, 6 + N presence sensors) | 17 | 22 |
-| Digital inputs, recommended extras | 5 + N (3 lane-full, 2 diverter-home, 1 low float per tank) | 8 | 13 |
-| Digital outputs, required | 4 + N (belt, reject diverter, sort diverter, remote E-Stop OK, 1 valve shutoff per tank) | 7 | 12 |
-| Digital outputs, stoppers (if fitted) | 5 + N | 8 | 13 |
-| Digital outputs, indicators (optional) | 5 (stack light ×3, RESET lamp, buzzer) | 5 | 5 |
-| Analog outputs | N valve angles (+1 belt speed) | 3–4 | 8–9 |
+| | Formula | N = 2 |
+| --- | --- | ---: |
+| Digital inputs, required | 13 + N (safety OK, 2 E-Stop monitors, relay feedback, key, STOP, RESET, 6 + N presence sensors) | 15 |
+| Digital inputs, recommended extras | 6 + N (3 lane-full, 3 actuator-home, 1 low float per tank) | 8 |
+| Digital outputs, required | 6 + N (belt, QR reject, lid press, fill reject, sort diverter, remote E-Stop OK, 1 valve shutoff per tank) | 8 |
+| Digital outputs, stoppers (if fitted) | 5 + N | 7 |
+| Digital outputs, indicators (ONN-M4W + RESET lamp) | 5 (tower red / yellow / green, buzzer, RESET lamp) | 5 |
+| Analog outputs | N valve angles (+1 belt speed) | 2–3 |
 
-Size the Micro850's plug-in and expansion modules for the **largest tank count you plan to support**, plus about 20% spare ([micro850-plc.md §1](micro850-plc.md#io-against-the-requirement)). With stoppers fitted, a 3-tank line needs roughly 25 DI, 20 DO and 4 AO.
+Size the Micro850's plug-in and expansion modules for the 2-tank line, plus about 20% spare ([micro850-plc.md §1](micro850-plc.md#io-against-the-requirement)). With stoppers fitted, the line needs roughly 23 DI, 20 DO and 3 AO.
 
 ### Calibration values per tank
 
@@ -173,7 +181,7 @@ These live in the PLC and are published in the tank register block. Keep [`confi
 | 13 | 40014 | `Sys.HmiHeartbeat` | RW | count | Written by the Pi bridge every poll. PLC clears HMI_LINK_OK if it stops changing (alarm only — never a safety function). |
 | 14 | 40015 | `Sys.UptimeS` | R | s (wraps) | Seconds since PLC run start. |
 | 15 | 40016 | `Sys.ActiveContainers` | R | count | Containers currently on the belt. |
-| 16 | 40017 | `Sys.PhysicalEStopMask` | R | bits | bit i = physical E-Stop button i pressed, from the safety relay's monitoring contacts (bit0 local control panel, bit1 line entry, bit2 line exit — config.safety.eStopButtons). |
+| 16 | 40017 | `Sys.PhysicalEStopMask` | R | bits | bit i = physical E-Stop button i pressed, from the safety relay's monitoring contacts (bit0 line start, bit1 line end — config.safety.eStopButtons). |
 | 17 | 40018 | `Counts.LaneA` | R | count | Accepted containers sorted to lane A (config.sort.lanes[0]) (wraps). |
 | 18 | 40019 | `Counts.LaneB` | R | count | Accepted containers sorted to lane B (config.sort.lanes[1]) (wraps). |
 | 19 | 40020 | `Sys.FaultCode` | R | code | First latched station fault, 0 = none: 1 labeler, 2 scanner, 3 arm servo, 4 arm could not pick a lid, 5 arm dropped the lid, 6 sort sensor, 7 scanner node offline, 8 station node offline. Cleared by RESET once the cause is gone. |
@@ -196,42 +204,6 @@ Six registers per slot k = 1..8, base `20 + 6·(k−1)`. Descriptions are given 
 | 29 | 40030 | `Tank2.RefillThresholdMl` | R | ml |  |
 | 30 | 40031 | `Tank2.DispenseRate` | R | ml/s × 10 |  |
 | 31 | 40032 | `Tank2.ValveOpeningPct` | R | % |  |
-| 32 | 40033 | `Tank3.LevelMl` | R | ml × 10 |  |
-| 33 | 40034 | `Tank3.CapacityMl` | R | ml |  |
-| 34 | 40035 | `Tank3.Flags` | R | bits |  |
-| 35 | 40036 | `Tank3.RefillThresholdMl` | R | ml |  |
-| 36 | 40037 | `Tank3.DispenseRate` | R | ml/s × 10 |  |
-| 37 | 40038 | `Tank3.ValveOpeningPct` | R | % |  |
-| 38 | 40039 | `Tank4.LevelMl` | R | ml × 10 |  |
-| 39 | 40040 | `Tank4.CapacityMl` | R | ml |  |
-| 40 | 40041 | `Tank4.Flags` | R | bits |  |
-| 41 | 40042 | `Tank4.RefillThresholdMl` | R | ml |  |
-| 42 | 40043 | `Tank4.DispenseRate` | R | ml/s × 10 |  |
-| 43 | 40044 | `Tank4.ValveOpeningPct` | R | % |  |
-| 44 | 40045 | `Tank5.LevelMl` | R | ml × 10 |  |
-| 45 | 40046 | `Tank5.CapacityMl` | R | ml |  |
-| 46 | 40047 | `Tank5.Flags` | R | bits |  |
-| 47 | 40048 | `Tank5.RefillThresholdMl` | R | ml |  |
-| 48 | 40049 | `Tank5.DispenseRate` | R | ml/s × 10 |  |
-| 49 | 40050 | `Tank5.ValveOpeningPct` | R | % |  |
-| 50 | 40051 | `Tank6.LevelMl` | R | ml × 10 |  |
-| 51 | 40052 | `Tank6.CapacityMl` | R | ml |  |
-| 52 | 40053 | `Tank6.Flags` | R | bits |  |
-| 53 | 40054 | `Tank6.RefillThresholdMl` | R | ml |  |
-| 54 | 40055 | `Tank6.DispenseRate` | R | ml/s × 10 |  |
-| 55 | 40056 | `Tank6.ValveOpeningPct` | R | % |  |
-| 56 | 40057 | `Tank7.LevelMl` | R | ml × 10 |  |
-| 57 | 40058 | `Tank7.CapacityMl` | R | ml |  |
-| 58 | 40059 | `Tank7.Flags` | R | bits |  |
-| 59 | 40060 | `Tank7.RefillThresholdMl` | R | ml |  |
-| 60 | 40061 | `Tank7.DispenseRate` | R | ml/s × 10 |  |
-| 61 | 40062 | `Tank7.ValveOpeningPct` | R | % |  |
-| 62 | 40063 | `Tank8.LevelMl` | R | ml × 10 |  |
-| 63 | 40064 | `Tank8.CapacityMl` | R | ml |  |
-| 64 | 40065 | `Tank8.Flags` | R | bits |  |
-| 65 | 40066 | `Tank8.RefillThresholdMl` | R | ml |  |
-| 66 | 40067 | `Tank8.DispenseRate` | R | ml/s × 10 |  |
-| 67 | 40068 | `Tank8.ValveOpeningPct` | R | % |  |
 
 ### Holding registers — container tracking (100–139)
 
@@ -362,12 +334,6 @@ The PLC holds a container at SCAN and writes its id to `Scan.Request`. The scann
 | ---: | ---: | --- | :---: | --- | --- |
 | 400 | 40401 | `Field.Tank1LevelMl` | RW | ml × 10 | Written by the ESP32 tank-level node; PLC validates range and heartbeat before using it. |
 | 401 | 40402 | `Field.Tank2LevelMl` | RW | ml × 10 |  |
-| 402 | 40403 | `Field.Tank3LevelMl` | RW | ml × 10 |  |
-| 403 | 40404 | `Field.Tank4LevelMl` | RW | ml × 10 |  |
-| 404 | 40405 | `Field.Tank5LevelMl` | RW | ml × 10 |  |
-| 405 | 40406 | `Field.Tank6LevelMl` | RW | ml × 10 |  |
-| 406 | 40407 | `Field.Tank7LevelMl` | RW | ml × 10 |  |
-| 407 | 40408 | `Field.Tank8LevelMl` | RW | ml × 10 |  |
 | 410 | 40411 | `Field.TankNodeHeartbeat` | RW | count | ESP32 tank node increments ≥ 1 Hz. |
 | 411 | 40412 | `Field.ScannerNodeHeartbeat` | RW | count | ESP32 scanner node (labeling + barcode scanner) increments ≥ 1 Hz. |
 | 412 | 40413 | `Field.StationNodeHeartbeat` | RW | count | ESP32 station node (robotic arm + sort sensor) increments ≥ 1 Hz. |
@@ -381,7 +347,7 @@ The PLC decides; the ESP32 nodes execute and report. Label and sort use the same
 | 420 | 40421 | `Station.RunPermit` | R | 0/1 | 1 = line running with the safety circuit closed. ESP32 nodes must stop their actuators when 0 or when Sys.PlcHeartbeat stops changing for 1 s. Not a safety function: actuator power still goes through the safety relay. |
 | 421 | 40422 | `Station.LabelRequest` | R | id | Container id held at LABEL waiting for its label, 0 = none. |
 | 422 | 40423 | `Station.LabelDone` | RW | id | Scanner node writes the container id once the label is applied. |
-| 423 | 40424 | `Station.ArmCmd` | R | code | Robotic arm command: 0 none, 1 HOME, 2 PICK_LID (lift the top lid from the magazine), 3 PLACE_LID (place the held lid on the container at CAP, press it down, release, return HOME). Written before ArmCmdSeq. |
+| 423 | 40424 | `Station.ArmCmd` | R | code | Robotic arm command: 0 none, 1 HOME, 2 PICK_LID (lift the top lid from the magazine), 3 PLACE_LID (place the held lid on the container at CAP, release, return HOME). The lid-press cylinder seats the lid. Written before ArmCmdSeq. |
 | 424 | 40425 | `Station.ArmCmdSeq` | R | count | PLC increments (1..65535, skips 0) to issue ArmCmd. The station node runs each sequence number once. |
 | 425 | 40426 | `Station.ArmDoneSeq` | RW | count | Station node copies ArmCmdSeq here when the command has finished, after writing ArmResult. |
 | 426 | 40427 | `Station.ArmResult` | RW | code | 1 OK, 2 NO_LID (gripper closed on nothing), 3 LID_LOST, 4 SERVO_ERROR, 5 ABORTED (RunPermit dropped mid-move), 6 REFUSED (not homed / unknown command). The PLC decides retries and faults. |

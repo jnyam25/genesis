@@ -71,7 +71,7 @@ export default function Page() {
                   <Boxes className="h-4 w-4" /> 3D Visualization
                 </CardTitle>
                 <span className="text-xs text-muted-foreground">
-                  Drag to orbit · scroll to zoom · right-drag to pan
+                  Drag to orbit · scroll to zoom · click a station
                 </span>
               </CardHeader>
               <CardContent>
@@ -152,7 +152,7 @@ function LoadingState() {
 
 function SceneSkeleton() {
   return (
-    <div className="flex h-[520px] w-full items-center justify-center rounded-lg border border-border/60 bg-slate-950 text-sm text-muted-foreground">
+    <div className="flex h-[520px] w-full items-center justify-center rounded-lg border border-border/60 bg-slate-50 text-sm text-muted-foreground">
       Loading 3D scene…
     </div>
   );

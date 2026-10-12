@@ -18,7 +18,7 @@
 #include <algorithm>
 
 #include "arm.h"
-#include "captsone_node.h"
+#include "genesis_node.h"
 
 static node::Config config;
 static node::PlcLink plc;
@@ -369,10 +369,10 @@ void setup() {
   Wire.setClock(400000);
   tofInit();
 
-  plc.begin(config, "captsone-station");
+  plc.begin(config, "genesis-station");
   console.begin(&config, HELP, command);
   node::watchdogBegin(5);
-  Serial.printf("Captsone station node, register map v%u. Poses %s. `help` for commands.\n", reg::PROTOCOL_VERSION, posesTaught ? "taught" : "NOT TAUGHT — teach them first");
+  Serial.printf("Genesis station node, register map v%u. Poses %s. `help` for commands.\n", reg::PROTOCOL_VERSION, posesTaught ? "taught" : "NOT TAUGHT — teach them first");
 }
 
 void loop() {

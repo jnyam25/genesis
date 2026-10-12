@@ -1,5 +1,5 @@
 /**
- * Captsone twin core — the framework-agnostic simulation engine.
+ * Genesis twin core — the framework-agnostic simulation engine.
  *
  * Pure TypeScript, no simulator dependency. Owns the container state machine,
  * station routing (label → scan → fill bays → capping arm → sort sensor →
@@ -131,6 +131,8 @@ export interface SnapshotTank {
   colorCode: string;
   levelMl: number;
   capacityMl: number;
+  /** True when the level is under the refill threshold. Same bit as Tank.Flags LOW. */
+  low: boolean;
 }
 
 export interface SnapshotContainer {
@@ -369,13 +371,12 @@ export class TwinCore {
       }
       visit("MIX", this.config.mixDurationSec);
       visit("CAP", times.cap);
+      visit("PRESS", times.press);
       visit("QC", times.qc, true);
       visit("GATE", times.gate, true);
       visit("SORT", times.sort);
       this.recordEvent(`container ${c.id} barcode read: ${text}`, "info", EventCode.BARCODE_READ, c.id, c.targetMl);
     } else {
-      // No scan diverter: an unreadable bottle rides through unserved to the reject diverter.
-      visit("GATE", times.gate, true);
       this.recordEvent(`container ${c.id} barcode rejected: ${c.parseError}`, "warn", EventCode.BARCODE_REJECTED, c.id, c.parseErrorCode);
     }
   }
@@ -464,7 +465,13 @@ export class TwinCore {
 
   private completeOp(c: Container, op: Op, result: StationResult): void {
     if (op.tankId) this.dispense(c, op);
-    if (op.stationId === "SCAN") this.applyScan(c, result.scanText !== undefined ? result.scanText : c.labelText);
+    if (op.stationId === "SCAN") {
+      this.applyScan(c, result.scanText !== undefined ? result.scanText : c.labelText);
+      if (c.parseError || !c.parsed) {
+        this.reject(c, "bad QR", RejectReason.BAD_BARCODE);
+        return;
+      }
+    }
     if (result.reject) this.flagReject(c, result.reject);
     if (c.opIndex === c.ops.length - 1) {
       // Last station passed (SORT, or GATE on a line without a sort diverter).
@@ -826,6 +833,7 @@ export class TwinCore {
         colorCode: t.colorCode,
         levelMl: Math.round(t.levelMl * 10) / 10,
         capacityMl: t.capacityMl,
+        low: t.levelMl < t.refillThresholdMl,
       })),
       containers: this.containers.map((c) => ({
         id: c.id,

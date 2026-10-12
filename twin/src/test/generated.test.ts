@@ -32,13 +32,25 @@ test("FUXA project: tags use 1-based Modbus addresses and every view item and al
   assert.equal(tags[tagId("Scan.Text1")], undefined, "raw barcode text registers are left out");
   assert.equal(Object.keys(tags).length, registerTable().length - (SCAN.PARSE_RESULT - SCAN.TEXT_BASE) + coilTable().length);
 
-  const view = project.hmi.views[0] as View;
-  for (const [id, item] of Object.entries(view.items)) {
-    assert.ok(tags[item.property.variableId], `${id} → ${item.property.variableId}`);
-    assert.ok(view.svgcontent.includes(`id="${id}"`), `${id} has an SVG element`);
-    if (item.type === "svg-ext-html_button") {
-      assert.equal(tags[item.property.variableId].type, "Bool", "buttons write command coils");
-      assert.deepEqual(item.property.events.map((e) => [e.action, e.actparam]), [["onSetValue", "1"]]);
+  const views = project.hmi.views as View[];
+  assert.ok(views.length >= 2, "overview plus trends");
+  for (const view of views) {
+    for (const [id, item] of Object.entries(view.items)) {
+      assert.ok(tags[item.property.variableId], `${id} → ${item.property.variableId}`);
+      assert.ok(view.svgcontent.includes(`id="${id}"`), `${id} has an SVG element`);
+      if (item.type === "svg-ext-html_button") {
+        assert.equal(tags[item.property.variableId].type, "Bool", "buttons write command coils");
+        assert.deepEqual(item.property.events.map((e) => [e.action, e.actparam]), [["onSetValue", "1"]]);
+      }
+    }
+  }
+  const charts = project.charts as Array<{ id: string; lines: Array<{ id: string; device: string }> }>;
+  assert.ok(charts.length >= 2);
+  for (const chart of charts) {
+    assert.ok(views.some((view) => view.svgcontent.includes(chart.id) || Object.values(view.items).some((item) => item.property && JSON.stringify(item.property).includes(chart.id))));
+    for (const line of chart.lines) {
+      assert.equal(line.device, "genesis-plc");
+      assert.ok(tags[line.id], line.id);
     }
   }
   for (const alarm of project.alarms) assert.ok(tags[alarm.property.variableId], alarm.name);
@@ -50,6 +62,7 @@ test("FUXA project: read-only variant has no coil tags and no buttons", () => {
   const project = buildFuxaProject({ plcHost: "127.0.0.1", plcPort: 5020, unitId: 1, pollingMs: 1000, commands: false });
   const device = Object.values(project.devices)[0] as Device;
   assert.ok(Object.values(device.tags).every((t) => t.memaddress === "400000"));
-  const view = project.hmi.views[0] as View;
-  assert.ok(Object.values(view.items).every((i) => i.type !== "svg-ext-html_button"));
+  for (const view of project.hmi.views as View[]) {
+    assert.ok(Object.values(view.items).every((i) => i.type !== "svg-ext-html_button"));
+  }
 });

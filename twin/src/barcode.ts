@@ -1,35 +1,18 @@
 /**
- * Captsone custom barcode format — parser + validator.
- *
- * The barcode is PREPRINTED on each container before it enters the line and
- * encodes the dispense instructions DIRECTLY: how many milliliters to draw
- * from EACH paint source (tank). It is NOT a recipe-id lookup. Adding a new
- * tank requires only (a) appending a tank to `config.tanks` and (b) printing
- * barcodes with one more comma-separated volume. No parser or controller
- * code changes.
- *
- * Format (version 1):
+ * Preprinted barcode. Volumes are listed directly, one per tank, in slot order.
  *
  *   PT1|T<totalMl>|<v1>,<v2>,...,<vN>[|I<rounds>]
  *
- *   PT1            — literal header ("PaintTwin", format version 1)
- *   T<totalMl>     — target total fill volume in milliliters, e.g. T250
- *   <v1>,...,<vN> — per-tank volume in ml, in config.tanks order, e.g. 100,80,70
- *   |I<rounds>    — OPTIONAL override of the interleaving round count from
- *                   config.mixPolicy. Omit to use the config policy.
+ *   PT1          header
+ *   T<totalMl>   target fill, ml
+ *   v1..vN       ml from each tank (must match config.tanks.length)
+ *   |I<rounds>   optional interleave override
  *
- * Examples:
- *   PT1|T250|100,80,70       3 tanks, 100+80+70 = 250 ml total
- *   PT1|T300|120,90,90|I4     3 tanks, interleaved into 4 rounds
- *   PT1|T200|200              single-tank fill (pure color)
+ *   PT1|T200|100,100     two tanks, 100+100 = 200
+ *   PT1|T260|130,130|I4  two tanks, 4 mix rounds
  *
- * Validation rules (see `parseBarcode`):
- *   - header must be exactly "PT1"
- *   - totalMl > 0
- *   - per-tank volume count must equal config.tanks.length
- *   - every per-tank volume >= 0
- *   - sum(per-tank) must equal totalMl within `toleranceMl`
- * A failing validation returns a structured error; the controller force-rejects.
+ * Header must be PT1, the volume count must match the tank count,
+ * and the volumes must sum to the total.
  */
 
 import type { TwinConfig } from "./config";

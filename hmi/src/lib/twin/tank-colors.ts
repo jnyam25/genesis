@@ -7,20 +7,14 @@ import { TANK_NAME_MAX_LENGTH, type TankColor } from "./types";
 
 /** Default slot names/colors — same as the twin's config.TANK_SLOTS. */
 export const DEFAULT_TANK_SLOTS: ({ id: string } & TankColor)[] = [
-  { id: "T1", name: "Titanium White", colorCode: "#F4F1EA" },
-  { id: "T2", name: "Cadmium Red", colorCode: "#C8362B" },
-  { id: "T3", name: "Ultramarine Blue", colorCode: "#1F3A93" },
-  { id: "T4", name: "Hansa Yellow", colorCode: "#F2C230" },
-  { id: "T5", name: "Phthalo Green", colorCode: "#1F7A5A" },
-  { id: "T6", name: "Carbon Black", colorCode: "#2B2B2B" },
-  { id: "T7", name: "Quinacridone Magenta", colorCode: "#A4245E" },
-  { id: "T8", name: "Burnt Sienna", colorCode: "#8A4B2A" },
+  { id: "T1", name: "Sky Blue", colorCode: "#7EC8E3" },
+  { id: "T2", name: "Amber", colorCode: "#F4C430" },
 ];
 
-/** Quick-pick swatches for the color editor (touch friendly). */
+/** Quick-pick swatches for the color editor. */
 export const PRESET_COLORS = [
-  "#F4F1EA", "#2B2B2B", "#C8362B", "#E8702A", "#F2C230", "#7CB342",
-  "#1F7A5A", "#26A69A", "#1F3A93", "#5E35B1", "#A4245E", "#8A4B2A",
+  "#7EC8E3", "#F4C430", "#F4A6C8", "#A8E6CF", "#C5B4E3", "#F6D6AD",
+  "#9AD1F5", "#F7E38A", "#F2B5A0", "#B7E4C7", "#D4C4A8", "#E8F1F8",
 ];
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;

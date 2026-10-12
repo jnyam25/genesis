@@ -1,13 +1,13 @@
-# Captsone Twin
+# Genesis Twin
 
-The digital-twin core of the **Captsone Industrial Paint Mixing System**: plain TypeScript on Node, with no simulator or framework dependency.
+The digital-twin core of the **Genesis Industrial Paint Mixing System**: plain TypeScript on Node, with no simulator or framework dependency.
 
 This package contains one control model with several faces:
 
 | Artifact | Role | Runs where |
 | --- | --- | --- |
 | `src/core.ts` | Framework-agnostic simulation engine (state machine, pipelining, commands, events, snapshot) | Node |
-| `src/run.ts` | HTTP service: simulated line (`CAPTSONE_MODE=sim`) or PLC bridge (`CAPTSONE_MODE=plc`) | Node (PC or Raspberry Pi) |
+| `src/run.ts` | HTTP service: simulated line (`GENESIS_MODE=sim`) or PLC bridge (`GENESIS_MODE=plc`) | Node (PC or Raspberry Pi) |
 | `src/plc/virtual-plc.ts` | The core exposed on the PLC register map over Modbus TCP: the reference PLC. It simulates both ESP32 nodes in-process (`src/plc/simulated-nodes.ts`) unless `VPLC_NODES` says real nodes are connected | Node |
 | `src/plc/bridge.ts` | Reads a real or virtual PLC and serves the HMI | Node (Raspberry Pi) |
 | `src/plc/fuxa-project.ts` | Generates the FUXA SCADA project from the register map | Node |
@@ -26,7 +26,7 @@ npm start            # node dist/run.js
 npm test             # automated tests
 npm run virtual-plc  # Modbus TCP virtual PLC on :5020
 npm run tag-map      # print the register tables (-- --write updates io-map.md and the firmware header)
-npm run fuxa-project # write ../deploy/fuxa/captsone-project.json (-- --push also loads it into a running FUXA)
+npm run fuxa-project # write ../deploy/fuxa/genesis-project.json (-- --push also loads it into a running FUXA)
 ```
 
 The virtual PLC simulates both ESP32 nodes by default. Set `VPLC_NODES=scanner`, `station`, `scanner,station` or `all` to use real ESP32 nodes instead: the PLC then watches their heartbeats and latches a fault when one goes offline. `VPLC_FEED=0` stops bottle arrivals ([`../docs/configuration.md`](../docs/configuration.md#virtual-plc-npm-run-virtual-plc)).
@@ -34,10 +34,10 @@ The virtual PLC simulates both ESP32 nodes by default. Set `VPLC_NODES=scanner`,
 PLC-bridge mode (e.g. against the virtual PLC):
 
 ```bash
-CAPTSONE_MODE=plc PLC_HOST=127.0.0.1 PLC_PORT=5020 npm start
+GENESIS_MODE=plc PLC_HOST=127.0.0.1 PLC_PORT=5020 npm start
 ```
 
-In PowerShell: `$env:CAPTSONE_MODE="plc"; $env:PLC_HOST="127.0.0.1"; $env:PLC_PORT="5020"; npm start`. Or run `npm run dev:plc-sim` at the repo root, which starts all three pieces.
+In PowerShell: `$env:GENESIS_MODE="plc"; $env:PLC_HOST="127.0.0.1"; $env:PLC_PORT="5020"; npm start`. Or run `npm run dev:plc-sim` at the repo root, which starts all three pieces.
 
 Then open:
 
@@ -45,7 +45,7 @@ Then open:
 - **Snapshot JSON** — http://127.0.0.1:43124/snapshot
 - **Snapshot file** — `twin/runtime/snapshot.json` (rewritten each tick)
 
-Override the port with the `CAPTSONE_PORT` environment variable (e.g. `CAPTSONE_PORT=5000 npm start` on macOS/Linux, `$env:CAPTSONE_PORT=5000; npm start` in PowerShell). `CAPTSONE_HOST` sets the bind address (default `127.0.0.1`).
+Override the port with the `GENESIS_PORT` environment variable (e.g. `GENESIS_PORT=5000 npm start` on macOS/Linux, `$env:GENESIS_PORT=5000; npm start` in PowerShell). `GENESIS_HOST` sets the bind address (default `127.0.0.1`).
 
 To run the twin together with the operator HMI, use `npm run dev` at the repo root (see `../INSTALL.md`).
 
@@ -55,7 +55,7 @@ To run the twin together with the operator HMI, use `npm run dev` at the repo ro
 - Containers are labelled and scanned, stop at **one bay per tank, in belt order**, then pass the robotic capping arm (it places a lid from the lid magazine and presses it down), the sort sensor (QC), the reject diverter and the sort diverter. Several containers flow at once (**pipelining**), held at stations by stoppers.
 - **The PLC makes every decision.** In the virtual PLC, LABEL, SCAN, CAP and QC finish only when the (simulated or real) ESP32 node reports back through the register map. The PLC validates the raw barcode text the scanner node forwards, sequences the robotic arm, and classifies the bottle height the station node measures; a type that doesn't match the recipe is rejected (`BOTTLE_TYPE_MISMATCH`). A node that doesn't report within `stationNodeTimeoutSec` jams its container.
 - **Station faults** (labeler, scanner, arm servo, no lid, lid lost, sort sensor, node offline) latch in the PLC: the line stops, START is refused, and RESET clears the fault once the cause is gone.
-- Tanks come from **fixed slots** (`TANK_SLOTS`, `T1..T8`). Adding or removing a tank is a config edit or a runtime command, not a code change.
+- Tanks come from **two fixed slots** (`TANK_SLOTS`, `T1` and `T2`). Removing a tank is a config edit or a runtime command, not a code change.
 - `mix_sequence` builds sequential or interleaved plans (`config.mixPolicy`). They become physical order only with a multi-nozzle manifold.
 - Every wait is **bounded by a timeout** that pauses while halted; a jam rejects the container and releases the station.
 - Tanks **auto-refill, then ACCEPT**: a container is never rejected for a low tank.

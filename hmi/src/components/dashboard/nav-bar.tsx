@@ -23,11 +23,11 @@ export function NavBar() {
     <header className="flex flex-col gap-3 border-b border-border/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
       <div className="flex items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground font-mono text-sm font-bold">
-          CP
+          GN
         </div>
         <div>
           <h1 className="text-base font-semibold leading-tight">
-            Captsone Paint Mixing — Operator HMI
+            Genesis Paint Mixing — Operator HMI
           </h1>
           <p className="text-xs text-muted-foreground">Digital twin · Line A</p>
         </div>

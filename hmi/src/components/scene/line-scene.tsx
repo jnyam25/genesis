@@ -2,12 +2,13 @@
 
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Html, OrbitControls } from "@react-three/drei";
-import { useRef, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { useContainerPositions } from "@/lib/twin/useContainerPositions";
 import { containerColor } from "@/components/schematic/line-schematic";
+import { cpm, ml, tankIsLow } from "@/lib/format";
 import type { Container, Tank, TwinState } from "@/lib/twin/types";
-import { stationForStatus, type StationPosition } from "@/lib/twin/layout";
+import { computeLayout, stationForStatus, type StationPosition } from "@/lib/twin/layout";
 
 const BELT_Y = 0;
 const BELT_HALF_H = 0.22;
@@ -17,33 +18,55 @@ const CONTAINER_R = 0.18;
 const CONTAINER_H = 0.32;
 
 export function LineScene({ state }: { state: TwinState }) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const samples = useTrend(state);
+  const alarmedId = alarmedStation(state);
+  const banner = faultBanner(state);
   return (
-    <div className="h-[520px] w-full rounded-lg border border-border/60 bg-gradient-to-b from-slate-950 to-slate-900">
-      <Canvas camera={{ position: [6, 5, 8], fov: 50 }} dpr={[1, 2]}>
-        <ambientLight intensity={0.55} />
-        <directionalLight position={[6, 8, 4]} intensity={1.1} castShadow />
-        <directionalLight position={[-6, 4, -4]} intensity={0.35} />
-        <SceneContents state={state} />
-        <OrbitControls
-          enablePan
-          minDistance={3}
-          maxDistance={20}
-          maxPolarAngle={Math.PI / 2.05}
-          target={[6, 0, 0]}
-        />
-        <gridHelper args={[40, 40, "#1e293b", "#0f172a"]} position={[0, -0.6, 0]} />
-      </Canvas>
+    <div className="space-y-3">
+      <div className="relative h-[520px] w-full overflow-hidden rounded-lg border border-border/60 bg-gradient-to-b from-slate-100 to-slate-50">
+        {banner && (
+          <div className={`pointer-events-none absolute left-3 right-3 top-3 z-10 flex items-baseline gap-3 rounded-md px-3 py-2 text-sm font-semibold text-white shadow-lg ${banner.tone}`}>
+            <span className="animate-pulse">{banner.title}</span>
+            <span className="font-normal">{banner.detail}</span>
+          </div>
+        )}
+        <Canvas camera={{ position: [6, 5, 8], fov: 50 }} dpr={[1, 2]}>
+          <ambientLight intensity={0.55} />
+          <directionalLight position={[6, 8, 4]} intensity={1.1} castShadow />
+          <directionalLight position={[-6, 4, -4]} intensity={0.35} />
+          <SceneContents state={state} selectedId={selectedId} alarmedId={alarmedId} onSelect={setSelectedId} />
+          <OrbitControls
+            enablePan
+            minDistance={3}
+            maxDistance={20}
+            maxPolarAngle={Math.PI / 2.05}
+            target={[6, 0, 0]}
+          />
+          <gridHelper args={[40, 40, "#cbd5e1", "#e2e8f0"]} position={[0, -0.6, 0]} />
+        </Canvas>
+        {selectedId && <StationPanel state={state} stationId={selectedId} samples={samples} onClose={() => setSelectedId(null)} />}
+      </div>
+      <TrendStrip samples={samples} tanks={state.tanks} throughput={state.throughputCpm} />
     </div>
   );
 }
 
-function SceneContents({ state }: { state: TwinState }) {
+function SceneContents({
+  state, selectedId, alarmedId, onSelect,
+}: {
+  state: TwinState;
+  selectedId: string | null;
+  alarmedId: string | null;
+  onSelect: (id: string) => void;
+}) {
   const { layout, positions } = useContainerPositions(state);
-  const station = (kind: StationPosition["kind"]) => layout.stations.find((s) => s.kind === kind)!;
+  const station = (kind: StationPosition["kind"]) => layout.stations.find((s) => s.kind === kind);
   const labelStation = station("label");
-  const capStation = station("cap");
-  const gateStation = station("gate");
-  const sortStation = station("sort");
+  const qrReject = station("qr-reject");
+  const capStation = station("cap")!;
+  const gateStation = station("gate")!;
+  const sortStation = station("sort")!;
   const laneBStation = layout.stations.find((s) => s.kind === "output" && s.lane === 1)!;
 
   const activeStationIds = new Set<string>();
@@ -67,20 +90,20 @@ function SceneContents({ state }: { state: TwinState }) {
       {/* Conveyor belt */}
       <mesh position={[(layout.spanX[0] + layout.spanX[1]) / 2, BELT_Y, 0]} receiveShadow>
         <boxGeometry args={[layout.spanX[1] - layout.spanX[0], BELT_HALF_H * 2, 1.1]} />
-        <meshStandardMaterial color="#1f2937" metalness={0.3} roughness={0.7} />
+        <meshStandardMaterial color="#cbd5e1" metalness={0.15} roughness={0.7} />
       </mesh>
-      {/* Belt edge stripes */}
-      {Array.from({ length: Math.floor((layout.spanX[1] - layout.spanX[0]) * 2) }).map((_, i) => (
-        <mesh key={i} position={[layout.spanX[0] + i / 2 + 0.25, BELT_Y + BELT_HALF_H + 0.01, 0]}>
-          <boxGeometry args={[0.04, 0.02, 1.0]} />
-          <meshStandardMaterial color="#0b1220" />
-        </mesh>
-      ))}
+      <BeltMarks x0={layout.spanX[0]} x1={layout.spanX[1]} running={state.safety?.running ?? state.containers.length > 0} />
 
-      {/* Reject lane (off the reject diverter) */}
+      {qrReject && (
+        <mesh position={[qrReject.x, BELT_Y, layout.rejectY * 0.5 - 0.1]}>
+          <boxGeometry args={[0.5, BELT_HALF_H * 2, Math.abs(layout.rejectY)]} />
+          <meshStandardMaterial color="#fecaca" metalness={0.1} roughness={0.8} />
+        </mesh>
+      )}
+      {/* Fill-reject slide */}
       <mesh position={[gateStation.x, BELT_Y, layout.rejectY * 0.5 - 0.1]}>
         <boxGeometry args={[0.5, BELT_HALF_H * 2, Math.abs(layout.rejectY)]} />
-        <meshStandardMaterial color="#1c0f12" metalness={0.2} roughness={0.8} />
+        <meshStandardMaterial color="#fecaca" metalness={0.1} roughness={0.8} />
       </mesh>
       {/* Lane B branch (sort diverter actuated), then its straight run */}
       <mesh
@@ -88,11 +111,11 @@ function SceneContents({ state }: { state: TwinState }) {
         rotation={[0, branchAngle, 0]}
       >
         <boxGeometry args={[branchLen, BELT_HALF_H * 2, 0.8]} />
-        <meshStandardMaterial color="#1f2937" metalness={0.3} roughness={0.7} />
+        <meshStandardMaterial color="#cbd5e1" metalness={0.15} roughness={0.7} />
       </mesh>
       <mesh position={[(branchEndX + layout.spanX[1]) / 2, BELT_Y - 0.005, laneBStation.y]}>
         <boxGeometry args={[layout.spanX[1] - branchEndX, BELT_HALF_H * 2, 0.8]} />
-        <meshStandardMaterial color="#1f2937" metalness={0.3} roughness={0.7} />
+        <meshStandardMaterial color="#cbd5e1" metalness={0.15} roughness={0.7} />
       </mesh>
 
       {/* Stations */}
@@ -102,14 +125,16 @@ function SceneContents({ state }: { state: TwinState }) {
           station={s}
           active={s.kind === "gate" ? rejecting : activeStationIds.has(s.id)}
           color={s.kind === "gate" && rejecting ? "#ef4444" : STATION_COLORS[s.kind]}
+          selected={selectedId === s.id}
+          alarm={alarmedId === s.id}
+          onSelect={() => onSelect(s.id)}
           {...stationText(s)}
         />
       ))}
 
-      {/* Labeler roll (spins while labeling) */}
-      <LabelRoller x={labelStation.x} active={activeStationIds.has(labelStation.id)} />
+      {labelStation && <LabelRoller x={labelStation.x} active={activeStationIds.has(labelStation.id)} />}
 
-      {/* Robotic arm: lifts a lid off the stack, places it on the container and presses it down */}
+      {/* Robotic arm places the lid. The press station seats it. */}
       <CapArm x={capStation.x} active={activeStationIds.has(capStation.id)} />
 
       {/* Reject diverter (extends when a container is being rejected) */}
@@ -129,6 +154,8 @@ function SceneContents({ state }: { state: TwinState }) {
             index={i}
             x={nozzle.x}
             y={layout.tankY}
+            selected={selectedId === tank.id}
+            onSelect={() => onSelect(tank.id)}
           />
         );
       })}
@@ -147,13 +174,16 @@ function SceneContents({ state }: { state: TwinState }) {
 }
 
 function Station3D({
-  station, active, color, label, sub,
+  station, active, color, label, sub, selected, alarm, onSelect,
 }: {
   station: StationPosition;
   active: boolean;
   color: string;
   label?: string;
   sub?: string;
+  selected: boolean;
+  alarm: boolean;
+  onSelect: () => void;
 }) {
   const labelY = station.kind === "cap" ? 1.25 : 0.45;
   return (
@@ -161,22 +191,31 @@ function Station3D({
       <mesh position={[0, -0.18, 0]}>
         <boxGeometry args={[0.5, 0.12, 0.9]} />
         <meshStandardMaterial
-          color={active ? "#14532d" : "#0f172a"}
-          emissive={active ? color : "#000000"}
-          emissiveIntensity={active ? 0.4 : 0}
+          color={alarm ? "#fecaca" : active ? "#bbf7d0" : "#f8fafc"}
+          emissive={alarm ? "#ef4444" : active ? color : "#000000"}
+          emissiveIntensity={alarm ? 0.8 : active ? 0.4 : 0}
           metalness={0.3}
           roughness={0.6}
         />
       </mesh>
-      <Html position={[0, labelY, 0]} center distanceFactor={8} occlude={false}>
-        <div className="pointer-events-none select-none whitespace-nowrap rounded-md border border-border/70 bg-background/90 px-2 py-0.5 text-[11px] font-medium text-foreground shadow-md">
+      <Html position={[0, labelY, 0]} center distanceFactor={8} occlude={false} zIndexRange={[20, 0]}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+          className={`pointer-events-auto select-none whitespace-nowrap rounded-md border bg-background/90 px-2 py-0.5 text-[11px] font-medium text-foreground shadow-md ${
+            alarm ? "animate-pulse border-red-500" : selected ? "border-sky-500" : "border-border/70"
+          }`}
+        >
           {label ?? station.label}
           {sub && (
             <span className="ml-1 font-mono text-[9px] text-muted-foreground">
               {sub}
             </span>
           )}
-        </div>
+        </button>
       </Html>
     </group>
   );
@@ -185,8 +224,10 @@ function Station3D({
 const STATION_COLORS: Record<StationPosition["kind"], string> = {
   label: "#8b5cf6",
   scan: "#0ea5e9",
+  "qr-reject": "#ef4444",
   nozzle: "#64748b",
   cap: "#14b8a6",
+  press: "#64748b",
   qc: "#10b981",
   gate: "#f59e0b",
   sort: "#f59e0b",
@@ -298,10 +339,18 @@ function RejectDiverter({ x, active }: { x: number; active: boolean }) {
   );
 }
 
-function Tank3D({ tank, index, x, y }: { tank: Tank; index: number; x: number; y: number }) {
+function Tank3D({
+  tank, index, x, y, selected, onSelect,
+}: {
+  tank: Tank;
+  index: number;
+  x: number;
+  y: number;
+  selected: boolean;
+  onSelect: () => void;
+}) {
   const ratio = Math.max(0, Math.min(1, tank.levelMl / tank.capacityMl));
-  const low = ratio < 0.15;
-  const crit = ratio < 0.3 && !low;
+  const low = tankIsLow(tank);
   const color = useMemo(() => new THREE.Color(tank.colorCode), [tank.colorCode]);
   const fillH = TANK_HEIGHT * ratio;
 
@@ -310,7 +359,7 @@ function Tank3D({ tank, index, x, y }: { tank: Tank; index: number; x: number; y
       {/* Tank shell */}
       <mesh position={[0, 0, 0]}>
         <cylinderGeometry args={[TANK_RADIUS, TANK_RADIUS, TANK_HEIGHT, 24]} />
-        <meshStandardMaterial color="#0b1220" metalness={0.4} roughness={0.5} transparent opacity={0.25} />
+        <meshStandardMaterial color="#e2e8f0" metalness={0.2} roughness={0.5} transparent opacity={0.35} />
       </mesh>
       {/* Fill */}
       <mesh position={[0, -TANK_HEIGHT / 2 + fillH / 2, 0]}>
@@ -323,17 +372,26 @@ function Tank3D({ tank, index, x, y }: { tank: Tank; index: number; x: number; y
         <meshStandardMaterial color="#334155" metalness={0.5} roughness={0.5} />
       </mesh>
       {/* Low/critical ring */}
-      {(low || crit) && (
+      {low && (
         <mesh position={[0, TANK_HEIGHT / 2 + 0.05, 0]}>
           <torusGeometry args={[TANK_RADIUS + 0.04, 0.03, 8, 24]} />
-          <meshStandardMaterial color={low ? "#ef4444" : "#f59e0b"} emissive={low ? "#ef4444" : "#f59e0b"} emissiveIntensity={0.6} />
+          <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={0.6} />
         </mesh>
       )}
-      <Html position={[0, TANK_HEIGHT / 2 + 0.4, 0]} center distanceFactor={9} occlude={false}>
-        <div className="pointer-events-none select-none whitespace-nowrap rounded-md border border-border/70 bg-background/90 px-2 py-0.5 text-[11px] font-medium text-foreground shadow-md">
+      <Html position={[0, TANK_HEIGHT / 2 + 0.4, 0]} center distanceFactor={9} occlude={false} zIndexRange={[20, 0]}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onSelect();
+          }}
+          className={`pointer-events-auto select-none whitespace-nowrap rounded-md border bg-background/90 px-2 py-0.5 text-[11px] font-medium text-foreground shadow-md ${
+            low ? "animate-pulse border-red-500" : selected ? "border-sky-500" : "border-border/70"
+          }`}
+        >
           Tank {index + 1} · {tank.name}
           <span className="ml-1 font-mono text-[9px] text-muted-foreground">{Math.round(ratio * 100)}%</span>
-        </div>
+        </button>
       </Html>
     </group>
   );
@@ -367,5 +425,180 @@ function Container3D({
         </div>
       </Html>
     </group>
+  );
+}
+
+function BeltMarks({ x0, x1, running }: { x0: number; x1: number; running: boolean }) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame((_, dt) => {
+    if (!ref.current || !running) return;
+    ref.current.position.x += dt * 0.45;
+    if (ref.current.position.x > 0.5) ref.current.position.x -= 0.5;
+  });
+  const count = Math.floor((x1 - x0) * 2) + 2;
+  return (
+    <group ref={ref}>
+      {Array.from({ length: count }).map((_, i) => (
+        <mesh key={i} position={[x0 + i / 2, BELT_Y + BELT_HALF_H + 0.01, 0]}>
+          <boxGeometry args={[0.04, 0.02, 1]} />
+          <meshStandardMaterial color="#94a3b8" />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+interface TrendSample {
+  t1: number;
+  t2: number;
+  rate: number;
+}
+
+function useTrend(state: TwinState): TrendSample[] {
+  const [samples, setSamples] = useState<TrendSample[]>([]);
+  const last = useRef(0);
+  useEffect(() => {
+    const now = Date.now();
+    if (now - last.current < 800 && samples.length > 0) return;
+    last.current = now;
+    setSamples((prev) =>
+      [...prev, { t1: state.tanks[0]?.levelMl ?? 0, t2: state.tanks[1]?.levelMl ?? 0, rate: state.throughputCpm }].slice(-48),
+    );
+  }, [state, samples.length]);
+  return samples;
+}
+
+function faultBanner(state: TwinState): { title: string; detail: string; tone: string } | null {
+  const safety = state.safety;
+  if (safety?.eStopActive) {
+    const pressed = safety.eStopButtons.filter((b) => b.pressed).map((b) => b.name);
+    const where = pressed.length ? pressed.join(", ") : safety.digitalEStop ? "digital E-Stop" : "safety circuit open";
+    return { title: "E-STOP", detail: where, tone: "bg-red-600" };
+  }
+  if (safety?.faultActive) {
+    const msg = (state.recentEvents ?? []).find((e) => e.severity === "error")?.message;
+    return { title: "STATION FAULT", detail: msg ?? "Reset is required before the line can start.", tone: "bg-amber-600" };
+  }
+  const low = state.tanks.find((t) => tankIsLow(t));
+  if (low) return { title: "TANK LOW", detail: `${low.name} is at ${ml(low.levelMl)} ml`, tone: "bg-amber-600" };
+  return null;
+}
+
+function alarmedStation(state: TwinState): string | null {
+  if (!state.safety?.faultActive) return null;
+  const msg = (state.recentEvents ?? []).find((e) => e.severity === "error")?.message.toLowerCase() ?? "";
+  if (msg.includes("sort")) return "sort";
+  if (msg.includes("press")) return "press";
+  if (msg.includes("arm") || msg.includes("lid")) return "cap";
+  if (msg.includes("scan") || msg.includes("barcode") || msg.includes("label") || msg.includes("qr")) return "scan";
+  if (msg.includes("reject")) return "gate";
+  return null;
+}
+
+function StationPanel({
+  state, stationId, samples, onClose,
+}: {
+  state: TwinState;
+  stationId: string;
+  samples: TrendSample[];
+  onClose: () => void;
+}) {
+  const layout = computeLayout(state.tanks);
+  const station = layout.stations.find((s) => s.id === stationId);
+  const tank = state.tanks.find((t) => t.id === stationId);
+  const title = tank ? tank.name : station?.label ?? stationId;
+  const here = state.containers.filter((c) => stationForStatus(c, layout).id === (station?.id ?? ""));
+  const nozzle = station?.kind === "nozzle" ? state.tanks.find((t) => t.id === station.tankId) : undefined;
+  const spark = tank
+    ? samples.map((s) => (state.tanks[0]?.id === tank.id ? s.t1 : s.t2))
+    : nozzle
+      ? samples.map((s) => (state.tanks[0]?.id === nozzle.id ? s.t1 : s.t2))
+      : samples.map((s) => s.rate);
+  const sparkLabel = tank || nozzle ? "Level" : "Throughput";
+  const events = (state.recentEvents ?? []).slice(0, 4);
+  return (
+    <aside className="absolute right-3 top-14 z-20 w-72 max-h-[440px] overflow-auto rounded-lg border border-border bg-background/95 p-3 text-sm shadow-xl">
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div>
+          <div className="font-semibold">{title}</div>
+          <div className="text-xs text-muted-foreground">{tank ? "Tank" : station?.kind ?? "Station"}</div>
+        </div>
+        <button type="button" onClick={onClose} className="rounded border border-border px-2 py-0.5 text-xs">
+          Close
+        </button>
+      </div>
+      {tank && (
+        <p className="font-mono text-xs">
+          {ml(tank.levelMl)} / {tank.capacityMl} ml
+        </p>
+      )}
+      {nozzle && (
+        <p className="font-mono text-xs">
+          {nozzle.name}: {ml(nozzle.levelMl)} ml
+        </p>
+      )}
+      <p className="mt-2 text-xs text-muted-foreground">{sparkLabel}</p>
+      <Spark values={spark} color={tank?.colorCode ?? nozzle?.colorCode ?? "#0284c7"} />
+      <p className="mt-2 text-xs text-muted-foreground">
+        {here.length ? here.map((c) => `${c.id} · ${c.status} · ${ml(c.fillMl)} ml`).join(", ") : "No can at this station."}
+      </p>
+      {state.safety && (
+        <p className="mt-2 text-xs">
+          {state.safety.running ? "Line running" : "Line stopped"}
+          {state.safety.faultActive ? " · fault latched" : ""}
+          {state.safety.eStopActive ? " · E-Stop" : ""}
+          {state.safety.resetRequired ? " · reset required" : ""}
+        </p>
+      )}
+      {events.length > 0 && (
+        <ul className="mt-2 space-y-1 text-xs text-muted-foreground">
+          {events.map((e) => (
+            <li key={e.id}>{e.message}</li>
+          ))}
+        </ul>
+      )}
+    </aside>
+  );
+}
+
+function TrendStrip({ samples, tanks, throughput }: { samples: TrendSample[]; tanks: Tank[]; throughput: number }) {
+  const rows = [
+    { label: tanks[0]?.name ?? "T1", value: `${ml(tanks[0]?.levelMl ?? 0)} ml`, color: tanks[0]?.colorCode ?? "#7EC8E3", values: samples.map((s) => s.t1) },
+    { label: tanks[1]?.name ?? "T2", value: `${ml(tanks[1]?.levelMl ?? 0)} ml`, color: tanks[1]?.colorCode ?? "#F4C430", values: samples.map((s) => s.t2) },
+    { label: "Throughput", value: `${cpm(throughput)} /min`, color: "#0284c7", values: samples.map((s) => s.rate) },
+  ];
+  return (
+    <div className="grid gap-2 sm:grid-cols-3">
+      {rows.map((row) => (
+        <div key={row.label} className="flex items-center justify-between gap-3 rounded-md border border-border/70 bg-background px-3 py-2">
+          <div>
+            <div className="text-xs text-muted-foreground">{row.label}</div>
+            <div className="font-mono text-sm">{row.value}</div>
+          </div>
+          <Spark values={row.values} color={row.color} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Spark({ values, color }: { values: number[]; color: string }) {
+  const w = 148;
+  const h = 36;
+  if (values.length < 2) return <svg width={w} height={h} aria-hidden />;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  const d = values
+    .map((v, i) => {
+      const x = (i / (values.length - 1)) * (w - 4) + 2;
+      const y = h - 3 - ((v - min) / span) * (h - 6);
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  return (
+    <svg width={w} height={h} aria-hidden>
+      <path d={d} fill="none" stroke={color} strokeWidth="1.5" />
+    </svg>
   );
 }

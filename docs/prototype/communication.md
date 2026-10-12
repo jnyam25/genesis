@@ -104,7 +104,7 @@ The register map's tag names are the OPC UA **browse names**. An OPC UA server f
 
 ```
 Objects/
-  Captsone/                         (ns = the server's namespace for the PLC tags)
+  Genesis/                         (ns = the server's namespace for the PLC tags)
     Sys/        ProtocolVersion, PlcHeartbeat, LineState, TankCount, TankEnableMask, HmiHeartbeat, UptimeS, ActiveContainers, PhysicalEStopMask, FaultCode
     Counts/     Accepted, Rejected, Total, LaneA, LaneB
     Perf/       ThroughputCpm

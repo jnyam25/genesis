@@ -1,4 +1,4 @@
-// Shared runtime for the Captsone ESP32 field nodes.
+// Shared runtime for the Genesis ESP32 field nodes.
 //
 // Every node is a Modbus TCP client of the Micro850 PLC. The PLC makes every
 // line decision; a node executes one request at a time and reports back.
@@ -13,7 +13,7 @@
 #include <functional>
 #include <vector>
 
-#include "captsone_registers.h"
+#include "genesis_registers.h"
 
 namespace node {
 

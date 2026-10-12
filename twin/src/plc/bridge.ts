@@ -13,7 +13,6 @@
  * different register-map version, the bridge reports "offline" and the HMI
  * shows a stale feed.
  */
-
 import { DEFAULT_CONFIG, MAX_TANKS, TANK_SLOTS, tankSlot } from "../config";
 import type { Snapshot, SnapshotContainer, SnapshotSortLane } from "../core";
 import { EVENT_SEVERITY, EventCode, formatEvent } from "../events";
@@ -106,6 +105,8 @@ export function hmiStatusFromCode(code: number): HmiContainerStatus | null {
       return "mix";
     case CONTAINER_STATUS.CAP:
       return "cap";
+    case CONTAINER_STATUS.PRESS:
+      return "press";
     case CONTAINER_STATUS.QC:
       return "qc";
     case CONTAINER_STATUS.SORT:
@@ -315,6 +316,7 @@ export class PlcBridge {
         colorCode: color.colorCode,
         levelMl: this.reg(tankRegister(slot, TANK_FIELD.LEVEL_ML_X10)) / 10,
         capacityMl: this.reg(tankRegister(slot, TANK_FIELD.CAPACITY_ML)),
+        low: bit(this.reg(tankRegister(slot, TANK_FIELD.FLAGS)), TANK_FLAG_BITS.LOW),
       });
     }
 

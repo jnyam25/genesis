@@ -1,12 +1,6 @@
 /**
- * Captsone twin configuration.
- *
- * Everything that describes the physical line — tanks, nozzles, sensors,
- * stations, belt speed, timeouts, dispensing jitter — is data here. Adding a
- * tank is a config edit (append to `tanks`), NOT a code or barcode-format
- * change. The controller, barcode parser, and Node harness all read from this
- * single source of truth. Tank names/colors below are only defaults: operators
- * rename and recolor slots at runtime (tank-colors.ts).
+ * Line configuration. Tanks, stations, belt speed, and timeouts live here.
+ * Names and colors are defaults; operators can change them at runtime.
  */
 
 import type { SafetyConfig } from "./safety";
@@ -43,9 +37,11 @@ export interface StationTimesConfig {
   label: number;
   /** SCAN: barcode scanner reads the label (microcontroller). */
   scan: number;
-  /** CAP: robotic arm places a pre-picked lid on the container and presses it down to seat it (microcontroller). */
+  /** CAP: robotic arm picks a lid and places it. The press seats it. */
   cap: number;
-  /** QC: sort sensor measures the bottle height; the PLC checks the bottle type and the fill here. */
+  /** PRESS: pneumatic cylinder seats the lid. */
+  press: number;
+  /** QC: fill and cap check before the reject pusher. */
   qc: number;
   /** GATE: reject diverter decision. */
   gate: number;
@@ -128,30 +124,15 @@ export interface TwinConfig {
   snapshotPeriodSec: number;
 }
 
-/**
- * MAX_TANKS is the number of physical tank slots. The live tank count is
- * whatever `tanks.length` is; MAX_TANKS bounds the tank slots below and the
- * PLC register map (`plc/tag-map.ts`), which reserves one block per slot.
- */
-export const MAX_TANKS = 8;
+/** Physical tank slots. Also sizes the PLC register blocks in tag-map.ts. */
+export const MAX_TANKS = 2;
 
 const TANK_DEFAULTS = { capacityMl: 5000, refillThresholdMl: 800, dispenseRateMlPerSec: 25, valveOpeningPct: 80 };
 
-/**
- * Physical tank slots. Slot k (1-based) always carries id `Tk`, so a tank keeps
- * its id, colour, and PLC register block when modules are enabled/disabled at
- * runtime. The default line populates slots 1–3; "add tank" enables the next
- * free slot.
- */
+/** Slot k uses id `Tk` and register block Tank<k>. Both slots start enabled. */
 export const TANK_SLOTS: TankConfig[] = [
-  { id: "T1", name: "Titanium White",       colorCode: "#F4F1EA", ...TANK_DEFAULTS },
-  { id: "T2", name: "Cadmium Red",          colorCode: "#C8362B", ...TANK_DEFAULTS },
-  { id: "T3", name: "Ultramarine Blue",     colorCode: "#1F3A93", ...TANK_DEFAULTS },
-  { id: "T4", name: "Hansa Yellow",         colorCode: "#F2C230", ...TANK_DEFAULTS },
-  { id: "T5", name: "Phthalo Green",        colorCode: "#1F7A5A", ...TANK_DEFAULTS },
-  { id: "T6", name: "Carbon Black",         colorCode: "#2B2B2B", ...TANK_DEFAULTS },
-  { id: "T7", name: "Quinacridone Magenta", colorCode: "#A4245E", ...TANK_DEFAULTS },
-  { id: "T8", name: "Burnt Sienna",         colorCode: "#8A4B2A", ...TANK_DEFAULTS },
+  { id: "T1", name: "Sky Blue", colorCode: "#7EC8E3", ...TANK_DEFAULTS },
+  { id: "T2", name: "Amber", colorCode: "#F4C430", ...TANK_DEFAULTS },
 ];
 
 /** 1-based slot number for a tank id (`T4` → 4), or null if it is not a slot id. */
@@ -162,31 +143,29 @@ export function tankSlot(tankId: string): number | null {
 }
 
 export const DEFAULT_CONFIG: TwinConfig = {
-  lineId: "CAP-LINE-01",
+  lineId: "GEN-LINE-01",
   beltSpeedMPerSec: 0.20,
   stationSpacingM: 0.50,
   maxConcurrentContainers: 4,
   sensorWaitTimeoutSec: 6.0,
   stationNodeTimeoutSec: 15.0,
   dispenseVariance: 0.02,
-  tanks: TANK_SLOTS.slice(0, 3),
+  tanks: TANK_SLOTS.slice(0, 2),
   stations: [
-    { id: "LABEL",   name: "Labeling",         positionM: 0.0 },
-    { id: "SCAN",    name: "Barcode Scan",     positionM: 0.5 },
-    { id: "BAY-1",   name: "Fill Bay 1",       positionM: 1.0 },
-    { id: "BAY-2",   name: "Fill Bay 2",       positionM: 1.5 },
-    { id: "BAY-3",   name: "Fill Bay 3",       positionM: 2.0 },
-    { id: "CAP",     name: "Capping Arm",      positionM: 2.5 },
-    { id: "QC",      name: "Sort Sensor",      positionM: 3.0 },
-    { id: "GATE",    name: "Reject Diverter",  positionM: 3.5 },
-    { id: "SORT",    name: "Sort Diverter",    positionM: 4.0 },
+    { id: "SCAN",  name: "Scan gate",        positionM: 0.0 },
+    { id: "BAY-1", name: "Tank T1",           positionM: 0.5 },
+    { id: "BAY-2", name: "Tank T2",           positionM: 1.0 },
+    { id: "CAP",   name: "Robotic capping arm", positionM: 1.5 },
+    { id: "PRESS", name: "Lid press",         positionM: 2.0 },
+    { id: "QC",    name: "Fill check",        positionM: 2.5 },
+    { id: "GATE",  name: "Fill reject",       positionM: 3.0 },
+    { id: "SORT",  name: "Sort / split",      positionM: 3.5 },
   ],
-  stationTimesSec: { label: 1.0, scan: 0.5, cap: 2.5, qc: 0.4, gate: 0.3, sort: 0.3 },
+  stationTimesSec: { label: 1.0, scan: 0.5, cap: 2.5, press: 0.8, qc: 0.4, gate: 0.3, sort: 0.3 },
   sort: {
-    // Measure the real bottles and set their heights here.
     lanes: [
-      { id: "A", name: "Lane A (small bottles)", bottleHeightMm: 120 },
-      { id: "B", name: "Lane B (large bottles)", bottleHeightMm: 180 },
+      { id: "A", name: "Lane 1", bottleHeightMm: 120 },
+      { id: "B", name: "Lane 2", bottleHeightMm: 180 },
     ],
     smallBottleMaxMl: 250,
     heightToleranceMm: 15,
@@ -198,9 +177,8 @@ export const DEFAULT_CONFIG: TwinConfig = {
   safety: {
     // Physical E-Stop buttons in PLC mask bit order: I_EStop_<Id>_Mon inputs.
     eStopButtons: [
-      { id: "PANEL", name: "Local control panel" },
-      { id: "ENTRY", name: "Line entry" },
-      { id: "EXIT", name: "Line exit" },
+      { id: "ENTRY", name: "Line start" },
+      { id: "EXIT", name: "Line end" },
     ],
     remoteResetAllowed: false,
     initialMode: "remote",
@@ -212,8 +190,8 @@ export const DEFAULT_CONFIG: TwinConfig = {
 
 /** A few sample preprinted barcodes used by the harness demo and tests. */
 export const SAMPLE_BARCODES: string[] = [
-  "PT1|T250|100,80,70",   // 3-tank mix, interleaved into 2 rounds
-  "PT1|T300|120,90,90",   // 3-tank mix
-  "PT1|T200|200",         // single volume on a 3-tank line — fails TANK_COUNT_MISMATCH (scan-reject demo)
-  "PT1|T150|60,50,40",   // 3-tank mix
+  "PT1|T200|100,100", // lane 1
+  "PT1|T260|130,130", // lane 2
+  "PT1|T200|200",     // one volume on a 2-tank line → ejected at the scan gate
+  "PT1|T180|90,90",   // lane 1
 ];

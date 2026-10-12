@@ -32,22 +32,23 @@ test("line keeps flowing past the pipelining cap (regression: stalled after 4 co
   assert.ok(core.counts.accepted > 20);
 });
 
-test("containers visit label, scan, every bay, capping arm, sort sensor, sort diverter, output and reject", () => {
+test("containers visit scan, both tanks, the arm, the lid press, sort, output and QR reject", () => {
   const core = new TwinCore(DEFAULT_CONFIG);
   const statuses = new Set<string>();
   run(core, 120, (i) => SAMPLE_BARCODES[i % SAMPLE_BARCODES.length], statuses);
-  for (const s of ["label", "scan", "fill-1", "fill-2", "fill-3", "cap", "qc", "sort", "output", "scan-rejected"]) {
+  for (const s of ["scan", "fill-1", "fill-2", "cap", "press", "qc", "sort", "output", "scan-rejected"]) {
     assert.ok(statuses.has(s), `missing status ${s}; saw ${[...statuses].join(", ")}`);
   }
-  assert.ok(!statuses.has("mix"), "the default bottling line has no mixer");
+  assert.ok(!statuses.has("mix"), "the default line has no mixer");
+  assert.ok(!statuses.has("label"), "cans already carry a QR code");
 });
 
-test("default line matches the BOM: station order (no lid press) and E-Stops at the panel, line entry and line exit", () => {
+test("default line matches the concept: two tanks, lid press, two e-stops", () => {
   assert.deepEqual(
     DEFAULT_CONFIG.stations.map((s) => s.id),
-    ["LABEL", "SCAN", "BAY-1", "BAY-2", "BAY-3", "CAP", "QC", "GATE", "SORT"],
+    ["SCAN", "BAY-1", "BAY-2", "CAP", "PRESS", "QC", "GATE", "SORT"],
   );
-  assert.deepEqual(DEFAULT_CONFIG.safety.eStopButtons.map((b) => b.id), ["PANEL", "ENTRY", "EXIT"]);
+  assert.deepEqual(DEFAULT_CONFIG.safety.eStopButtons.map((b) => b.id), ["ENTRY", "EXIT"]);
   const t = DEFAULT_CONFIG.stationTimesSec;
   for (const [name, sec] of Object.entries(t)) {
     assert.ok(sec < DEFAULT_CONFIG.sensorWaitTimeoutSec, `${name} dwell must be below the service timeout`);
@@ -55,7 +56,7 @@ test("default line matches the BOM: station order (no lid press) and E-Stops at 
 });
 
 test("physical E-Stop at the line entry and at the line exit each stop the line and are named", () => {
-  for (const [buttonId, name] of [["ENTRY", "Line entry"], ["EXIT", "Line exit"]]) {
+  for (const [buttonId, name] of [["ENTRY", "Line start"], ["EXIT", "Line end"]]) {
     const core = new TwinCore(DEFAULT_CONFIG);
     run(core, 10, (i) => SAMPLE_BARCODES[i % 4]);
     assert.equal(applyHmiCommand(core, { command: "simPhysicalEStop", buttonId, pressed: true }), null);
@@ -69,7 +70,7 @@ test("physical E-Stop at the line entry and at the line exit each stop the line 
 test("sort diverter: small bottles go to lane A, large bottles to lane B", () => {
   const core = new TwinCore(DEFAULT_CONFIG);
   const lanes = new Map<string, number>();
-  const barcodes = ["PT1|T150|60,50,40", "PT1|T300|120,90,90"];
+  const barcodes = ["PT1|T200|100,100", "PT1|T260|130,130"];
   let feed = 0;
   let i = 0;
   for (let k = 0; k < 1500; k++) {
@@ -90,11 +91,11 @@ test("sort diverter: small bottles go to lane A, large bottles to lane B", () =>
   assert.ok(new Set(lanes.values()).size === 2);
 });
 
-test("no scan diverter: a bad barcode rides through unfilled and the reject diverter rejects it", () => {
+test("a bad QR is ejected at the scan gate before filling", () => {
   const core = new TwinCore(DEFAULT_CONFIG);
   core.enqueueBarcode("PT1|T200|200");
   const seen: string[] = [];
-  for (let k = 0; k < 600 && core.counts.total === 0; k++) {
+  for (let k = 0; k < 80 && core.counts.total === 0; k++) {
     core.tick(0.1);
     const c = toHmiState(core).containers[0];
     if (c && seen[seen.length - 1] !== c.status) seen.push(c.status);
@@ -103,23 +104,22 @@ test("no scan diverter: a bad barcode rides through unfilled and the reject dive
   const c = core.containers[0];
   assert.equal(c.state, "REJECTED");
   assert.equal(c.fillMl, 0);
-  assert.ok(!c.ops.some((op) => op.tankId !== null || op.stationId === "CAP"));
-  assert.deepEqual(seen, ["label", "scan", "qc", "scan-rejected"]);
-  assert.ok(core.simTimeSec > 15, "it travels the belt instead of being diverted at the scanner");
+  assert.ok(!c.ops.some((op) => op.tankId !== null || op.stationId === "CAP" || op.stationId === "PRESS"));
+  assert.deepEqual(seen, ["scan", "scan-rejected"]);
 });
 
 test("the label is read at SCAN: the recipe and fill ops are unknown until the scan completes", () => {
   const core = new TwinCore(DEFAULT_CONFIG);
-  core.enqueueBarcode("PT1|T250|100,80,70");
+  core.enqueueBarcode("PT1|T250|150,100");
   core.tick(0.1);
   const c = core.containers[0];
-  assert.equal(c.occupyingStationId, "LABEL");
+  assert.equal(c.occupyingStationId, "SCAN");
   assert.deepEqual([c.parsed, c.barcodeRaw, c.targetMl], [null, null, 0]);
-  assert.deepEqual(c.ops.map((op) => op.stationId), ["LABEL", "SCAN"]);
+  assert.deepEqual(c.ops.map((op) => op.stationId), ["SCAN"]);
   for (let k = 0; k < 200 && c.opIndex < 2; k++) core.tick(0.1);
-  assert.equal(c.barcodeRaw, "PT1|T250|100,80,70");
+  assert.equal(c.barcodeRaw, "PT1|T250|150,100");
   assert.equal(c.targetMl, 250);
-  assert.deepEqual(c.ops.map((op) => op.stationId), ["LABEL", "SCAN", "BAY-1", "BAY-2", "BAY-3", "CAP", "QC", "GATE", "SORT"]);
+  assert.deepEqual(c.ops.map((op) => op.stationId), ["SCAN", "BAY-1", "BAY-2", "CAP", "PRESS", "QC", "GATE", "SORT"]);
   assert.ok(core.events.some((e) => e.code === EventCode.BARCODE_READ && e.arg1 === c.id && e.arg2 === 250));
 });
 
@@ -131,7 +131,7 @@ test("station driver: the core waits for an external station, applies its scan t
     handles: (id) => id === "SCAN" || id === "CAP",
     poll: (id) => {
       polled.push(id);
-      if (id === "SCAN") return { scanText: "PT1|T300|120,90,90" };
+      if (id === "SCAN") return { scanText: "PT1|T200|100,100" };
       return capReady ? { reject: RejectReason.STATION_FAULT } : null;
     },
   };
@@ -139,7 +139,7 @@ test("station driver: the core waits for an external station, applies its scan t
   for (let k = 0; k < 400 && !core.containers[0]?.occupyingStationId?.startsWith("CAP"); k++) core.tick(0.1);
   const c = core.containers[0];
   assert.equal(c.labelText, null, "an unlabelled bottle: only the scanner knows its recipe");
-  assert.equal(c.targetMl, 300);
+  assert.equal(c.targetMl, 200);
   for (let k = 0; k < 50; k++) core.tick(0.1);
   assert.equal(c.occupyingStationId, "CAP", "held at CAP until the arm reports");
   capReady = true;
@@ -152,8 +152,8 @@ test("station driver: the core waits for an external station, applies its scan t
 
 test("station driver timeout: a station node that never answers jams its container", () => {
   const core = new TwinCore(DEFAULT_CONFIG);
-  core.driver = { handles: (id) => id === "LABEL", poll: () => null };
-  core.enqueueBarcode("PT1|T250|100,80,70");
+  core.driver = { handles: (id) => id === "SCAN", poll: () => null };
+  core.enqueueBarcode("PT1|T250|150,100");
   for (let k = 0; k < (DEFAULT_CONFIG.stationNodeTimeoutSec + 1) * 10; k++) core.tick(0.1);
   assert.equal(core.containers[0].state, "JAMMED");
 });
@@ -174,14 +174,14 @@ test("station faults stop the line, refuse START until RESET", () => {
 test("containers only move forward along the belt, even with an interleaved mix policy", () => {
   assert.equal(DEFAULT_CONFIG.mixPolicy.kind, "interleaved");
   const core = new TwinCore(DEFAULT_CONFIG);
-  const order = ["label", "scan", "fill-1", "fill-2", "fill-3", "cap", "qc", "sort", "output"];
+  const order = ["scan", "fill-1", "fill-2", "cap", "press", "qc", "sort", "output"];
   const lastPos = new Map<string, number>();
   let feed = 0;
   for (let k = 0; k < 1200; k++) {
     core.tick(0.1);
     if ((feed += 0.1) >= 3 && core.queuedBarcodes < 4) {
       feed = 0;
-      core.enqueueBarcode("PT1|T300|120,90,90|I4");
+      core.enqueueBarcode("PT1|T200|100,100|I4");
     }
     for (const c of toHmiState(core).containers) {
       const pos = order.indexOf(c.status);
@@ -197,6 +197,7 @@ test("digital E-Stop: shuts the line down, needs release + LOCAL reset + start t
   const core = new TwinCore(DEFAULT_CONFIG);
   run(core, 30, (i) => SAMPLE_BARCODES[i % 4]);
   assert.equal(applyHmiCommand(core, { command: "eStop" }), null);
+  assert.ok(core.events.some((e) => e.code === EventCode.DIGITAL_ESTOP));
   let s = toHmiState(core).safety!;
   assert.ok(s.eStopActive && s.digitalEStop && !s.safetyCircuitOk && !s.running);
   const before = core.counts.total;
@@ -225,7 +226,6 @@ test("digital E-Stop: shuts the line down, needs release + LOCAL reset + start t
   assert.equal(applyHmiCommand(core, { command: "start" }), null);
   run(core, 30, (i) => SAMPLE_BARCODES[i % 4]);
   assert.ok(core.counts.total > before);
-  assert.ok(core.events.some((e) => e.code === EventCode.DIGITAL_ESTOP));
 });
 
 test("physical E-Stop: shuts down physical and digital control; HMI sees which button; reset only after release", () => {
@@ -234,9 +234,9 @@ test("physical E-Stop: shuts down physical and digital control; HMI sees which b
   assert.equal(applyHmiCommand(core, { command: "simPhysicalEStop", buttonId: "EXIT", pressed: true }), null);
   let state = toHmiState(core);
   assert.ok(state.safety!.eStopActive && !state.safety!.running && !state.safety!.safetyCircuitOk);
-  assert.deepEqual(state.safety!.eStopButtons.filter((b) => b.pressed).map((b) => b.name), ["Line exit"]);
+  assert.deepEqual(state.safety!.eStopButtons.filter((b) => b.pressed).map((b) => b.name), ["Line end"]);
   assert.match(state.lastEvent!.message, /LINE STOPPED|Line stopped|PHYSICAL E-STOP/i);
-  assert.ok(state.recentEvents!.some((e) => /PHYSICAL E-STOP pressed at Line exit/.test(e.message) && e.severity === "error"));
+  assert.ok(state.recentEvents!.some((e) => /PHYSICAL E-STOP pressed at Line end/.test(e.message) && e.severity === "error"));
 
   // Digital side is shut down too: every operational command is refused.
   for (const command of ["start", "jogBelt", "firePusher"]) {
@@ -297,61 +297,52 @@ test("remote reset can be enabled by configuration (Remote mode only)", () => {
   assert.ok(toHmiState(core).safety!.running);
 });
 
-test("tank slots keep ids and barcode order; stale queued barcodes are held back", () => {
+test("tank slots keep ids; changing the tank count holds stale barcodes", () => {
   const core = new TwinCore(DEFAULT_CONFIG);
-  for (let i = 0; i < 3; i++) core.enqueueBarcode("PT1|T250|100,80,70");
-  core.addTank();
-  assert.deepEqual(core.tanks.map((t) => t.id), ["T1", "T2", "T3", "T4"]);
+  for (let i = 0; i < 3; i++) core.enqueueBarcode("PT1|T250|150,100");
+  core.removeTank("T2");
+  assert.deepEqual(core.tanks.map((t) => t.id), ["T1"]);
   assert.equal(core.queuedBarcodes, 0);
   const held = core.events.find((e) => e.code === EventCode.STALE_BARCODES_HELD);
   assert.equal(held?.arg1, 3);
 
-  core.removeTank("T2");
-  core.addTank(); // re-enables the lowest free slot, in slot order
-  assert.deepEqual(core.tanks.map((t) => t.id), ["T1", "T2", "T3", "T4"]);
+  core.addTank();
+  assert.deepEqual(core.tanks.map((t) => t.id), ["T1", "T2"]);
   assert.equal(core.tanks[1].name, TANK_SLOTS[1].name);
   assert.deepEqual(
     core.config.stations.map((s) => s.id),
-    ["LABEL", "SCAN", "BAY-1", "BAY-2", "BAY-3", "BAY-4", "CAP", "QC", "GATE", "SORT"],
+    ["SCAN", "BAY-1", "BAY-2", "CAP", "PRESS", "QC", "GATE", "SORT"],
   );
 
   const c0 = core.counts.rejected;
-  run(core, 90, () => "PT1|T200|50,50,50,50");
-  assert.equal(core.counts.rejected, c0, "valid 4-tank barcodes should not be rejected");
+  run(core, 90, () => "PT1|T200|100,100");
+  assert.equal(core.counts.rejected, c0, "valid 2-tank barcodes should not be rejected");
 });
 
-test("tank colors: rename/recolor any slot, add a tank with its own color, reset to defaults", () => {
+test("tank colors: rename, recolor, reject bad edits, reset to defaults", () => {
   const core = new TwinCore(DEFAULT_CONFIG);
   assert.equal(applyHmiCommand(core, { command: "setTankColor", tankId: "T2", name: " Crimson ", colorCode: "#b00020" }), null);
   assert.deepEqual([core.tanks[1].name, core.tanks[1].colorCode], ["Crimson", "#B00020"]);
-  assert.equal(core.config.tanks[1].name, "Crimson");
-
-  // A slot that is not on the line yet can be edited too; enabling it uses the edit.
-  assert.equal(applyHmiCommand(core, { command: "setTankColor", tankId: "T5", colorCode: "#00AAFF" }), null);
-  assert.equal(applyHmiCommand(core, { command: "addTank", name: "Lemon", colorCode: "#FFF44F" }), null);
-  assert.deepEqual([core.tanks[3].id, core.tanks[3].name, core.tanks[3].colorCode], ["T4", "Lemon", "#FFF44F"]);
 
   const slots = toHmiState(core).tankSlots!;
-  assert.equal(slots.length, 8);
-  assert.deepEqual(slots.filter((s) => s.enabled).map((s) => s.id), ["T1", "T2", "T3", "T4"]);
-  assert.deepEqual(slots.filter((s) => s.custom).map((s) => s.id), ["T2", "T4", "T5"]);
-  assert.equal(slots[4].colorCode, "#00AAFF");
+  assert.equal(slots.length, 2);
+  assert.deepEqual(slots.filter((s) => s.enabled).map((s) => s.id), ["T1", "T2"]);
+  assert.deepEqual(slots.filter((s) => s.custom).map((s) => s.id), ["T2"]);
 
   assert.match(applyHmiCommand(core, { command: "setTankColor", tankId: "T2", colorCode: "red" })!, /hex color/);
   assert.match(applyHmiCommand(core, { command: "setTankColor", tankId: "T2", name: "" })!, /empty/);
   assert.match(applyHmiCommand(core, { command: "setTankColor", tankId: "T9", name: "X" })!, /unknown tank/);
   assert.match(applyHmiCommand(core, { command: "addTank", colorCode: "#12345" })!, /hex color/);
-  assert.equal(core.tanks.length, 4, "an invalid color does not add a tank");
+  assert.equal(core.tanks.length, 2);
 
   assert.equal(applyHmiCommand(core, { command: "resetTankColor", tankId: "T2" }), null);
   assert.equal(core.tanks[1].name, TANK_SLOTS[1].name);
   assert.equal(applyHmiCommand(core, { command: "resetTankColor" }), null);
   assert.ok(toHmiState(core).tankSlots!.every((s) => !s.custom));
-  assert.equal(core.tanks[3].colorCode, TANK_SLOTS[3].colorCode);
 });
 
 test("tank colors persist through the palette file and are applied on start", () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "captsone-")), "tank-colors.json");
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "genesis-")), "tank-colors.json");
   const saving = new TankPalette(loadTankColors(file), (p) => saveTankColors(file, p));
   new TwinCore(DEFAULT_CONFIG, saving).setTankColor("T1", { name: "Snow", colorCode: "#FFFFFF" });
   assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")), { T1: { name: "Snow", colorCode: "#FFFFFF" } });
@@ -365,11 +356,11 @@ test("tank colors persist through the palette file and are applied on start", ()
 
 test("throughput is a rolling rate, not a since-start average", () => {
   const core = new TwinCore(DEFAULT_CONFIG);
-  run(core, 180, () => "PT1|T250|100,80,70");
+  run(core, 180, () => "PT1|T200|100,100");
   const busy = core.snapshot().throughputCpm;
   assert.ok(busy > 0);
   core.eStop();
-  run(core, 90, () => "PT1|T250|100,80,70");
+  run(core, 90, () => "PT1|T200|100,100");
   assert.equal(core.snapshot().throughputCpm, 0, "no accepts in the last window → 0 cpm");
 });
 

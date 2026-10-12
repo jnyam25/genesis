@@ -1,6 +1,6 @@
-# Captsone Twin — Engine Design
+# Genesis Twin — Engine Design
 
-Every design decision in the Captsone digital twin, with specific reasoning. Companion to the code under `twin/src/`.
+Every design decision in the Genesis digital twin, with specific reasoning. Companion to the code under `twin/src/`.
 
 ## 1. System overview
 
@@ -23,14 +23,14 @@ PT1|T<totalMl>|<v1>,<v2>,...,<vN>[|I<rounds>]
 
 | Barcode | Meaning |
 | --- | --- |
-| `PT1\|T250\|100,80,70` | 3 tanks, 100+80+70 = 250 ml total |
-| `PT1\|T300\|120,90,90\|I4` | 3 tanks, interleaved into 4 rounds |
+| `PT1\|T250\|150,100` | 2 tanks, 150+100 = 250 ml total |
+| `PT1\|T300\|180,120\|I4` | 2 tanks, interleaved into 4 rounds |
 | `PT1\|T200\|200` | single-tank fill (only valid if config has 1 tank) |
 
 ### Why this format
 
 1. **Direct instructions, not a lookup.** The user's key requirement is that the barcode *encodes the dispense instructions directly* — how many units from each source — rather than a recipe ID the controller resolves against a database. `PT1|T250|100,80,70` is the entire instruction set. No recipe table, no lookup miss, no version skew between the printed label and the line's recipe store.
-2. **Preprinted before entry.** The format is self-describing and stateless, so containers can be labeled at the filling plant and run on any Captsone line with the same tank order.
+2. **Preprinted before entry.** The format is self-describing and stateless, so containers can be labeled at the filling plant and run on any Genesis line with the same tank order.
 3. **Trivially extensible to more tanks.** Adding a tank is appending one more comma-separated number. The parser splits on `,` and validates the count against `config.tanks.length`; it never indexes named fields. A 4-tank line prints `PT1|T300|100,80,70,50`; a 1-tank line prints `PT1|T200|200`. No parser code changes between configurations.
 4. **Versioned header.** `PT1` lets us evolve the format (`PT2`, …) without breaking existing labels. The parser rejects unknown headers with a structured `BAD_HEADER` error rather than misinterpreting them.
 5. **Checksum-style total.** `T<totalMl>` is redundant with the sum of the per-tank volumes, but intentional: it lets the parser catch misprints (a wrong digit that breaks the sum is caught by `VOLUME_SUM_MISMATCH`) and gives the gate a target to validate the fill against, independent of the per-tank breakdown.
@@ -52,10 +52,10 @@ A controller written around named per-tank references (`nozzleSensor1`, `tankLev
 
 ### The chosen approach — tank slots and data-driven loops
 
-- `config.tanks` lists the enabled tanks; each one occupies a fixed **slot** from `TANK_SLOTS` (`T1..T8`), so a tank keeps its id, calibration, colour and PLC register block when others are enabled or disabled.
+- `config.tanks` lists the enabled tanks; each one occupies a fixed **slot** from `TANK_SLOTS` (`T1` and `T2`), so a tank keeps its id, calibration, colour and PLC register block when the other is enabled or disabled.
 - Every piece of control logic loops over `config.tanks` (or over slots) and addresses tanks by **id**, never by a hard-coded index. Stations are data too: each tank has a `BAY-k` station in `config.stations`.
 - Tanks can be bypassed at runtime through the tank-enable mask (bit k−1 = slot k), which is what the PLC's `Sys.TankEnableMask` holds.
-- `MAX_TANKS = 8` bounds the slots and the register map, which reserves one tank block per slot. `addTank` refuses past it (`TANK_CHANGE_REFUSED`).
+- `MAX_TANKS = 2` bounds the slots and the register map, which reserves one tank block per slot. `addTank` refuses past it (`TANK_CHANGE_REFUSED`).
 
 The PLC program follows the same pattern: arrays indexed by slot (`TankEnabled[k]`, `TankLevelMl_x10[k]` …) and a `FOR` loop or one rung block per slot (docs/prototype/micro850-plc.md §3).
 
@@ -105,7 +105,7 @@ A flat ratios array (`[0.4, 0.32, 0.28]`) only describes *proportions*. It canno
 
 ### Belt order
 
-On a one-way conveyor with **one bay per tank**, a container passes each bay exactly once, so it cannot return to BAY-1 after BAY-3. `beltOrderSteps(plan)` (in `recipe.ts`) collapses any plan into one step per tank, in belt order, with that tank's total volume; `core.ts` dispenses through it, and the PLC opens each bay's valve once for that tank's volume. Consequences:
+On a one-way conveyor with **one bay per tank**, a container passes each bay exactly once, so it cannot return to BAY-1 after BAY-2. `beltOrderSteps(plan)` (in `recipe.ts`) collapses any plan into one step per tank, in belt order, with that tank's total volume; `core.ts` dispenses through it, and the PLC opens each bay's valve once for that tank's volume. Consequences:
 
 - `sequential` and `interleaved` plans dispense identically on this layout (same per-tank totals, same order).
 - The interleaved round-robin order becomes physical only with a **multi-nozzle manifold** at a single station (all tanks dispensing into a container that stays put). That layout is not modelled yet; `buildDispensePlan` keeps producing the full ordered plan for it.
@@ -233,10 +233,10 @@ Implemented once in `metrics.ts` (`computeOee`, `RollingRate`, `idealCycleSec`) 
 
 The twin emits the snapshot over two transports it can produce without the simulator:
 
-1. **HTTP** — `GET http://127.0.0.1:43124/snapshot` returns the latest snapshot JSON with `Access-Control-Allow-Origin: *` so an HMI worker on any origin can poll it. `GET /` returns a tiny HTML dashboard (tank levels, KPIs, containers, event timeline) that polls `/snapshot` and `/hmi/state`. Port is configurable via `CAPTSONE_PORT`.
+1. **HTTP** — `GET http://127.0.0.1:43124/snapshot` returns the latest snapshot JSON with `Access-Control-Allow-Origin: *` so an HMI worker on any origin can poll it. `GET /` returns a tiny HTML dashboard (tank levels, KPIs, containers, event timeline) that polls `/snapshot` and `/hmi/state`. Port is configurable via `GENESIS_PORT`.
 2. **File write** — `twin/runtime/snapshot.json` is overwritten every `config.snapshotPeriodSec` (0.5 s), for file-watch integrations.
 
-3. **PLC bridge** — with `CAPTSONE_MODE=plc`, the same HTTP endpoints are fed from a physical (or virtual) PLC over Modbus TCP instead of the simulated core (`plc/bridge.ts`); see docs/prototype/.
+3. **PLC bridge** — with `GENESIS_MODE=plc`, the same HTTP endpoints are fed from a physical (or virtual) PLC over Modbus TCP instead of the simulated core (`plc/bridge.ts`); see docs/prototype/.
 
 We chose HTTP + file over WebSocket because the snapshot is small, fully recomputed each tick, and poll-based consumption is trivial for an HMI worker; a streaming socket would add complexity for no payload benefit. SCADA (FUXA) doesn't use this snapshot: it reads the PLC's register map directly over Modbus TCP (docs/prototype/scada.md).
 
@@ -303,7 +303,7 @@ The HMI reaches these endpoints through its own `/api/twin/*` route handlers (a 
 | `twin/src/plc/arm-sequencer.ts` | PLC-side robotic arm sequencing: HOME, PICK_LID, PLACE_LID, retries and arm faults. |
 | `twin/src/plc/simulated-nodes.ts` | Simulated ESP32 scanner and station nodes, on the same register contract as the firmware. |
 | `twin/src/plc/bridge.ts` | Bridge (monitoring PC or Pi): PLC registers ↔ HMI state and commands; `coilBase` for PLCs whose coils don't start at 0 (0 for the Micro850). |
-| `twin/src/plc/print-tag-map.ts` | Generates the register tables in docs/prototype/io-map.md and the firmware header `firmware/lib/captsone_node/src/captsone_registers.h`. |
-| `twin/src/plc/fuxa-project.ts` | Generates the FUXA SCADA project (`deploy/fuxa/captsone-project.json`) from the register map. |
+| `twin/src/plc/print-tag-map.ts` | Generates the register tables in docs/prototype/io-map.md and the firmware header `firmware/lib/genesis_node/src/genesis_registers.h`. |
+| `twin/src/plc/fuxa-project.ts` | Generates the FUXA SCADA project (`deploy/fuxa/genesis-project.json`) from the register map. |
 | `twin/src/test/*.test.ts` | Automated tests (`npm test`). |
 

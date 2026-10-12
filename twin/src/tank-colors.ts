@@ -1,13 +1,6 @@
 /**
- * Tank color palette — the operator-editable name and swatch color of each
- * tank slot.
- *
- * The line has MAX_TANKS fixed slots (T1..T8, one PLC register block each).
- * Which slots are enabled is line state (PLC / core); what each slot is called
- * and what color it shows is presentation data owned by the Pi, so it lives
- * here and never goes over Modbus. Defaults come from `config.TANK_SLOTS`;
- * operator edits are kept as overrides and persisted by the caller (run.ts
- * writes them to a JSON file).
+ * Operator names and colors for each tank slot (T1..T2).
+ * Defaults come from TANK_SLOTS. Edits stay on the PC; they are not Modbus tags.
  */
 
 import * as fs from "fs";
@@ -126,7 +119,7 @@ export function loadTankColors(file: string): Record<string, Partial<TankColor>>
     if (data && typeof data === "object" && !Array.isArray(data)) return data as Record<string, Partial<TankColor>>;
     throw new Error("expected an object keyed by tank id");
   } catch (err) {
-    console.warn(`[captsone] ignoring tank colors file ${file}: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn(`[genesis] ignoring tank colors file ${file}: ${err instanceof Error ? err.message : String(err)}`);
     return {};
   }
 }

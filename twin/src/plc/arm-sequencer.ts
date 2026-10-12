@@ -7,13 +7,13 @@
  *
  *   not homed (power-up, after an abort)     → HOME
  *   homed, no lid in the gripper             → PICK_LID   (pre-pick while the belt moves)
- *   homed, lid held, container held at CAP   → PLACE_LID  (place + press down + release)
+ *   homed, lid held, container held at CAP   → PLACE_LID  (place, release, return HOME)
  *
  * Results: NO_LID is retried up to ARM_PICK_ATTEMPTS times, then latches
  * ARM_NO_LID. LID_LOST and SERVO_ERROR latch a fault. ABORTED (RunPermit
  * dropped mid-move) re-homes; if the lid was already released during an
  * aborted PLACE_LID, that container is rejected, since the PLC cannot tell
- * whether its lid is seated.
+ * whether the lid was placed. The lid-press cylinder seats it later.
  */
 
 import { FaultCode } from "../events";

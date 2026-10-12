@@ -7,7 +7,7 @@ Two HTTP servers are involved:
 | **Twin service** (`twin/src/run.ts`) | `http://127.0.0.1:43124` | The HMI server, scripts, diagnostics. Keep it on localhost in production |
 | **HMI proxy** (`hmi/src/app/api/twin/*`) | `http://<host>:43123/api/twin` | Browsers. Forwards to the twin service at `TWIN_HTTP_URL` |
 
-The twin service answers the same way whether it's simulating the line (`CAPTSONE_MODE=sim`) or bridging a PLC (`CAPTSONE_MODE=plc`).
+The twin service answers the same way whether it's simulating the line (`GENESIS_MODE=sim`) or bridging a PLC (`GENESIS_MODE=plc`).
 
 All responses are JSON with `Cache-Control: no-store`. The twin service sends permissive CORS headers (`Access-Control-Allow-Origin: *`) and answers `OPTIONS` preflights with 204.
 
@@ -65,7 +65,7 @@ Live line state in the HMI's `TwinState` shape (mirrors `hmi/src/lib/twin/types.
 
 | Field | Notes |
 | --- | --- |
-| `tanks[]` | Enabled tanks in slot order (`T1..T8`). `levelMl` 0.1 ml resolution. `name`/`colorCode` are the operator's current choice for that slot |
+| `tanks[]` | Enabled tanks in slot order (`T1`, `T2`). `levelMl` 0.1 ml resolution. `name`/`colorCode` are the operator's current choice for that slot |
 | `tankSlots[]` | All eight slots, enabled or not, with their editable `name`/`colorCode`. `custom` = edited away from the default; `enabled` = on the line. Optional (the HMI hides the colour editor without it) |
 | `containers[].id` | `C-` + zero-padded id |
 | `containers[].status` | In belt order: `label`, `scan`, `fill-<bay>`, `mix` (only if a mixer is configured), `cap` (robotic capping arm), `qc` (sort sensor and reject diverter), `sort` (sort diverter), then `output` (accepted) or `rejected`. `scan-rejected` = bad barcode or no read, rejected at the reject diverter. Finished containers stay listed for about 1.5 s |
@@ -96,7 +96,7 @@ Body: `{ "command": <name>, ...args }`
 | `firePusher` | Fire the reject diverter on the container at the sort sensor (QC) or reject diverter (GATE) | REMOTE, no E-Stop, safety reset | `Cmd.FirePusher` |
 | `addTank` (+ optional `name`, `colorCode`) | Enable the lowest free tank slot. `name`/`colorCode` are saved to that slot first | REMOTE | `Sys.TankEnableMask` bit set |
 | `removeTank` + `tankId` | Disable a tank (not the last) | REMOTE | `Sys.TankEnableMask` bit cleared |
-| `setTankColor` + `tankId`, `name` and/or `colorCode` | Rename/recolour a tank slot, enabled or spare. Saved to `CAPTSONE_TANK_COLORS_FILE` | Always, any mode (display only) | none: kept on the Pi |
+| `setTankColor` + `tankId`, `name` and/or `colorCode` | Rename/recolour a tank slot, enabled or spare. Saved to `GENESIS_TANK_COLORS_FILE` | Always, any mode (display only) | none: kept on the Pi |
 | `resetTankColor` (+ optional `tankId`) | Restore one slot's default name/colour, or every slot's without `tankId` | Always, any mode | none |
 
 `name` is trimmed, 1–24 characters. `colorCode` is `#RRGGBB` and is stored upper-case. In PLC mode the colour commands work even while the PLC is offline.

@@ -2,6 +2,15 @@
 
 The HMI runs in a browser at `http://<line computer>:43123`. It shows the line live and lets you operate it remotely. The machine also has a **local control panel** that works without the HMI.
 
+The wall-mounted **ONN-M4W** stack light repeats the line status when you are not looking at the HMI:
+
+| Layer | Meaning |
+| --- | --- |
+| Green | Line running |
+| Yellow | Stopped, reset required, or a warning (including the HMI link dropping out) |
+| Red | E-Stop or a latched station fault |
+| Buzzer | E-Stop or a jam. It pulses; it does not stay on for an ordinary stop |
+
 ## Emergency stop
 
 There are two kinds of emergency stop, and **both shut the machine down**:
@@ -36,7 +45,7 @@ The PLC watches the stations the two ESP32 nodes run (label applicator, barcode 
 
 | Cause shown in the banner | What to do |
 | --- | --- |
-| label applicator fault | Check the label applicator for a jam or an empty label roll |
+| label applicator fault | Check the label applicator for a jam or an empty label roll. If the DM556Y Open Loop Stepper is showing a fault, reset the safety circuit so its supply is back, then check for a stalled motor |
 | barcode scanner not answering | Check the scanner module and its cable to the scanner node |
 | robotic arm servo fault | Check the arm for an obstruction or a loose servo cable, then let it re-home |
 | robotic arm could not pick a lid — check the lid magazine | Refill the lid magazine or straighten the lid stack (see below) |
@@ -125,7 +134,7 @@ The reject diverter rejects bottles that are out of fill tolerance, the wrong bo
 | **Run control** | **Start** (REMOTE mode, after reset, no station fault latched) and **Stop** (always) |
 | **Motion** | **Jog belt** (REMOTE, line stopped, after reset); **Fire reject diverter** (rejects the bottle at the sort sensor or reject diverter) |
 | **Tank modules** | **Add tank** / **Remove** (REMOTE mode). **Add tank** opens a small form for the new tank's name and colour, prefilled with that slot's saved choice. Stop the line and let it empty first. Containers already on the line that need a removed tank are rejected, and barcodes already read for the old number of tanks are held back |
-| **Tank colors** | All eight tank slots, on the line or spare. **Edit** a slot to change its name and colour: use the colour picker, type a hex code (`#C8362B`), or tap a preset swatch; then **Save**. **Default** undoes one slot; **Reset all** undoes every slot. Changes show on every screen immediately and are kept after a restart. They only change what the screens show, so they're allowed in any mode, even during an E-Stop. After you refill a tank with a different paint, rename and recolour it here |
+| **Tank colors** | Both tank slots. **Edit** a slot to change its name and colour: use the colour picker, type a hex code (`#C8362B`), or tap a preset swatch; then **Save**. **Default** undoes one slot; **Reset all** undoes every slot. Changes show on every screen immediately and are kept after a restart. They only change what the screens show, so they're allowed in any mode, even during an E-Stop. After you refill a tank with a different paint, rename and recolour it here |
 
 After each command, a message confirms it was sent or explains why it was refused.
 

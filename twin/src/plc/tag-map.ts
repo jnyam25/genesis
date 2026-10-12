@@ -1,5 +1,5 @@
 /**
- * Captsone PLC register map (Modbus TCP) — the single source of truth for the
+ * Genesis PLC register map (Modbus TCP) — the single source of truth for the
  * data exchanged between the line PLC and the Raspberry Pi bridge.
  *
  * Used by:
@@ -158,7 +158,8 @@ export const CONTAINER_STATUS = {
   OUTPUT: 22,
   REJECTED: 23,
   CAP: 24,
-  /** 25 was the lid press (removed in v4); reserved. */
+  /** Lid press cylinder, between the arm and the fill check. */
+  PRESS: 25,
   SORT: 26,
   /** Accepted, sorted to lane B. */
   OUTPUT_LANE_B: 27,
@@ -412,7 +413,7 @@ export function registerTable(): RegisterDef[] {
     { address: SYS.HMI_HEARTBEAT, name: "Sys.HmiHeartbeat", access: "RW", unit: "count", description: "Written by the Pi bridge every poll. PLC clears HMI_LINK_OK if it stops changing (alarm only — never a safety function)." },
     { address: SYS.UPTIME_S, name: "Sys.UptimeS", access: "R", unit: "s (wraps)", description: "Seconds since PLC run start." },
     { address: SYS.ACTIVE_CONTAINERS, name: "Sys.ActiveContainers", access: "R", unit: "count", description: "Containers currently on the belt." },
-    { address: SYS.PHYSICAL_ESTOP_MASK, name: "Sys.PhysicalEStopMask", access: "R", unit: "bits", description: "bit i = physical E-Stop button i pressed, from the safety relay's monitoring contacts (bit0 local control panel, bit1 line entry, bit2 line exit — config.safety.eStopButtons)." },
+    { address: SYS.PHYSICAL_ESTOP_MASK, name: "Sys.PhysicalEStopMask", access: "R", unit: "bits", description: "bit i = physical E-Stop button i pressed, from the safety relay's monitoring contacts (bit0 line start, bit1 line end — config.safety.eStopButtons)." },
     { address: SYS.COUNT_LANE_A, name: "Counts.LaneA", access: "R", unit: "count", description: "Accepted containers sorted to lane A (config.sort.lanes[0]) (wraps)." },
     { address: SYS.COUNT_LANE_B, name: "Counts.LaneB", access: "R", unit: "count", description: "Accepted containers sorted to lane B (config.sort.lanes[1]) (wraps)." },
     { address: SYS.FAULT_CODE, name: "Sys.FaultCode", access: "R", unit: "code", description: "First latched station fault, 0 = none: 1 labeler, 2 scanner, 3 arm servo, 4 arm could not pick a lid, 5 arm dropped the lid, 6 sort sensor, 7 scanner node offline, 8 station node offline. Cleared by RESET once the cause is gone." },
@@ -478,7 +479,7 @@ export function registerTable(): RegisterDef[] {
     { address: STATION.RUN_PERMIT, name: "Station.RunPermit", access: "R", unit: "0/1", description: "1 = line running with the safety circuit closed. ESP32 nodes must stop their actuators when 0 or when Sys.PlcHeartbeat stops changing for 1 s. Not a safety function: actuator power still goes through the safety relay." },
     { address: STATION.LABEL_REQUEST, name: "Station.LabelRequest", access: "R", unit: "id", description: "Container id held at LABEL waiting for its label, 0 = none." },
     { address: STATION.LABEL_DONE, name: "Station.LabelDone", access: "RW", unit: "id", description: "Scanner node writes the container id once the label is applied." },
-    { address: STATION.ARM_CMD, name: "Station.ArmCmd", access: "R", unit: "code", description: "Robotic arm command: 0 none, 1 HOME, 2 PICK_LID (lift the top lid from the magazine), 3 PLACE_LID (place the held lid on the container at CAP, press it down, release, return HOME). Written before ArmCmdSeq." },
+    { address: STATION.ARM_CMD, name: "Station.ArmCmd", access: "R", unit: "code", description: "Robotic arm command: 0 none, 1 HOME, 2 PICK_LID (lift the top lid from the magazine), 3 PLACE_LID (place the held lid on the container at CAP, release, return HOME). The lid-press cylinder seats the lid. Written before ArmCmdSeq." },
     { address: STATION.ARM_CMD_SEQ, name: "Station.ArmCmdSeq", access: "R", unit: "count", description: "PLC increments (1..65535, skips 0) to issue ArmCmd. The station node runs each sequence number once." },
     { address: STATION.ARM_DONE_SEQ, name: "Station.ArmDoneSeq", access: "RW", unit: "count", description: "Station node copies ArmCmdSeq here when the command has finished, after writing ArmResult." },
     { address: STATION.ARM_RESULT, name: "Station.ArmResult", access: "RW", unit: "code", description: "1 OK, 2 NO_LID (gripper closed on nothing), 3 LID_LOST, 4 SERVO_ERROR, 5 ABORTED (RunPermit dropped mid-move), 6 REFUSED (not homed / unknown command). The PLC decides retries and faults." },

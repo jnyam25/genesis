@@ -17,7 +17,7 @@
 
 #include <Arduino.h>
 
-#include "captsone_registers.h"
+#include "genesis_registers.h"
 #include "lx_servo.h"
 
 enum class Pose : uint8_t { HOME, MAG_ABOVE, MAG_PICK, CAP_ABOVE, CAP_PLACE, CAP_PRESS, COUNT };

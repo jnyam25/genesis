@@ -4,8 +4,8 @@ The Pi runs two services:
 
 | Service | What it runs | Listens on |
 | --- | --- | --- |
-| `captsone-twin` | `twin/dist/run.js` with `CAPTSONE_MODE=plc`: polls the PLC, serves `/hmi/*`, `/snapshot`, `/health` | `127.0.0.1:43124` |
-| `captsone-hmi` | `next start` for the operator HMI (built with `NEXT_PUBLIC_TWIN_SOURCE=http`) | `0.0.0.0:43123` |
+| `genesis-twin` | `twin/dist/run.js` with `GENESIS_MODE=plc`: polls the PLC, serves `/hmi/*`, `/snapshot`, `/health` | `127.0.0.1:43124` |
+| `genesis-hmi` | `next start` for the operator HMI (built with `NEXT_PUBLIC_TWIN_SOURCE=http`) | `0.0.0.0:43123` |
 
 Template files are in [`deploy/raspberry-pi/`](../../deploy/raspberry-pi/).
 
@@ -33,21 +33,21 @@ Install Node.js 22 LTS. Either use the NodeSource repository (see nodesource.com
 node -v
 ```
 
-Create a service user and copy the project to `/opt/captsone` (git clone, or copy from the USB drive **without** `node_modules`; see [INSTALL.md](../../INSTALL.md)):
+Create a service user and copy the project to `/opt/genesis` (git clone, or copy from the USB drive **without** `node_modules`; see [INSTALL.md](../../INSTALL.md)):
 
 ```bash
-sudo useradd --system --create-home --home-dir /opt/captsone --shell /usr/sbin/nologin captsone
-sudo cp -r genesis/. /opt/captsone/
-sudo chown -R captsone:captsone /opt/captsone
+sudo useradd --system --create-home --home-dir /opt/genesis --shell /usr/sbin/nologin genesis
+sudo cp -r genesis/. /opt/genesis/
+sudo chown -R genesis:genesis /opt/genesis
 ```
 
 Install and build as that user. The HMI build bakes in the `http` data source.
 
 ```bash
-cd /opt/captsone
-sudo -u captsone npm install
-sudo -u captsone npm run build
-sudo -u captsone npm test
+cd /opt/genesis
+sudo -u genesis npm install
+sudo -u genesis npm run build
+sudo -u genesis npm test
 ```
 
 The build takes several minutes on a Pi. `npm run build` at the repo root already sets `NEXT_PUBLIC_TWIN_SOURCE=http`.
@@ -55,9 +55,9 @@ The build takes several minutes on a Pi. `npm run build` at the repo root alread
 ## 3. Configure
 
 ```bash
-sudo mkdir -p /etc/captsone
-sudo cp /opt/captsone/deploy/raspberry-pi/captsone.env.example /etc/captsone/captsone.env
-sudo nano /etc/captsone/captsone.env
+sudo mkdir -p /etc/genesis
+sudo cp /opt/genesis/deploy/raspberry-pi/genesis.env.example /etc/genesis/genesis.env
+sudo nano /etc/genesis/genesis.env
 ```
 
 Set at least `PLC_HOST`. All variables are listed in [../configuration.md](../configuration.md#environment-variables).
@@ -67,16 +67,16 @@ Set at least `PLC_HOST`. All variables are listed in [../configuration.md](../co
 ## 4. Services
 
 ```bash
-sudo cp /opt/captsone/deploy/raspberry-pi/captsone-twin.service /etc/systemd/system/
-sudo cp /opt/captsone/deploy/raspberry-pi/captsone-hmi.service /etc/systemd/system/
+sudo cp /opt/genesis/deploy/raspberry-pi/genesis-twin.service /etc/systemd/system/
+sudo cp /opt/genesis/deploy/raspberry-pi/genesis-hmi.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now captsone-twin captsone-hmi
+sudo systemctl enable --now genesis-twin genesis-hmi
 ```
 
 Check them:
 
 ```bash
-systemctl status captsone-twin captsone-hmi
+systemctl status genesis-twin genesis-hmi
 ```
 
 ```bash
@@ -84,7 +84,7 @@ curl -s http://127.0.0.1:43124/health
 ```
 
 ```bash
-journalctl -u captsone-twin -f
+journalctl -u genesis-twin -f
 ```
 
 `/health` should show `"mode": "plc"` and `"online": true`. Open `http://<pi-ip>:43123` from an operator device.
@@ -92,10 +92,10 @@ journalctl -u captsone-twin -f
 **Updating:**
 
 ```bash
-sudo systemctl stop captsone-hmi captsone-twin
-cd /opt/captsone && sudo -u captsone git pull   # or copy the new files in
-sudo -u captsone npm install && sudo -u captsone npm run build && sudo -u captsone npm test
-sudo systemctl start captsone-twin captsone-hmi
+sudo systemctl stop genesis-hmi genesis-twin
+cd /opt/genesis && sudo -u genesis git pull   # or copy the new files in
+sudo -u genesis npm install && sudo -u genesis npm run build && sudo -u genesis npm test
+sudo systemctl start genesis-twin genesis-hmi
 ```
 
 ## 5. Firewall
@@ -110,7 +110,7 @@ sudo ufw allow 43123/tcp                                # HMI
 sudo ufw enable
 ```
 
-Keep the twin service bound to `127.0.0.1` (the default `CAPTSONE_HOST`). The HMI reaches it locally; nothing else needs to.
+Keep the twin service bound to `127.0.0.1` (the default `GENESIS_HOST`). The HMI reaches it locally; nothing else needs to.
 
 ## 6. Optional: kiosk screen
 
@@ -118,7 +118,7 @@ On Raspberry Pi OS Desktop (64-bit), autostart a full-screen browser for the loc
 
 ```bash
 mkdir -p ~/.config/autostart
-cp /opt/captsone/deploy/raspberry-pi/captsone-kiosk.desktop ~/.config/autostart/
+cp /opt/genesis/deploy/raspberry-pi/genesis-kiosk.desktop ~/.config/autostart/
 ```
 
 The template launches Chromium in kiosk mode on `http://localhost:43123` and retries until the HMI is up. Disable screen blanking in the Raspberry Pi configuration tool.
@@ -127,8 +127,8 @@ The template launches Chromium in kiosk mode on `http://localhost:43123` and ret
 
 | Task | Command |
 | --- | --- |
-| Live logs | `journalctl -u captsone-twin -u captsone-hmi -f` |
+| Live logs | `journalctl -u genesis-twin -u genesis-hmi -f` |
 | PLC link state | `curl -s http://127.0.0.1:43124/health` |
-| Last snapshot on disk | `cat /opt/captsone/twin/runtime/snapshot.json` |
-| Restart after config change | `sudo systemctl restart captsone-twin` |
-| Rebuild after changing `NEXT_PUBLIC_*` | `npm run build`, then `sudo systemctl restart captsone-hmi` |
+| Last snapshot on disk | `cat /opt/genesis/twin/runtime/snapshot.json` |
+| Restart after config change | `sudo systemctl restart genesis-twin` |
+| Rebuild after changing `NEXT_PUBLIC_*` | `npm run build`, then `sudo systemctl restart genesis-hmi` |

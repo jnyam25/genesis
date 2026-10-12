@@ -14,7 +14,7 @@ Because nodes #1 and #2 drive actuators, the rules in [safety.md §2a](safety.md
 
 If your level sensors have 4–20 mA outputs, wire them to PLC analog inputs instead and skip the tank node. Fewer parts means fewer failure modes.
 
-**Firmware is in the repo** ([`firmware/`](../../firmware/README.md)): `scanner-node` and `station-node` are PlatformIO projects on the Arduino framework, sharing [`firmware/lib/captsone_node`](../../firmware/lib/captsone_node/src/captsone_node.h) (Wi-Fi, the Modbus TCP link, PLC supervision, settings and the serial console). The register numbers come from [`captsone_registers.h`](../../firmware/lib/captsone_node/src/captsone_registers.h), which `npm run tag-map` generates from [`twin/src/plc/tag-map.ts`](../../twin/src/plc/tag-map.ts); a test fails if the two drift apart. The virtual PLC's simulated nodes ([`simulated-nodes.ts`](../../twin/src/plc/simulated-nodes.ts)) follow the same contract, so the line runs end to end in software before the hardware exists.
+**Firmware is in the repo** ([`firmware/`](../../firmware/README.md)): `scanner-node` and `station-node` are PlatformIO projects on the Arduino framework, sharing [`firmware/lib/genesis_node`](../../firmware/lib/genesis_node/src/genesis_node.h) (Wi-Fi, the Modbus TCP link, PLC supervision, settings and the serial console). The register numbers come from [`genesis_registers.h`](../../firmware/lib/genesis_node/src/genesis_registers.h), which `npm run tag-map` generates from [`twin/src/plc/tag-map.ts`](../../twin/src/plc/tag-map.ts); a test fails if the two drift apart. The virtual PLC's simulated nodes ([`simulated-nodes.ts`](../../twin/src/plc/simulated-nodes.ts)) follow the same contract, so the line runs end to end in software before the hardware exists.
 
 ## 1. Hardware
 
@@ -25,7 +25,7 @@ If your level sensors have 4–20 mA outputs, wire them to PLC analog inputs ins
 | Robotic arm (node #2) | Hiwonder xArm ESP32: 6 LX-series bus servos, servo 1 is the gripper, servos 2–6 the wrist rotate … base. Servo power from the safety-relay-switched supply |
 | Lid magazine | A gravity-fed stack of lids in a fixed position the arm can reach; the top lid is always at the same height. The arm needs a clear straight approach from above |
 | Sort height sensor (node #2) | VL53L1X time-of-flight sensor on I²C, mounted above the belt at QC looking down. Height = mount distance − measured distance |
-| Label applicator (node #1) | Hobby servo driving the roller/peel mechanism (built, per the BOM) on its own 5–6 V supply from the safety-relay-switched rail. Optional label-present sensor (active low) to confirm each label |
+| Label applicator (node #1) | **STEPPERONLINE DM556Y Open Loop Stepper** and a NEMA 23 bipolar motor on the peel/tamp mechanism. The driver supply is **20–50 V DC**, switched by the safety relay. Step, direction and motor-free go to the driver's opto inputs (PU, DR, MF). Optional label-present sensor (active low) and the driver's alarm output |
 | Scanner (node #1) | Fixed-mount GM65/GM861-class module with a TTL UART, **command-trigger mode**, CR/LF suffix. For RS-232 scanners, add a MAX3232 level shifter |
 | Power | Dedicated 5 V supply (or PoE), in the electronics enclosure. Not powered from the 24 V field supply without a proper DC/DC converter |
 | Logic levels | ESP32 GPIO is **3.3 V and not 5 V / 24 V tolerant**. Use optocouplers or isolated modules for any field signal |
@@ -54,7 +54,9 @@ If your level sensors have 4–20 mA outputs, wire them to PLC analog inputs ins
 
 It writes status, length and all 32 text registers in one request, then `Scan.Done` = the container id. Reading moves nothing, so it does not wait for `RunPermit`. The PLC validates the text (`PT1|T<totalMl>|<v1>,…,<vN>[|I<rounds>]`) and publishes `Scan.ParseResult`: 0 OK, 1–6 as in [`twin/src/barcode.ts`](../../twin/src/barcode.ts), 7 `NO_READ`. A rejected container rides through unfilled and is diverted at the reject gate.
 
-**Label.** On a new `Station.LabelRequest` while permitted, the applicator servo strokes from `label_rest` to `label_apply` and back (`label_ms` each way). If the optional label sensor doesn't see a label at the end, the node sets fault bit0 instead of `LabelDone`. If the permit drops mid-stroke, the servo returns to rest and the node waits; the PLC keeps the request until the label is on.
+**Label.** On a new `Station.LabelRequest` while permitted, the node enables the DM556Y and sends `label_steps` step pulses, then the same number back (`label_us` between pulses). Direction is set before the first step. If the optional label sensor doesn't see a label at the end, or the driver alarm input is low, the node sets fault bit0 instead of `LabelDone` and turns the motor coils off. If the permit drops mid-stroke, pulsing stops and the motor is freed; the PLC keeps the request, so the stroke starts over once the permit returns.
+
+Wire **PU+, DR+ and MF+ to the DevKit's +5 V**, not to the motor supply. Each minus pin needs a small NPN or 2N7002 to ground (GPIO through 1 kΩ to the base or gate): the DM556Y's logic high is 5–24 V, and an ESP32 pin only reaches 3.3 V. In this firmware a **high GPIO turns that transistor on** (opto LED on). One step is a rising edge on `label_step` held for 5 µs — that is a falling edge on PU−, which is the edge the driver counts. A high on `label_ena` turns MF on and the coils off. Set the current DIP switches at or below the motor's rated phase current before the first move, and confirm the shaft direction with `stroke` (line stopped) before adjusting `label_steps`.
 
 **Fault bits** (`Station.ScannerNodeFaults`): bit0 labeler (no label detected), bit1 scanner (no acknowledgement to the trigger within 500 ms, command-trigger mode only). A bit reports a failed attempt. The PLC latches the fault and stops the line; the node clears the bit after the line has been stopped for 2 s, so RESET can proceed, and a problem that persists sets it again on the next attempt.
 
@@ -112,11 +114,11 @@ Both nodes keep their settings in NVS; `show` lists them, `set <key> <value>` ch
 
 | Setting | Default | Node |
 | --- | --- | --- |
-| `wifi_ssid`, `wifi_pass` | `captsone-ctl`, empty | both |
+| `wifi_ssid`, `wifi_pass` | `genesis-ctl`, empty | both |
 | `ip`, `gateway`, `subnet` | `192.168.10.31` / `.33`, `192.168.10.1`, `255.255.255.0` | both (empty `ip` = DHCP) |
 | `plc_ip`, `plc_port`, `unit_id` | `192.168.10.10`, `502`, `1` | both |
 | `scan_rx`, `scan_tx`, `scan_baud`, `scan_trig`, `scan_pin`, `scan_ms` | 16, 17, 9600, `serial`, −1, 2000 | scanner |
-| `label_pin`, `label_rest`, `label_apply`, `label_ms`, `label_sense` | 25, 10°, 120°, 600 ms, −1 | scanner |
+| `label_step`, `label_dir`, `label_ena`, `label_steps`, `label_us`, `label_sense`, `label_alarm` | 25, 26, 27, 400 steps, 500 µs, −1, −1 | scanner |
 | `bus_rx`, `bus_tx`, `bus_txen`, `bus_rxen`, `bus_echo` | 16, 17, −1, −1, 1 | station |
 | `move_ms`, `approach_ms`, `slow_ms`, `press_ms`, `grip_ms` | 1000, 700, 2500, 600, 500 | station |
 | `tolerance`, `lid_margin`, `grip_open`, `grip_close`, `p_<pose>` | 40, 30, taught | station |
@@ -130,7 +132,7 @@ Both nodes keep their settings in NVS; `show` lists them, `set <key> <value>` ch
 
 Scanner bench commands: `scan` triggers one read and prints it; `stroke` runs one applicator stroke (line stopped only). Station: `height` prints one sensor reading; `pos` prints the servo positions.
 
-**Test barcodes.** Code 128 handles `|` and `,`. Samples from [`config.ts`](../../twin/src/config.ts): `PT1|T250|100,80,70`, `PT1|T300|120,90,90|I4`, and `PT1|T200|200`, which fails on a 3-tank line with `TANK_COUNT_MISMATCH`. The scanner node forwards each one unchanged; the PLC's `Scan.ParseResult` shows the verdict.
+**Test barcodes.** Code 128 handles `|` and `,`. Samples from [`config.ts`](../../twin/src/config.ts): `PT1|T200|100,100`, `PT1|T260|130,130|I4`, and `PT1|T200|200`, which fails on the 2-tank line with `TANK_COUNT_MISMATCH` and is ejected at the scan gate. Keep each tank dose under about 140 ml so a fill finishes inside the 6 s station timeout. The scanner node forwards each one unchanged; the PLC's `Scan.ParseResult` shows the verdict.
 
 ## 6. Tank-level node firmware (optional, not in the repo)
 
@@ -162,5 +164,5 @@ every 1 s:
 - [ ] The heartbeat keeps running when the scanner, a servo or the sensor is unplugged, so the PLC can tell "node alive, device missing" (fault bit) from "node dead" (offline).
 - [ ] Writes only the registers listed for the node.
 - [ ] The arm's poses re-taught and replayed after any mechanical change; lid detection checked with and without a lid.
-- [ ] `captsone_registers.h` regenerated (`npm run tag-map`) and the firmware rebuilt after any register-map change.
+- [ ] `genesis_registers.h` regenerated (`npm run tag-map`) and the firmware rebuilt after any register-map change.
 - [ ] OTA updates, if you add them, are password-protected and only reachable from the control network.

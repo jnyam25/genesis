@@ -1,6 +1,6 @@
-# Captsone Industrial Paint Mixing System — Digital Twin
+# Genesis Industrial Paint Mixing System — Digital Twin
 
-Captsone is an industrial paint-mixing and bottling line. Empty bottles ride a belt past, in order:
+Genesis is an industrial paint-mixing and bottling line. Empty bottles ride a belt past, in order:
 - a label applicator and a barcode scanner,
 - one fill bay per tank (gravity tanks with proportional valves),
 - a robotic capping arm, which lifts a lid from a lid magazine, places it on the bottle and presses it down,
@@ -46,7 +46,7 @@ genesis/
   firmware/               # ESP32 firmware (PlatformIO)
     scanner-node/         # ESP32 #1: label applicator + barcode scanner
     station-node/         # ESP32 #2: robotic capping arm + sort sensor
-    lib/captsone_node/    # shared Modbus/register library; captsone_registers.h is generated
+    lib/genesis_node/    # shared Modbus/register library; genesis_registers.h is generated
   twin/                   # twin engine, PLC bridge, virtual PLC, tests
     src/plc/              # register map, Modbus TCP, virtual PLC, simulated ESP32 nodes, bridge, FUXA project
   hmi/                    # operator HMI (Next.js 16)
@@ -54,7 +54,50 @@ genesis/
 
 ## Quick start
 
-Requires **Node.js 20.9+** (LTS 22 recommended). From the repo root:
+The project needs **Node.js 20.9 or newer**. **Node.js 22 LTS** is the version to install; `.nvmrc` pins 22. npm is included with Node. After installing, open a new terminal so `node` and `npm` are on `PATH`, then check:
+
+```bash
+node -v
+```
+
+```bash
+npm -v
+```
+
+`node -v` should print `v22.x` (or at least `v20.9.0`).
+
+### Install Node.js
+
+**Windows (PowerShell).** This is the usual fix when PowerShell says `npm` is not recognized:
+
+```powershell
+winget install --id OpenJS.NodeJS.LTS -e
+```
+
+Or download the Windows LTS installer from [nodejs.org](https://nodejs.org) and run it. Close the current terminal and open a new one before `npm install`.
+
+**macOS:**
+
+```bash
+brew install node@22
+```
+
+Or download the macOS LTS installer from [nodejs.org](https://nodejs.org).
+
+**Linux.** Install Node.js 22 from your distribution if that package is 20.9 or newer, or use the LTS build from [nodejs.org](https://nodejs.org).
+
+**Version managers (any OS).** With [nvm](https://github.com/nvm-sh/nvm) or [fnm](https://github.com/Schniz/fnm), from the repo root (`.nvmrc` selects 22):
+
+```bash
+nvm install
+nvm use
+```
+
+On Windows, [nvm-windows](https://github.com/coreybutler/nvm-windows) uses `nvm install 22` then `nvm use 22`.
+
+### Run
+
+From the repo root after cloning:
 
 ```bash
 npm install
@@ -78,7 +121,7 @@ npm run dev
 | `npm run virtual-plc` | Only the virtual PLC (Modbus TCP on port 5020), with both ESP32 nodes simulated. `VPLC_NODES=scanner`, `station` or `all` uses real ESP32 nodes instead ([docs/configuration.md](docs/configuration.md#virtual-plc-npm-run-virtual-plc)) |
 | `npm run fuxa` | FUXA SCADA at http://127.0.0.1:1881 (editor `/editor`, operator view `/home`). Installs FUXA into `deploy/fuxa` on first use ([docs/prototype/scada.md](docs/prototype/scada.md)) |
 | `npm run fuxa:project` | Regenerates the FUXA project from the register map and loads it into a running FUXA |
-| `npm run tag-map` | Regenerates the register tables in [docs/prototype/io-map.md](docs/prototype/io-map.md) and the firmware header `captsone_registers.h` |
+| `npm run tag-map` | Regenerates the register tables in [docs/prototype/io-map.md](docs/prototype/io-map.md) and the firmware header `genesis_registers.h` |
 | `npm test` | Automated tests (twin engine, Modbus, virtual PLC ↔ bridge, simulated ESP32 nodes, generated files) |
 | `npm run build` then `npm start` | Production |
 | `npm run doctor` | Environment check |
@@ -89,8 +132,9 @@ Moving the project to another computer, or having install problems: see **[INSTA
 
 Start at **[docs/prototype/README.md](docs/prototype/README.md)**, and read **[docs/prototype/safety.md](docs/prototype/safety.md)** before powering hardware. In short:
 - the team's Allen-Bradley Micro850 PLC (2080-L50E-48QBB) supervises the line (belt, valves, diverters, E-Stop monitoring) with a touch panel or hardwired buttons for local control; it's programmed with the free CCW Standard Edition;
-- two ESP32 nodes on Wi-Fi execute PLC requests and report back: the scanner node runs the label applicator and forwards the raw barcode text, and the station node runs the robotic capping arm (a Hiwonder xArm) and measures the bottle height at the sort sensor. The **PLC makes every decision**: it validates the barcode, sequences the arm, classifies the bottle type and latches a station fault when a node fails or goes offline ([docs/prototype/esp32.md](docs/prototype/esp32.md));
-- a monitoring PC (or a Raspberry Pi) runs the bridge (`CAPTSONE_MODE=plc`), the HMI and the SCADA, [FUXA](https://github.com/frangoteam/FUXA) (open source, MIT), installed natively with `npm run fuxa` ([docs/prototype/scada.md](docs/prototype/scada.md)). Nothing in the stack needs a software subscription ([docs/prototype/bom.md §2a](docs/prototype/bom.md#2a-software-no-subscriptions)).
+- two ESP32 nodes on Wi-Fi execute PLC requests and report back: the scanner node runs the label applicator (a STEPPERONLINE DM556Y Open Loop Stepper and a NEMA 23 motor) and forwards the raw barcode text, and the station node runs the robotic capping arm (a Hiwonder xArm) and measures the bottle height at the sort sensor. The **PLC makes every decision**: it validates the barcode, sequences the arm, classifies the bottle type and latches a station fault when a node fails or goes offline ([docs/prototype/esp32.md](docs/prototype/esp32.md));
+- the conveyor uses a DC motor speed controller, touch sensors detect a bottle at the dry stations, and an ONN-M4W wall-mounted stack light (red / yellow / green, with buzzer) shows line status;
+- a monitoring PC (or a Raspberry Pi) runs the bridge (`GENESIS_MODE=plc`), the HMI and the SCADA, [FUXA](https://github.com/frangoteam/FUXA) (open source, MIT), installed natively with `npm run fuxa` ([docs/prototype/scada.md](docs/prototype/scada.md)). Nothing in the stack needs a software subscription ([docs/prototype/bom.md §2a](docs/prototype/bom.md#2a-software-no-subscriptions)).
 
 Everything is specified by one register map ([`twin/src/plc/tag-map.ts`](twin/src/plc/tag-map.ts), protocol version 4, tables in [docs/prototype/io-map.md](docs/prototype/io-map.md)). The firmware header and the FUXA project are generated from it.
 
@@ -99,8 +143,8 @@ Everything is specified by one register map ([`twin/src/plc/tag-map.ts`](twin/sr
 See [docs/engine-design.md](docs/engine-design.md) for the full reasoning.
 
 - **Dynamic paint sources.**
-  - Eight fixed tank slots (`T1..T8`), each with its own bay and PLC register block.
-  - Adding a tank is a config edit, or an "add tank" command at runtime, plus barcodes with one more volume field.
+  - Two tank slots (`T1` and `T2`), each with its own bay and PLC register block.
+  - Removing a tank is a config edit or a runtime command. Barcodes list one volume per tank.
   - No controller or parser rewrite.
 - **Custom preprinted barcode.** `PT1|T<totalMl>|<v1>,...,<vN>[|I<rounds>]` encodes per-tank volumes directly (not a recipe-id lookup).
 - **mix_sequence and belt order.**

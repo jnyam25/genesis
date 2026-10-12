@@ -9,7 +9,7 @@ curl -s http://127.0.0.1:43124/health
 | `/health` shows | Layer | Go to |
 | --- | --- | --- |
 | Connection refused | Twin service not running | §1 |
-| `"mode": "sim"` | Wrong mode | Set `CAPTSONE_MODE=plc` in `/etc/captsone/captsone.env`, restart |
+| `"mode": "sim"` | Wrong mode | Set `GENESIS_MODE=plc` in `/etc/genesis/genesis.env`, restart |
 | `online: false`, `reason: "connecting to PLC …"` | Network / Modbus | §2 |
 | `online: false`, `reason: "PLC heartbeat stopped …"` | PLC program | §3 |
 | `online: false`, `reason: "PLC register map version …"` | Version mismatch | §3 |
@@ -22,7 +22,7 @@ curl -s http://127.0.0.1:43124/health
 
 | Symptom | Fix |
 | --- | --- |
-| `systemctl status captsone-twin` shows failed | `journalctl -u captsone-twin -n 50`. Common causes: `PLC_HOST` missing, wrong Node path in the unit file (nvm installs), `dist/` missing (run `npm run build`) |
+| `systemctl status genesis-twin` shows failed | `journalctl -u genesis-twin -n 50`. Common causes: `PLC_HOST` missing, wrong Node path in the unit file (nvm installs), `dist/` missing (run `npm run build`) |
 | `port 43124 is already in use` | Another instance is running (e.g. a manual `npm run dev`). Stop it |
 
 ## 2. PLC link (Modbus TCP)
@@ -42,7 +42,7 @@ curl -s http://127.0.0.1:43124/health
 | Symptom | Fix |
 | --- | --- |
 | Heartbeat stopped | PLC in Stop/Program mode or faulted, or the publish subroutine isn't being called |
-| Version mismatch | `Sys.ProtocolVersion` must equal `PROTOCOL_VERSION` in `twin/src/plc/tag-map.ts` (currently 4). Also reflash the ESP32 nodes after a map change: their `captsone_registers.h` is generated from `tag-map.ts` by `npm run tag-map` |
+| Version mismatch | `Sys.ProtocolVersion` must equal `PROTOCOL_VERSION` in `twin/src/plc/tag-map.ts` (currently 4). Also reflash the ESP32 nodes after a map change: their `genesis_registers.h` is generated from `tag-map.ts` by `npm run tag-map` |
 | Commands do nothing | Wrong `PLC_COIL_BASE`; PLC doesn't reset coils (the next press has no rising edge); reset refused because `SAFETY_OK = 0`; START refused because a station fault is latched (reason 9, see §6) |
 | Containers never get a recipe | Scan mailbox: the scanner node must write `Scan.Done` = `Scan.Request` (after `Scan.Status`, `Scan.Length` and `Scan.Text`). Then check `Scan.ParseResult` for that `Scan.ResultId`: non-zero means the PLC rejected the barcode (7 = NO_READ, 3 = the volume count doesn't match `Sys.TankCount`). The node only forwards raw text; the validation is the PLC's |
 | Every container JAMMED at the same station | Presence sensor not seen (wiring, alignment, debounce), stopper not releasing, or timeout too short for the belt speed. At LABEL, SCAN, CAP or QC: the ESP32 node didn't report within `stationNodeTimeoutSec` (15 s); check its serial console |
@@ -54,7 +54,7 @@ curl -s http://127.0.0.1:43124/health
 
 | Symptom | Fix |
 | --- | --- |
-| Red/Green/Blue tanks instead of the real ones | The HMI was built with the mock source. Rebuild with `npm run build` at the repo root, then restart `captsone-hmi` |
+| Red/Green/Blue tanks instead of the real ones | The HMI was built with the mock source. Rebuild with `npm run build` at the repo root, then restart `genesis-hmi` |
 | "Feed stale" while `/health` is online | `TWIN_HTTP_URL` in the env file doesn't point at the twin service. Check `http://<pi>:43123/api/twin/state`: a 502 includes the reason |
 | Can't reach the HMI from another device | Firewall (allow 43123), wrong network, or the service is bound to localhost |
 
@@ -81,7 +81,7 @@ A station fault latches in `Sys.FaultCode` (the first one; the HMI event log lis
 
 | `Sys.FaultCode` | Meaning | Fix |
 | --- | --- | --- |
-| 1 `LABELER` | Scanner node set `Station.ScannerNodeFaults` bit0: label applicator fault | Check the applicator for a jam, its driver and its supply (switched by the safety relay, so reset it first). With the line stopped, the scanner node's console `stroke` runs one applicator stroke |
+| 1 `LABELER` | Scanner node set `Station.ScannerNodeFaults` bit0: label applicator fault | Check the peel mechanism for a jam, the DM556Y alarm (over/under-voltage or over-current) and the motor supply (switched by the safety relay, so reset it first). Confirm the DIP current is at or below the motor rating. With the line stopped, the scanner node's console `stroke` runs one applicator stroke |
 | 2 `SCANNER` | Scanner node set bit1: the barcode scanner module isn't answering | UART wiring (TX/RX crossed), scanner power, baud rate (`scan_baud`, default 9600) and trigger mode (`scan_trig`: a GM65-class module must be in command-trigger mode for `serial`). The console `scan` command triggers one read without the PLC |
 | 3 `ARM_SERVO` | Station node set `Station.StationNodeFaults` bit0, or the arm reported `SERVO_ERROR` | On the station node console, `status` shows the cause: a servo stopped answering or missed its position (servo supply off because the safety relay isn't reset, bus wiring, an overloaded joint), poses **NOT TAUGHT**, or teach mode still **ON** (`teach off`) |
 | 4 `ARM_NO_LID` | `PICK_LID` closed on nothing three times in a row | Lid magazine empty or misaligned. Refill it with the line stopped. If it isn't empty, re-teach `mag_pick`, and check that `grip_close` was taught with the gripper closed on **nothing** (lid detection compares the gripper position with it; `lid_margin`) |

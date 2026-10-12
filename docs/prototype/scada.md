@@ -39,7 +39,7 @@ Derived from the register map ([io-map.md §4](io-map.md#4-register-map-modbus-t
 | R5 | **Alarm list** with active/cleared state, timestamps and acknowledgement | Replaces "last 8 events" with a journal |
 | R6 | **Trends** of any logged value over a chosen time range | Review of runs and the final presentation |
 | R7 | Runs on the team's **Windows laptop**; ideally also on a **Raspberry Pi / Linux** | The monitoring PC may be either ([raspberry-pi.md](raspberry-pi.md)) |
-| R8 | **No subscription**: free to use indefinitely, no leased or time-limited licence, and terms that allow a university capstone | Team decision; the hardware BOM is also over the ~$500 budget ([bom.md §4](bom.md#4-budget)) |
+| R8 | **No subscription**: free to use indefinitely, no leased or time-limited licence, and terms that allow a student project | Team decision; the hardware BOM is also over the ~$500 budget ([bom.md §4](bom.md#4-budget)) |
 | R9 | **Student-friendly**: installs in an afternoon, documented, active community | Limited time in one semester |
 | R10 | **Read-only by default**, with user accounts if exposed beyond one PC | §1 and §6.5 |
 | R11 | Can also read the **virtual PLC** on port 5020 | Develop and test before the hardware exists (`npm run dev:plc-sim`) |
@@ -191,7 +191,7 @@ $env:PLC_HOST="192.168.10.10"; $env:PLC_PORT="502"; npm run fuxa:project
 
 ### 5.3 Tags, alarms and the overview screen (generated)
 
-[`twin/src/plc/fuxa-project.ts`](../../twin/src/plc/fuxa-project.ts) builds the FUXA project from the same register table as [io-map.md](io-map.md#4-register-map-modbus-tcp) and the bridge, so the tags can't drift from the PLC. `npm run fuxa-project --prefix twin` writes it to [`deploy/fuxa/captsone-project.json`](../../deploy/fuxa/captsone-project.json); `npm run fuxa:project` also loads it into the running FUXA. The twin tests check that every screen item and alarm points at an existing tag.
+[`twin/src/plc/fuxa-project.ts`](../../twin/src/plc/fuxa-project.ts) builds the FUXA project from the same register table as [io-map.md](io-map.md#4-register-map-modbus-tcp) and the bridge, so the tags can't drift from the PLC. `npm run fuxa-project --prefix twin` writes it to [`deploy/fuxa/genesis-project.json`](../../deploy/fuxa/genesis-project.json); `npm run fuxa:project` also loads it into the running FUXA. The twin tests check that every screen item and alarm points at an existing tag.
 
 - **Tags:** one `UInt16` holding-register tag per register-map entry, named as in the map (`Sys.LineState`, `Tank1.LevelMl` …). The 32 raw barcode text registers (`Scan.Text*`, 304–335) are left out; the PLC's parse result and recipe id (336–338) are included.
 - **Addresses:** FUXA addresses are **1-based**, like CCW: register-map holding register **N** is FUXA address **N + 1** (FUXA sends N on the wire). The generator does this. `Sys.ProtocolVersion` (register 0) is address 1 and must read **4**; `Sys.PlcHeartbeat` (register 1) keeps changing.
@@ -199,7 +199,7 @@ $env:PLC_HOST="192.168.10.10"; $env:PLC_PORT="502"; npm run fuxa:project
 - **Bits:** status words (`Sys.LineState`, `Tank<k>.Flags`, `Station.ArmStatus`) are shown as lamps that test one bit (FUXA's bitmask), so no scripts are needed.
 - **History:** DAQ logging is on for every register except the heartbeat counters: a value is stored on every change and at least once a minute (§6.1).
 - **Alarms:** the §6.2 alarms are part of the project.
-- **Screen:** one dark **Line overview** view: line state and E-Stops, production counts and OEE, stations (last scan result, robotic arm status and result, sort height), tanks, and a command panel (read-only text unless `FUXA_COMMANDS=1`).
+- **Screen:** a light **Line overview** drawn with FUXA's process widgets: animated conveyor pipes, ISA tanks, valves and nozzles, a spinning conveyor motor, a stroking lid-press piston, a capping rotor, vertical tank-level bars, a live tank-level chart, an OEE bar, status lamps, production counts, and a command panel. E-Stop, station-fault, and low-tank banners blink in place. Clicking a tank, the arm, the press, or a station marker opens a diagnostic card. A **Trends** page charts tank level and throughput. The command panel is read-only text unless the project is generated with `FUXA_COMMANDS=1`, which adds START, STOP, RESET, JOG, digital E-Stop, release, and fire reject.
 
 Add more views, charts or tags in the FUXA editor if needed, then keep them as described in §5.5.
 
@@ -217,11 +217,11 @@ FUXA starts **without login**, and its default account is `admin` / `123456`. Be
 
 ### 5.5 Keep the project in git
 
-FUXA saves the project to its internal database (`deploy/fuxa/data`, not in git) after every change. The committed source of truth is the generator and its output, [`deploy/fuxa/captsone-project.json`](../../deploy/fuxa/captsone-project.json), which always matches the repo's register map (`Sys.ProtocolVersion`). When the register map changes, run `npm run fuxa:project` to regenerate and reload it.
+FUXA saves the project to its internal database (`deploy/fuxa/data`, not in git) after every change. The committed source of truth is the generator and its output, [`deploy/fuxa/genesis-project.json`](../../deploy/fuxa/genesis-project.json), which always matches the repo's register map (`Sys.ProtocolVersion`). When the register map changes, run `npm run fuxa:project` to regenerate and reload it.
 
 `npm run fuxa:project` and `npm run fuxa -- --load` **replace** the whole FUXA project. Changes made only in the FUXA editor are lost unless you either:
 - add them to the generator (preferred for anything permanent: tags, alarms, the overview screen), or
-- export them with **Save Project As** to a separate file such as `deploy/fuxa/captsone-custom.json`, commit that, and load it with **Open Project** instead of regenerating.
+- export them with **Save Project As** to a separate file such as `deploy/fuxa/genesis-custom.json`, commit that, and load it with **Open Project** instead of regenerating.
 
 ## 6. Integration notes
 
@@ -251,16 +251,16 @@ For per-container fill accuracy, use the `CONTAINER_ACCEPTED` / `CONTAINER_REJEC
 
 Build alarms from **state bits and codes** (an alarm is active while the condition holds), and journal the **event ring** separately (events are one-off records). In FUXA, alarms are set on tags ([alarm guide](https://frangoteam.github.io/FUXA/)); a bit is tested with the alarm's bitmask and a code with a min/max range. The PLC makes every fault decision: it latches **one** `Sys.FaultCode` and sets `LineState` bit3, so SCADA only reports what the PLC decided.
 
-The **Generated** column marks the 18 alarms already in the generated project; add the others in the FUXA editor (and keep them as in §5.5) if the team wants them.
+The **Generated** column marks the alarms already in the generated project; add the others in the FUXA editor (and keep them as in §5.5) if the team wants them.
 
 | Condition | Source | Priority | Generated |
 | --- | --- | --- | --- |
 | E-Stop active | `LineState` bit1 | Critical | Yes |
 | Line fault: labeler, barcode scanner, arm servo, arm found no lid, arm lost the lid, sort sensor, scanner node offline, station node offline | `Sys.FaultCode` = 1…8 (one alarm per code, text from the PLC's fault table) | High | Yes (8) |
 | Safety reset required | `LineState` bit7 | Warning | Yes |
-| Tank k low | `Tank<k>.Flags` bit2 | Warning | Yes (one per tank slot, 8) |
-| Digital E-Stop latched | `LineState` bit5 | Critical | No |
-| Physical E-Stop pressed (panel / line entry / line exit) | `LineState` bit6 + `PhysicalEStopMask` bits 0/1/2 | Critical, one alarm per button | No |
+| Tank k low | `Tank<k>.Flags` bit2 | Warning | Yes (one per tank slot, 2) |
+| Digital E-Stop latched | `LineState` bit5 | Critical | Yes |
+| Physical E-Stop pressed (line start / line end) | `PhysicalEStopMask` bits 0 and 1 | Critical, one alarm per button | Yes |
 | Safety circuit open | `LineState` bit2 = 0 | High | No |
 | ESP32 node fault bits (raw report behind a fault code) | `Station.ScannerNodeFaults` (431: bit0 labeler, bit1 scanner), `Station.StationNodeFaults` (432: bit0 arm, bit1 sort sensor) | Info | No |
 | Bridge link lost (as seen by the PLC) | `LineState` bit4 = 0 | Warning | No |
@@ -306,7 +306,7 @@ None of these makes Modbus safe on an open network. Safety still comes only from
 
 ### Open questions for the team
 
-- **Command buttons?** Does SCADA need command buttons for the demo (`FUXA_COMMANDS=1`), or is it purely monitoring? (Recommendation: read-only, the default.)
+- **Command buttons.** The demo overview is generated with `FUXA_COMMANDS=1` (START, STOP, RESET, JOG, digital E-Stop, release, fire reject). The generator still omits every coil when that variable is unset, so a monitoring-only project is one command away. Turn login on before the SCADA is reachable beyond this PC (§5.4).
 - **Host.** Will FUXA run on the same laptop as the bridge, or on a separate Pi?
 - **Retention.** How long must history be kept: one demo day, a week, or the whole semester? This sets the DAQ database (SQLite vs InfluxDB) and disk use.
 - **Micro850 behaviour** to confirm on hardware: does it drop idle or half-open Modbus connections, and after how long? Does a read that touches an unmapped address return an exception or zeros?

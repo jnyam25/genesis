@@ -49,16 +49,16 @@ Before designing the panel, list any plug-in or expansion modules already fitted
 
 ### IO against the requirement
 
-[io-map.md §3](io-map.md#3-io-count-and-sizing) needs **18 DI / 7 DO / 3–4 AO** for 3 tanks, or about **26 DI / 21 DO / 4 AO** with stoppers, the recommended extra inputs and indicators.
+[io-map.md §3](io-map.md#3-io-count-and-sizing) needs **15 DI / 8 DO / 2–3 AO** for 2 tanks, or about **23 DI / 20 DO / 3 AO** with stoppers, the recommended extra inputs and indicators.
 
 | Need | 2080-L50E-48QBB | What to add |
 | --- | --- | --- |
-| Digital inputs | 28 embedded: covers the required 18 and the full 26 | Nothing. With everything fitted only 2 are spare; a **2080-IQ4OB4** plug-in (4 DI + 4 sourcing DO) adds headroom |
-| Digital outputs | 20 embedded: covers the required 7 plus 9 stoppers, with 4 left for the 5 optional indicators (stack light ×3, RESET lamp, buzzer) | **One short** with every indicator. Drop the optional buzzer (or sound it from the red stack-light output), or use the 2080-IQ4OB4's outputs |
-| Analog outputs (valve angles, belt speed) | None embedded | **Two 2080-OF2 plug-ins** (2 channels each, 0–10 V or 0–20 mA, 12-bit, non-isolated) give 4 channels and use 2 of the 5 slots. One 2085-OF4 expansion module (4 channels, isolated) is the alternative |
+| Digital inputs | 28 embedded: covers the required 15 and the full 23 | Nothing. With everything fitted 5 are spare |
+| Digital outputs | 20 embedded: covers the required 8 plus 7 stoppers, with 5 left for the 5 indicator outputs (ONN-M4W red, yellow, green and buzzer, plus the RESET lamp) | Nothing spare once stoppers and the tower are both fitted. One-bottle mode frees the stopper outputs |
+| Analog outputs (valve angles, belt speed) | None embedded | **One 2080-OF2** (2 channels, 0–10 V or 0–20 mA, 12-bit, non-isolated) covers the two valves. Add a second OF2, or use a PWM output, only if belt speed is an analog channel |
 
-- **Belt speed without an AO channel.** Drive the motor driver's speed input from one of the PWM outputs if the driver accepts PWM. The valves then need only 3 AO channels, which is still two 2080-OF2s.
-- **One-bottle mode** ([bom.md D1](bom.md#6-open-decisions-for-the-team)) drops the 9 stopper outputs, so the embedded outputs cover everything with room to spare.
+- **Belt speed without an AO channel.** Drive the conveyor speed controller's speed input from one of the PWM outputs if the controller accepts PWM. The two valves then need one 2080-OF2.
+- **One-bottle mode** ([bom.md D1](bom.md#6-open-decisions-for-the-team)) drops the 7 stopper outputs, so the embedded outputs cover everything with room to spare.
 - **More tanks.** Each extra tank adds 2 inputs, 2 outputs (valve shutoff and stopper) and 1 analog output. The embedded IO runs out at about 4 tanks with stoppers; beyond that add a 2085-IQ16 / 2085-OB16 and a third 2080-OF2 or a 2085-OF4.
 - **Distributor prices in September 2026** (they vary a lot, so get a quote): 2080-OF2 about $120–160; 2085-OF4 about $210–350. **Check the lab's parts bin first.**
 - DC inputs must match the sensors (PNP sensors → wire the input common for sourcing sensors). The sourcing outputs switch +24 V to the load; return the load to 0 V.
@@ -316,7 +316,7 @@ END_IF;
    ContTargetMl_x10 := Total * 10, lane from Total (4c). Then publish MB_Scan[36..38]. *)
 ```
 
-Negative volumes are only recorded once the count check passes, like `barcode.ts` (a `-0` counts as 0). Test the program with the labels in the twin's tests before connecting the scanner: `PT1|T250|100,80,70` → 0, `PT1|T200|200` → 3 with 3 tanks, `PT1|T250|100,80,60` → 5, `XX1|T250|100,80,70` → 1, `PT1|250|100,80,70` → 2, `PT1|T250|100,8a,70` → 6, `PT1|T250|100,80,70|I0` → 6.
+Negative volumes are only recorded once the count check passes, like `barcode.ts` (a `-0` counts as 0). Test the program with the labels in the twin's tests before connecting the scanner: `PT1|T200|100,100` → 0, `PT1|T200|200` → 3 on the 2-tank line, `PT1|T200|100,90` → 5, `XX1|T200|100,100` → 1, `PT1|200|100,100` → 2, `PT1|T200|100,8a` → 6, `PT1|T200|100,100|I0` → 6.
 
 ### 4b. Robotic arm sequencer (CAP)
 

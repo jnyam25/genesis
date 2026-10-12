@@ -1,17 +1,6 @@
 /**
- * Shared line layout model.
- *
- * Both the 2D schematic and the 3D scene render the *same* physical line, so
- * they share one geometric model. Stations are placed along the X axis in
- * "line units" (1 unit ~= 1 meter) in belt order: labeling, barcode scan, one
- * fill bay per tank, capping arm (lifts a lid and places it), sort sensor,
- * reject diverter, sort diverter. Tanks sit above their fill bays; the reject lane branches off the
- * reject diverter downward; after the sort diverter Lane A runs straight on and
- * Lane B branches off upward.
- *
- * The layout is computed from the live `tanks[]` array, so adding a tank in the
- * twin config re-positions fill bays and lengthens the conveyor in both views
- * with no per-view code change.
+ * Line geometry matching the concept: scan gate, QR reject, two tanks,
+ * capping arm, lid press, fill reject, then lane 1 and lane 2.
  */
 
 import type { Container, Tank } from "./types";
@@ -21,8 +10,10 @@ export interface StationPosition {
   kind:
     | "label"
     | "scan"
+    | "qr-reject"
     | "nozzle"
     | "cap"
+    | "press"
     | "qc"
     | "gate"
     | "sort"
@@ -54,11 +45,11 @@ export interface LineLayout {
   laneBY: number;
 }
 
-const LABEL_X = 0.6;
-const SCAN_X = 1.6;
-const NOZZLE_SPACING = 1.1;
-const NOZZLE_START = 2.7;
-const CAP_OFFSET = 1.2;
+const SCAN_X = 1.2;
+const QR_REJECT_X = 2.15;
+const NOZZLE_SPACING = 1.15;
+const NOZZLE_START = 3.3;
+const CAP_OFFSET = 1.35;
 const STATION_SPACING = 1.0;
 const OUTPUT_OFFSET = 1.4;
 const TANK_Y = 1.6;
@@ -69,8 +60,8 @@ const BELT_HALF = 0.22;
 export function computeLayout(tanks: Tank[]): LineLayout {
   const stations: StationPosition[] = [];
 
-  stations.push({ id: "label", kind: "label", x: LABEL_X, y: 0, label: "Labeling" });
-  stations.push({ id: "scan", kind: "scan", x: SCAN_X, y: 0, label: "Barcode Scan" });
+  stations.push({ id: "scan", kind: "scan", x: SCAN_X, y: 0, label: "Scan gate" });
+  stations.push({ id: "qr-reject", kind: "qr-reject", x: QR_REJECT_X, y: REJECT_Y, label: "QR reject" });
 
   tanks.forEach((tank, i) => {
     stations.push({
@@ -89,18 +80,20 @@ export function computeLayout(tanks: Tank[]): LineLayout {
       : NOZZLE_START;
 
   const capX = lastNozzleX + CAP_OFFSET;
-  const qcX = capX + STATION_SPACING;
+  const pressX = capX + STATION_SPACING;
+  const qcX = pressX + STATION_SPACING;
   const gateX = qcX + STATION_SPACING;
   const sortX = gateX + STATION_SPACING;
   const outputX = sortX + OUTPUT_OFFSET;
 
-  stations.push({ id: "cap", kind: "cap", x: capX, y: 0, label: "Capping Arm" });
-  stations.push({ id: "qc", kind: "qc", x: qcX, y: 0, label: "Sort Sensor" });
-  stations.push({ id: "gate", kind: "gate", x: gateX, y: 0, label: "Reject Diverter" });
-  stations.push({ id: "sort", kind: "sort", x: sortX, y: 0, label: "Sort Diverter" });
-  stations.push({ id: "output-a", kind: "output", x: outputX, y: 0, label: "Lane A", lane: 0 });
-  stations.push({ id: "output-b", kind: "output", x: outputX, y: LANE_B_Y, label: "Lane B", lane: 1 });
-  stations.push({ id: "reject", kind: "reject", x: gateX, y: REJECT_Y, label: "Reject Lane" });
+  stations.push({ id: "cap", kind: "cap", x: capX, y: 0, label: "Robotic capping arm" });
+  stations.push({ id: "press", kind: "press", x: pressX, y: 0, label: "Lid press" });
+  stations.push({ id: "qc", kind: "qc", x: qcX, y: 0, label: "Fill check" });
+  stations.push({ id: "gate", kind: "gate", x: gateX, y: 0, label: "Fill reject" });
+  stations.push({ id: "sort", kind: "sort", x: sortX, y: 0, label: "Sort / split" });
+  stations.push({ id: "output-a", kind: "output", x: outputX, y: 0, label: "Lane 1", lane: 0 });
+  stations.push({ id: "output-b", kind: "output", x: outputX, y: LANE_B_Y, label: "Lane 2", lane: 1 });
+  stations.push({ id: "reject", kind: "reject", x: gateX, y: REJECT_Y, label: "Fill reject slide" });
 
   return {
     stations,
@@ -130,15 +123,17 @@ export function stationForStatus(
     case "label":
     case "scan":
     case "cap":
+    case "press":
     case "qc":
     case "sort":
       return byId(layout, status);
+    case "scan-rejected":
+      return byId(layout, "qr-reject");
     case "mix":
       return nozzles[nozzles.length - 1] ?? byId(layout, "scan");
     case "output":
       return byId(layout, container.lane === 1 ? "output-b" : "output-a");
     case "rejected":
-    case "scan-rejected":
       return byId(layout, "reject");
   }
   const m = /^fill-(\d+)$/.exec(status);

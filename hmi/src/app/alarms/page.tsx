@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AlertTriangle, Bell, ShieldAlert, WifiOff } from "lucide-react";
 import { useTwin } from "@/lib/twin/twin-context";
-import { clockTime } from "@/lib/format";
+import { clockTime, ml, tankIsLow } from "@/lib/format";
 import type { TwinEvent } from "@/lib/twin/types";
 
 interface ActiveAlarm {
@@ -78,20 +78,12 @@ export default function AlarmsPage() {
     });
   }
   for (const t of state.tanks) {
-    const ratio = t.levelMl / t.capacityMl;
-    if (ratio < 0.15) {
-      active.push({
-        id: `tank-${t.id}-crit`,
-        severity: "error",
-        source: `Tank ${t.name}`,
-        message: `Tank ${t.name} CRITICAL — ${Math.round(ratio * 100)}% remaining`,
-      });
-    } else if (ratio < 0.3) {
+    if (tankIsLow(t)) {
       active.push({
         id: `tank-${t.id}-low`,
         severity: "warn",
         source: `Tank ${t.name}`,
-        message: `Tank ${t.name} low — ${Math.round(ratio * 100)}% remaining`,
+        message: `Tank ${t.name} low — ${ml(t.levelMl)} ml`,
       });
     }
   }

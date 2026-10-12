@@ -11,12 +11,8 @@
  * Station-based container status, in belt order. Mirrors `HmiContainerStatus`
  * in twin/src/hmi.ts — keep in sync.
  *
- * - `qc` covers the sort sensor and the reject diverter; a bad-barcode
- *   container also reports `qc` while it rides unfilled from scan to the
- *   reject diverter.
- * - `mix` only occurs on lines configured with a mixer.
- * - Final statuses: `output` (accepted, see `Container.lane`), `rejected`, and
- *   `scan-rejected` (bad barcode, rejected into the normal reject lane).
+ * Final statuses: `output` (lane 1 or 2), `rejected` (fill/cap reject),
+ * and `scan-rejected` (QR reject slide, before filling).
  */
 export type ContainerStatus =
   | "idle"
@@ -26,6 +22,7 @@ export type ContainerStatus =
   | `fill-${number}`
   | "mix"
   | "cap"
+  | "press"
   | "qc"
   | "sort"
   | "output"
@@ -36,10 +33,12 @@ export interface Tank {
   name: string;
   /** Hex color used for the paint, e.g. "#e53935". */
   colorCode: string;
-  /** Current fill in milliliters. */
+  /** Current fill in milliliters, 0.1 ml (the PLC's × 10 register). */
   levelMl: number;
   /** Total capacity in milliliters. */
   capacityMl: number;
+  /** PLC Tank.Flags LOW. Optional on older sources. */
+  low?: boolean;
 }
 
 /** An operator-editable tank name + color. */
@@ -50,7 +49,7 @@ export interface TankColor {
 }
 
 /**
- * A tank slot (T1..T8, enabled or not) with its editable name/color.
+ * A tank slot (T1 or T2) with its editable name and color.
  * Mirrors `HmiTankSlot` in twin/src/hmi.ts — keep in sync.
  */
 export interface TankSlot extends TankColor {

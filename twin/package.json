@@ -1,8 +1,8 @@
 {
-  "name": "captsone-paint-twin",
+  "name": "genesis-paint-twin",
   "version": "0.1.0",
   "private": true,
-  "description": "Captsone Industrial Paint Mixing System digital twin — simulation engine, virtual PLC and PLC bridge serving the live JSON snapshot contract for the HMI.",
+  "description": "Genesis Industrial Paint Mixing System digital twin — simulation engine, virtual PLC and PLC bridge serving the live JSON snapshot contract for the HMI.",
   "type": "commonjs",
   "main": "dist/run.js",
   "scripts": {

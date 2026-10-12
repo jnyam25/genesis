@@ -28,12 +28,12 @@ if (!script) {
 
 for (const project of PROJECTS) {
   if (!existsSync(join(ROOT, project, "node_modules"))) {
-    console.error(`[captsone] ${project}/node_modules is missing — run \`npm install\` at the repo root first.`);
+    console.error(`[genesis] ${project}/node_modules is missing — run \`npm install\` at the repo root first.`);
     process.exit(1);
   }
 }
 if (script === "start" && !existsSync(join(ROOT, "hmi", ".next", "BUILD_ID"))) {
-  console.error("[captsone] no production build found — run `npm run build` first.");
+  console.error("[genesis] no production build found — run `npm run build` first.");
   process.exit(1);
 }
 
@@ -65,13 +65,13 @@ function stopAll(code) {
 }
 
 const twinEnv = plcSim
-  ? { ...process.env, CAPTSONE_MODE: "plc", PLC_HOST: "127.0.0.1", PLC_PORT: String(VPLC_PORT) }
+  ? { ...process.env, GENESIS_MODE: "plc", PLC_HOST: "127.0.0.1", PLC_PORT: String(VPLC_PORT) }
   : { ...process.env };
 
 if (plcSim) {
   // Compile the twin once so the virtual PLC and the bridge don't run two
   // TypeScript compilers against the same dist/ concurrently.
-  console.log("[captsone] building twin for --plc-sim ...");
+  console.log("[genesis] building twin for --plc-sim ...");
   const build = spawnSync(...npmSpawnArgs(["run", "build"], { cwd: join(ROOT, "twin"), stdio: "inherit" }));
   if (build.status !== 0) process.exit(build.status ?? 1);
 }
@@ -94,7 +94,7 @@ for (const [name, dir, npmScript, env] of processes) {
   pipe(child.stderr, name);
   child.on("exit", (code) => {
     if (!shuttingDown) {
-      console.log(`[captsone] ${name} exited (code ${code}) — stopping the rest.`);
+      console.log(`[genesis] ${name} exited (code ${code}) — stopping the rest.`);
       stopAll(code ?? 1);
     }
   });
@@ -104,7 +104,7 @@ for (const [name, dir, npmScript, env] of processes) {
 const hmiSource = processes.find(([name]) => name === "hmi")[3].NEXT_PUBLIC_TWIN_SOURCE;
 const source = script === "start" ? "as built" : (hmiSource ?? "from hmi/.env.local");
 console.log(
-  `[captsone] running "${script}" in ${processes.map(([name]) => name).join(" + ")}\n` +
+  `[genesis] running "${script}" in ${processes.map(([name]) => name).join(" + ")}\n` +
     (plcSim ? `           Virtual PLC: Modbus TCP 127.0.0.1:${VPLC_PORT} (twin runs in PLC-bridge mode)\n` : "") +
     `           HMI:  http://localhost:${HMI_PORT}  (data source: ${source})\n` +
     `           Twin: http://127.0.0.1:${TWIN_PORT}/  (snapshot: /snapshot, HMI state: /hmi/state, health: /health)\n` +

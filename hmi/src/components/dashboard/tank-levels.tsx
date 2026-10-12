@@ -7,14 +7,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { pct } from "@/lib/format";
+import { ml, pct, tankIsLow } from "@/lib/format";
 import type { Tank } from "@/lib/twin/types";
 
-function levelState(t: Tank): "ok" | "low" | "critical" {
-  const r = t.levelMl / t.capacityMl;
-  if (r < 0.15) return "critical";
-  if (r < 0.3) return "low";
-  return "ok";
+function levelState(t: Tank): "ok" | "low" {
+  return tankIsLow(t) ? "low" : "ok";
 }
 
 export function TankLevels({ tanks }: { tanks: Tank[] }) {
@@ -61,14 +58,14 @@ export function TankLevels({ tanks }: { tanks: Tank[] }) {
                 <div className="flex items-center gap-2">
                   {state !== "ok" && (
                     <Badge
-                      variant={state === "critical" ? "destructive" : "secondary"}
+                      variant="destructive"
                       className="text-[10px]"
                     >
-                      {state === "critical" ? "CRITICAL" : "LOW"}
+                      LOW
                     </Badge>
                   )}
                   <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                    {t.levelMl.toLocaleString()} / {t.capacityMl.toLocaleString()} ml
+                    {ml(t.levelMl)} / {t.capacityMl} ml
                   </span>
                 </div>
               </div>

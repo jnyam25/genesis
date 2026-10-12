@@ -6,7 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { oeeBg, oeeColor, pct1 } from "@/lib/format";
+import { oeeBg, oeeColor, ratio } from "@/lib/format";
 import type { Oee } from "@/lib/twin/types";
 
 interface Metric {
@@ -58,7 +58,7 @@ export function OeeGrid({ oee }: { oee: Oee }) {
               <div
                 className={`font-mono text-3xl font-semibold tabular-nums ${oeeColor(v)}`}
               >
-                {pct1(v)}
+                {ratio(v)}
               </div>
               <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
                 <div

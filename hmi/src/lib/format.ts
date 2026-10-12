@@ -1,11 +1,35 @@
-/** Small display helpers shared across the HMI. */
+/**
+ * Display helpers. Values are rounded to the PLC register scale, then trailing
+ * zeros are dropped, which is how FUXA renders a scaled tag (parseFloat of a
+ * fixed-decimal string). ml × 10, cpm × 100, OEE × 1000.
+ */
+
+function scaled(n: number, decimals: number): string {
+  return String(Number(n.toFixed(decimals)));
+}
+
+/** Tank.Flags LOW and the SCADA level bar turn red below this (ml). */
+export const TANK_LOW_ML = 800;
+
+export function tankIsLow(t: { levelMl: number; low?: boolean }): boolean {
+  return t.low ?? t.levelMl < TANK_LOW_ML;
+}
+
+export function ml(n: number): string {
+  return scaled(n, 1);
+}
+
+export function cpm(n: number): string {
+  return scaled(n, 2);
+}
+
+/** OEE factor, matching Oee.* on the PLC and SCADA. */
+export function ratio(n: number): string {
+  return scaled(n, 3);
+}
 
 export function pct(n: number): string {
   return `${Math.round(n * 100)}%`;
-}
-
-export function pct1(n: number): string {
-  return `${(n * 100).toFixed(1)}%`;
 }
 
 export function timeAgo(at: number, now: number): string {

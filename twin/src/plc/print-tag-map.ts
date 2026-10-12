@@ -141,7 +141,7 @@ export function renderFirmwareHeader(): string {
     "",
   ];
   return [
-    "// Captsone PLC register map for the ESP32 field nodes.",
+    "// Genesis PLC register map for the ESP32 field nodes.",
     `// Generated from twin/src/plc/tag-map.ts (protocol v${PROTOCOL_VERSION}) by \`npm run tag-map\`. Do not edit by hand.`,
     "// Addresses are 0-based Modbus PDU addresses of holding registers.",
     "#pragma once",
@@ -178,7 +178,7 @@ export function renderFirmwareHeader(): string {
   ].join("\n");
 }
 
-export const FIRMWARE_HEADER = path.join(__dirname, "..", "..", "..", "firmware", "lib", "captsone_node", "src", "captsone_registers.h");
+export const FIRMWARE_HEADER = path.join(__dirname, "..", "..", "..", "firmware", "lib", "genesis_node", "src", "genesis_registers.h");
 
 if (require.main === module) {
   const md = renderTagMap();

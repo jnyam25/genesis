@@ -19,7 +19,7 @@ const bad = (msg, fix) => {
   console.log(`  \x1b[31m✗\x1b[0m ${msg}${fix ? `\n      → ${fix}` : ""}`);
 };
 
-console.log(`\nCaptsone doctor — ${process.platform}/${process.arch}\n`);
+console.log(`\nGenesis doctor — ${process.platform}/${process.arch}\n`);
 
 // Node / npm
 if (nodeVersionOk()) ok(`Node ${process.versions.node}`);
@@ -59,7 +59,7 @@ const portFree = (port) =>
 
 for (const [name, port, fix] of [
   ["HMI", HMI_PORT, "stop the other process, or edit the -p flag in hmi/package.json"],
-  ["Twin", TWIN_PORT, "stop the other process, or set CAPTSONE_PORT to another port"],
+  ["Twin", TWIN_PORT, "stop the other process, or set GENESIS_PORT to another port"],
 ]) {
   if (await portFree(port)) ok(`${name} port ${port} is free`);
   else bad(`${name} port ${port} is in use (already running, or another app)`, fix);

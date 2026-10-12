@@ -91,7 +91,7 @@ export function buildDispensePlan(
  * Physical dispense order for a linear line with one bay per tank.
  *
  * A container on a one-way conveyor passes each bay exactly once, so it cannot
- * return to BAY-1 after BAY-3. This collapses any plan into one step per tank,
+ * return to BAY-1 after BAY-2. This collapses any plan into one step per tank,
  * in belt (tank index) order, with that tank's total volume. Interleaved plans
  * therefore dispense sequentially on this layout; the plan's round-robin order
  * only becomes physical with a multi-nozzle manifold at a single station.

@@ -39,7 +39,7 @@ export function containerColor(c: Container, tanks: Tank[]): string {
   return mixedColor(tanks);
 }
 
-const LANE_LETTER = ["A", "B"];
+const LANE_LETTER = ["1", "2"];
 
 const SCALE = 95;
 const MARGIN = 48;
@@ -88,13 +88,13 @@ export function LineSchematic({ state }: { state: TwinState }) {
         viewBox={`0 0 ${width} ${height}`}
         className="w-full min-w-[760px]"
         role="img"
-        aria-label="2D schematic of the Captsone paint mixing line"
+        aria-label="Schematic of the Genesis paint mixing line"
       >
         <defs>
           <linearGradient id="belt" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#1f2937" />
-            <stop offset="50%" stopColor="#111827" />
-            <stop offset="100%" stopColor="#1f2937" />
+            <stop offset="0%" stopColor="#dbe4ee" />
+            <stop offset="50%" stopColor="#c5d0dc" />
+            <stop offset="100%" stopColor="#dbe4ee" />
           </linearGradient>
           <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
@@ -113,7 +113,7 @@ export function LineSchematic({ state }: { state: TwinState }) {
               .map(([x, y]) => `${svgX(x, layout)},${svgY(y, layout)}`)
               .join(" ")}
             fill="none"
-            stroke={i === 0 ? "#334155" : "#111827"}
+            stroke={i === 0 ? "#b7c3d0" : "#9aabbd"}
             strokeWidth={w}
             strokeLinejoin="round"
           />
@@ -127,7 +127,7 @@ export function LineSchematic({ state }: { state: TwinState }) {
           height={layout.beltHalfHeight * 2 * SCALE}
           rx={8}
           fill="url(#belt)"
-          stroke="#334155"
+          stroke="#8ea0b3"
         />
         {Array.from({ length: Math.floor((layout.spanX[1] - layout.spanX[0]) * 4) }).map((_, i) => (
           <line
@@ -136,7 +136,7 @@ export function LineSchematic({ state }: { state: TwinState }) {
             y1={svgY(layout.beltHalfHeight, layout)}
             x2={svgX(layout.spanX[0] + i / 4, layout)}
             y2={svgY(-layout.beltHalfHeight, layout)}
-            stroke="#0b1220"
+            stroke="#94a3b8"
             strokeWidth={1}
             opacity={0.5}
           />
@@ -149,8 +149,8 @@ export function LineSchematic({ state }: { state: TwinState }) {
           width={28}
           height={Math.abs(layout.rejectY) * SCALE}
           rx={6}
-          fill="#1c0f12"
-          stroke="#7f1d1d"
+          fill="#fee2e2"
+          stroke="#f87171"
         />
         {/* Reject diverter */}
         <g>
@@ -167,7 +167,7 @@ export function LineSchematic({ state }: { state: TwinState }) {
             x={svgX(gateStation.x, layout)}
             y={svgY(-0.55, layout)}
             textAnchor="middle"
-            className="fill-amber-300 font-mono"
+            className="fill-amber-700 font-mono"
             fontSize={9}
           >
             DIVERTER
@@ -225,7 +225,7 @@ export function LineSchematic({ state }: { state: TwinState }) {
           const cy = svgY(p.y, layout);
           return (
             <g key={p.id}>
-              <circle cx={cx} cy={cy} r={13} fill={color} stroke="#0b1220" strokeWidth={1.5} />
+              <circle cx={cx} cy={cy} r={13} fill={color} stroke="#334155" strokeWidth={1.5} />
               <circle
                 cx={cx}
                 cy={cy}
@@ -265,7 +265,7 @@ function StationGlyph({
 }) {
   const cx = svgX(station.x, layout);
   const cy = svgY(station.y, layout);
-  const isLane = station.kind === "reject";
+  const isLane = station.kind === "reject" || station.kind === "qr-reject";
   const color = flagged
     ? "#7f1d1d"
     : active
@@ -281,7 +281,7 @@ function StationGlyph({
           width={52}
           height={32}
           rx={6}
-          fill={active ? "#14532d" : "#0f172a"}
+          fill={active ? "#dcfce7" : "#f8fafc"}
           stroke={color}
           strokeWidth={active ? 2.5 : 1.5}
         />
@@ -292,8 +292,8 @@ function StationGlyph({
           width={60}
           height={28}
           rx={6}
-          fill="#1c0f12"
-          stroke="#7f1d1d"
+          fill="#fee2e2"
+          stroke="#f87171"
           strokeWidth={active ? 2.5 : 1.5}
         />
       )}
@@ -313,25 +313,27 @@ function StationGlyph({
 }
 
 const GLYPHS: Record<StationPosition["kind"], { glyph: string; size: number; className: string }> = {
-  label: { glyph: "✎", size: 14, className: "fill-violet-300" },
-  scan: { glyph: "⌖", size: 14, className: "fill-sky-300" },
-  nozzle: { glyph: "▼", size: 14, className: "fill-slate-200" },
-  cap: { glyph: "◓", size: 14, className: "fill-teal-300" },
-  qc: { glyph: "✓", size: 13, className: "fill-emerald-300" },
-  gate: { glyph: "↧", size: 14, className: "fill-amber-300" },
-  sort: { glyph: "⇉", size: 14, className: "fill-amber-300" },
-  output: { glyph: "▶", size: 12, className: "fill-emerald-300" },
-  reject: { glyph: "✕", size: 14, className: "fill-rose-400" },
+  label: { glyph: "✎", size: 14, className: "fill-violet-700" },
+  scan: { glyph: "⌖", size: 14, className: "fill-sky-700" },
+  "qr-reject": { glyph: "✕", size: 14, className: "fill-rose-700" },
+  nozzle: { glyph: "▼", size: 14, className: "fill-slate-700" },
+  cap: { glyph: "◓", size: 14, className: "fill-teal-700" },
+  press: { glyph: "⬇", size: 14, className: "fill-slate-700" },
+  qc: { glyph: "✓", size: 13, className: "fill-emerald-700" },
+  gate: { glyph: "↧", size: 14, className: "fill-amber-700" },
+  sort: { glyph: "⇉", size: 14, className: "fill-amber-700" },
+  output: { glyph: "▶", size: 12, className: "fill-emerald-700" },
+  reject: { glyph: "✕", size: 14, className: "fill-rose-700" },
 };
 
 function LabelCallout({ x, y, text, sub }: { x: number; y: number; text: string; sub?: string }) {
   return (
     <g>
-      <text x={x} y={y} textAnchor="middle" className="fill-slate-200 font-sans" fontSize={11} fontWeight={600}>
+      <text x={x} y={y} textAnchor="middle" className="fill-slate-800 font-sans" fontSize={11} fontWeight={600}>
         {text}
       </text>
       {sub && (
-        <text x={x} y={y + 12} textAnchor="middle" className="fill-slate-400 font-mono" fontSize={9}>
+        <text x={x} y={y + 12} textAnchor="middle" className="fill-slate-600 font-mono" fontSize={9}>
           {sub}
         </text>
       )}
@@ -358,8 +360,8 @@ function TankGlyph({
 
   return (
     <g>
-      <line x1={x} y1={yBottom} x2={nozzleX} y2={nozzleY} stroke="#334155" strokeWidth={3} />
-      <rect x={x - 22} y={yTop} width={44} height={tankHeight} rx={6} fill="#0b1220" stroke="#334155" strokeWidth={1.5} />
+      <line x1={x} y1={yBottom} x2={nozzleX} y2={nozzleY} stroke="#94a3b8" strokeWidth={3} />
+      <rect x={x - 22} y={yTop} width={44} height={tankHeight} rx={6} fill="#f8fafc" stroke="#94a3b8" strokeWidth={1.5} />
       <rect
         x={x - 20}
         y={yBottom - fillH}
@@ -370,10 +372,10 @@ function TankGlyph({
         opacity={0.9}
       />
       <rect x={x - 22} y={yTop} width={44} height={tankHeight} rx={6} fill="none" stroke={crit ? "#f59e0b" : low ? "#ef4444" : "#334155"} strokeWidth={low || crit ? 2 : 1.5} />
-      <text x={x} y={yTop - 8} textAnchor="middle" className="fill-slate-100 font-sans" fontSize={11} fontWeight={600}>
+      <text x={x} y={yTop - 8} textAnchor="middle" className="fill-slate-800 font-sans" fontSize={11} fontWeight={600}>
         {tank.name}
       </text>
-      <text x={x} y={yTop - 20} textAnchor="middle" className="fill-slate-400 font-mono" fontSize={9}>
+      <text x={x} y={yTop - 20} textAnchor="middle" className="fill-slate-600 font-mono" fontSize={9}>
         TANK {index + 1}
       </text>
       <text x={x} y={yBottom + 14} textAnchor="middle" className="fill-slate-300 font-mono" fontSize={9}>

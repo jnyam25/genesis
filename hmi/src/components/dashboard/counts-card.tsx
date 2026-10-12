@@ -7,6 +7,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { CheckCircle2, XCircle, Gauge, Package } from "lucide-react";
+import { cpm } from "@/lib/format";
 import type { Counts, SortLane } from "@/lib/twin/types";
 
 export function CountsCard({
@@ -87,7 +88,7 @@ export function CountsCard({
         </CardHeader>
         <CardContent className="pt-0">
           <div className="font-mono text-3xl font-semibold tabular-nums">
-            {throughputCpm}
+            {cpm(throughputCpm)}
           </div>
           <p className="mt-1 text-[11px] text-muted-foreground">
             containers / min

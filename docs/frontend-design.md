@@ -1,6 +1,6 @@
-# Captsone HMI — Frontend Design
+# Genesis HMI — Frontend Design
 
-Operator HMI for the **Captsone Industrial Paint Mixing System** digital twin.
+Operator HMI for the **Genesis Industrial Paint Mixing System** digital twin.
 This document explains every design decision: data-source abstraction, OEE
 metric definitions, schematic layout, 3D scene structure, how dynamic tanks are
 handled in each view, and state handling.
@@ -72,7 +72,7 @@ The HMI is built strictly against the twin's documented JSON shape:
 }
 ```
 
-`tankSlots` lists all eight tank slots with their operator-editable name and
+`tankSlots` lists both tank slots with their operator-editable name and
 colour (see §9 "Tank colors"). Tank colours are data, not code: every view reads
 `tanks[].colorCode`, so a recolour shows everywhere on the next poll.
 
@@ -93,16 +93,16 @@ schematic, and 3D views all update in sync.
 
 ### Mock feed (`src/lib/twin/mock-engine.ts`)
 
-`MockTwinEngine` simulates the line: it spawns containers, walks them through
-`label → scan → fill-1..N → cap → qc → sort → output` (lane A or B by
-the engine's 250 ml rule) or `rejected`, with bad barcodes riding through as
-`label → scan → qc → scan-rejected`. It drains tanks per recipe,
-refills tanks when low, computes OEE, and emits events. It ticks every 500ms.
-**To demonstrate the dynamic-tank requirement it starts with 3 tanks (slots
-T1–T3) and enables a 4th (T4) after ~25s** — every view updates with no
-code change because all rendering is driven from `tanks[]`. Tanks use the
-twin's slot model and default names/colours (`lib/twin/tank-colors.ts` mirrors
-`TANK_SLOTS`), so mock and live screens look the same.
+`MockTwinEngine` simulates the concept line: it spawns containers at the scan
+gate and walks them through `scan → fill-1 → fill-2 → cap → press → qc →
+sort → output` (Lane 1 or Lane 2 by the 250 ml rule) or the fill-reject slide.
+A bad or missing QR is ejected immediately as `scan-rejected` onto the QR
+reject slide, before either tank opens. It drains tanks per recipe, refills
+tanks when low, computes OEE, and emits events. It ticks every 500ms.
+The mock starts with both slots enabled (T1 Sky Blue, T2 Amber). Rendering
+follows `tanks[]`, so enabling or disabling a slot updates every view. Tanks
+use the twin's slot model and default names/colours (`lib/twin/tank-colors.ts`
+mirrors `TANK_SLOTS`), so mock and live screens look the same.
 
 ---
 
@@ -248,26 +248,25 @@ hardcodes tank count:
 | **2D schematic** | `computeLayout(tanks)` inserts one fill bay per tank and shifts the capping arm and everything after it right; tanks render above their bay; `fill-i` statuses map to the new bays via `stationForStatus`. |
 | **3D scene** | Same `computeLayout` + `useContainerPositions`; one `Tank3D` and one fill-bay pad per tank; conveyor length grows with `spanX`. |
 
-The mock demonstrates this by starting at 3 tanks and adding a 4th (T4)
-after ~25s — watch the schematic lengthen, a new fill bay + tank appear,
-and containers start visiting `fill-4`. No view is reloaded or re-coded. The
-Controls screen can also add/remove tanks on demand (see §8).
+The mock starts with T1 and T2. The Controls screen can disable a slot and
+enable it again; the schematic shortens or lengthens and containers visit only
+the bays that are on. No view is reloaded or re-coded.
 
 ---
 
-## 7. Bad barcodes (no scan diverter)
+## 7. Bad QR codes (scan-gate ejector)
 
-The bill of materials has no scan diverter, so a container that **fails the
-scan** (bad/no barcode) can't leave the belt early. It gets no recipe, is not
-filled or capped, and rides through to the reject diverter:
+The concept line has a reject slide at the scan gate. A container that **fails
+the scan** (bad or missing QR) gets no recipe and is ejected before either
+fill valve opens:
 
-- **Status `scan-rejected`** in `ContainerStatus` is its final status. On the
-  way it reports `label`, `scan` and then `qc` (target 0, no lane), so the
-  views move it along the belt past the fill bays without filling it.
-- `stationForStatus` maps `scan-rejected` to the normal **reject lane**; there
-  is no separate scan-reject lane any more.
-- Both views draw bad-barcode containers **orange** with a "BAD BARCODE" tag,
-  to tell them apart from fill/type rejects (dark red). The legend matches.
+- **Status `scan-rejected`** is its final status, set as soon as the scan
+  fails. `stationForStatus` maps it to the **QR reject** slide, ahead of the
+  tanks.
+- A later fill or cap fault uses status `rejected` and the **fill reject**
+  slide after the lid press.
+- Both views draw bad-QR containers **orange** with a "BAD BARCODE" tag, and
+  fill/cap rejects dark red. The legend matches.
 
 ---
 
@@ -315,7 +314,7 @@ filled or capped, and rides through to the reject diverter:
 - **Tank colors** (`components/controls/tank-colors.tsx`, on `/manual`, shown when the source sends `tankSlots`):
   - a **Tank colors** card listing all eight slots (ON LINE / SPARE, EDITED). **Edit** opens an inline editor with a native colour picker, a hex field, the tank name (max 24 characters) and preset swatches sized for touch; **Save** sends `setTankColor`, **Default** and **Reset all** send `resetTankColor`;
   - **Add tank** opens `AddTankForm` for the next free slot, prefilled with its saved name/colour, and sends `addTank({ name, colorCode })`;
-  - input is checked client-side (`lib/twin/tank-colors.ts`) before sending; the twin re-validates. Colour edits aren't safety commands, so they are never disabled by LOCAL mode or an E-Stop. The twin saves them (`CAPTSONE_TANK_COLORS_FILE`); the mock saves them in `localStorage`.
+  - input is checked client-side (`lib/twin/tank-colors.ts`) before sending; the twin re-validates. Colour edits aren't safety commands, so they are never disabled by LOCAL mode or an E-Stop. The twin saves them (`GENESIS_TANK_COLORS_FILE`); the mock saves them in `localStorage`.
 - **Alarms screen** (`/alarms`): active alarms derived from the snapshot (feed
   stale, line halted/E-Stop, tanks low/critical) plus the rolling warn/error
   history from the event log.

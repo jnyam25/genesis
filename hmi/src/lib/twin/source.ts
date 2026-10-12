@@ -23,7 +23,7 @@ export interface TwinDataSource {
   commands?: TwinCommands;
 }
 
-const MOCK_COLORS_KEY = "captsone.mock.tankColors";
+const MOCK_COLORS_KEY = "genesis.mock.tankColors";
 
 function loadMockColors(): Record<string, Partial<TankColor>> {
   if (typeof window === "undefined") return {};
@@ -115,7 +115,7 @@ export class HttpTwinDataSource implements TwinDataSource {
 
   constructor(
     private baseUrl = "/api/twin",
-    private intervalMs = 500,
+    private intervalMs = 250,
   ) {
     /** POST a command; resolves to null on success or the refusal/error message. */
     const send = async (command: string, extra?: Record<string, unknown>): Promise<string | null> => {

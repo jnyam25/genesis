@@ -30,7 +30,7 @@ import {
 import { useTwin } from "@/lib/twin/twin-context";
 import { refusal, type SafetyCommand } from "@/lib/twin/safety";
 import type { CommandResult } from "@/lib/twin/types";
-import { pct } from "@/lib/format";
+import { ml, pct, tankIsLow } from "@/lib/format";
 import { AddTankForm, TankColorsCard } from "@/components/controls/tank-colors";
 
 interface Feedback {
@@ -262,7 +262,7 @@ export default function ControlsPage() {
               <ul className="grid gap-2 sm:grid-cols-2">
                 {state.tanks.map((t, i) => {
                   const ratio = t.levelMl / t.capacityMl;
-                  const low = ratio < 0.3;
+                  const low = tankIsLow(t);
                   return (
                     <li
                       key={t.id}
@@ -278,7 +278,7 @@ export default function ControlsPage() {
                             Tank {i + 1} · {t.name}
                           </div>
                           <div className="font-mono text-[11px] text-muted-foreground">
-                            {t.levelMl.toLocaleString()}/{t.capacityMl.toLocaleString()} ml · {pct(ratio)}
+                            {ml(t.levelMl)}/{t.capacityMl} ml · {pct(ratio)}
                           </div>
                         </div>
                         {low && (

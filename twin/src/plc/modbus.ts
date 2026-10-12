@@ -1,7 +1,7 @@
 /**
  * Minimal, dependency-free Modbus TCP client and server.
  *
- * Supports the function codes the Captsone register map needs:
+ * Supports the function codes the Genesis register map needs:
  *   0x01 Read Coils            0x03 Read Holding Registers
  *   0x05 Write Single Coil     0x06 Write Single Register
  *   0x0F Write Multiple Coils  0x10 Write Multiple Registers

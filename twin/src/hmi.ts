@@ -21,6 +21,7 @@ export type HmiContainerStatus =
   | "label"
   | "scan"
   | "scan-rejected"
+  | "press"
   | `fill-${number}`
   | "mix"
   | "cap"
@@ -50,7 +51,7 @@ export interface HmiTankSlot extends TankColorSlot {
 }
 
 export interface HmiState {
-  tanks: { id: string; name: string; colorCode: string; levelMl: number; capacityMl: number }[];
+  tanks: { id: string; name: string; colorCode: string; levelMl: number; capacityMl: number; low: boolean }[];
   /** Every tank slot (enabled or not) with its editable name/color (optional contract extension). */
   tankSlots?: HmiTankSlot[];
   containers: {
@@ -138,6 +139,8 @@ export function hmiStatus(c: CoreContainer): HmiContainerStatus {
       return "mix";
     case "CAP":
       return "cap";
+    case "PRESS":
+      return "press";
     case "QC":
     case "GATE":
       return "qc";

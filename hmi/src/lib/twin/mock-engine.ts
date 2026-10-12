@@ -1,18 +1,6 @@
 /**
- * Mock twin engine.
- *
- * Produces a live `TwinState` stream that mimics the real digital twin so the
- * HMI runs standalone before the engine is wired in. It advances containers
- * through the line (label → scan → fill bays → capping arm → sort sensor /
- * reject diverter → sort diverter → Lane A/B), drains/refills tanks, computes
- * OEE, and emits events.
- *
- * To demonstrate the DYNAMIC requirement, it starts with 3 tanks and adds a
- * 4th tank (slot T4) after ~25s — the frontend re-renders all three views
- * with no code change because everything is driven from `tanks[]`.
- *
- * Tanks use the twin's 8-slot model (T1..T8) with an editable name/color per
- * slot; saved edits are passed in and reported through `onColorsChange`.
+ * Stand-in twin for the HMI. Two tanks, two sort lanes.
+ * Saved color edits arrive in the constructor and go out through `onColorsChange`.
  */
 
 import type {
@@ -41,24 +29,22 @@ interface SimContainer extends Container {
   dwell: number;
   /** Index of the next fill bay to visit (for fill-i sequencing). */
   nextNozzle: number;
-  /** Barcode failed at scan: rides through unfilled to the reject diverter. */
+  /** Barcode failed at the scan gate and was sent to the QR reject slide. */
   badBarcode: boolean;
 }
 
 const TANK_CAPACITY_ML = 5000;
-const INITIAL_TANKS = 3;
+const INITIAL_TANKS = 2;
 
 const STATUS_DWELL_MS: Record<string, number> = {
-  label: 1000,
   scan: 800,
   cap: 2000,
-  qc: 1200,
+  press: 800,
+  qc: 900,
   sort: 800,
 };
 const FILL_DWELL_MS = 900;
-/** Bad-barcode containers report `qc` all the way from scan to the reject diverter. */
-const BAD_BARCODE_TRANSIT_MS = 3500;
-/** Finished containers stay visible at their output/reject lane this long. */
+/** Finished containers stay visible at their output or reject slide this long. */
 const COMPLETED_LINGER_MS = 1500;
 const FINAL_STATUSES: ContainerStatus[] = ["output", "rejected", "scan-rejected"];
 const REJECT_RATE = 0.06;
@@ -67,8 +53,8 @@ const IDEAL_CPM = 12;
 
 /** Same defaults as the twin (config.sort). */
 const SORT_LANES = [
-  { id: "A", name: "Lane A (small bottles)" },
-  { id: "B", name: "Lane B (large bottles)" },
+  { id: "A", name: "Lane 1" },
+  { id: "B", name: "Lane 2" },
 ];
 const SMALL_BOTTLE_MAX_ML = 250;
 
@@ -111,8 +97,6 @@ export class MockTwinEngine {
   private lastSpawn = 0;
   private spawnCounter = 0;
   private lastTick = Date.now();
-  private startedAt = Date.now();
-  private fourthTankAdded = false;
   private downtimeUntil = 0;
   /** E-Stops, safety circuit, local/remote control (same rules as the twin). */
   private safety = new MockSafety((severity, message) => {
@@ -167,7 +151,6 @@ export class MockTwinEngine {
     const dt = Math.min(now - this.lastTick, 1000);
     this.lastTick = now;
 
-    this.maybeAddFourthTank(now);
     this.spawnContainers(now);
     // While stopped or E-Stopped the line is frozen: no container advancement.
     if (this.safety.lineEnabled) this.advanceContainers(now, dt);
@@ -282,15 +265,6 @@ export class MockTwinEngine {
     return null;
   }
 
-  private maybeAddFourthTank(now: number) {
-    if (this.fourthTankAdded || now - this.startedAt <= 25_000) return;
-    this.fourthTankAdded = true;
-    const id = DEFAULT_TANK_SLOTS[INITIAL_TANKS].id;
-    if (this.tanks.some((t) => t.id === id)) return;
-    const tank = this.enableSlot(id);
-    this.lastEvent = ev("warn", `Tank ${tank.id} (${tank.name}) added to line config — re-balancing fill bays`, now);
-  }
-
   private spawnContainers(now: number) {
     if (now - this.lastSpawn < 2600) return;
     if (this.downtimeUntil > now) return;
@@ -302,7 +276,7 @@ export class MockTwinEngine {
     const recipe = this.randomRecipe();
     this.containers.push({
       id,
-      status: "label",
+      status: "scan",
       fillMl: 0,
       targetMl: recipe.targetMl,
       lane: recipe.targetMl <= SMALL_BOTTLE_MAX_ML ? 0 : 1,
@@ -311,7 +285,7 @@ export class MockTwinEngine {
       nextNozzle: 0,
       badBarcode: false,
     });
-    this.lastEvent = ev("info", `${id} entered labeling station`, now);
+    this.lastEvent = ev("info", `${id} entered the scan gate`, now);
   }
 
   /** Picks a bottle size first so both sort lanes see traffic. */
@@ -331,7 +305,6 @@ export class MockTwinEngine {
   }
 
   private dwellMs(c: SimContainer): number {
-    if (c.status === "qc" && c.badBarcode) return BAD_BARCODE_TRANSIT_MS;
     return STATUS_DWELL_MS[c.status] ?? FILL_DWELL_MS;
   }
 
@@ -353,7 +326,7 @@ export class MockTwinEngine {
     c.dwell = 0;
     this.counts.rejected += 1;
     this.counts.total += 1;
-    this.lastEvent = ev("error", `${c.id} REJECTED at reject diverter — ${reason}`, now);
+    this.lastEvent = ev("error", `${c.id} REJECTED — ${reason}`, now);
   }
 
   private toFillOrCap(c: SimContainer, now: number) {
@@ -368,35 +341,27 @@ export class MockTwinEngine {
 
   private transition(c: SimContainer, now: number) {
     switch (c.status) {
-      case "label":
-        c.status = "scan";
-        return;
       case "scan": {
-        // A failed scan (bad/no barcode) has no recipe: there is no scan
-        // diverter, so the container rides through unfilled and is rejected
-        // at the reject diverter.
         if (Math.random() < SCAN_FAIL_RATE) {
           c.badBarcode = true;
-          c.status = "qc";
           c.targetMl = 0;
           c.lane = undefined;
-          this.lastEvent = ev(
-            "warn",
-            `${c.id} barcode unreadable — riding through unfilled to the reject diverter`,
-            now,
-          );
+          this.reject(c, "scan-rejected", "bad or missing QR", now);
         } else {
           this.toFillOrCap(c, now);
         }
         return;
       }
       case "cap":
+        c.status = "press";
+        this.lastEvent = ev("info", `${c.id} lid placed → lid press`, now);
+        return;
+      case "press":
         c.status = "qc";
-        this.lastEvent = ev("info", `${c.id} lid placed → sort sensor`, now);
+        this.lastEvent = ev("info", `${c.id} lid seated → fill check`, now);
         return;
       case "qc":
-        if (c.badBarcode) this.reject(c, "scan-rejected", "bad barcode", now);
-        else if (Math.random() < REJECT_RATE) this.reject(c, "rejected", "fill out of tolerance", now);
+        if (Math.random() < REJECT_RATE) this.reject(c, "rejected", "bad fill or cap", now);
         else c.status = "sort";
         return;
       case "sort": {

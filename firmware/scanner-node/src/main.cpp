@@ -12,12 +12,11 @@
 // it again on the next attempt.
 
 #include <Arduino.h>
-#include <ESP32Servo.h>
 #include <WiFi.h>
 
 #include <algorithm>
 
-#include "captsone_node.h"
+#include "genesis_node.h"
 
 using node::Config;
 
@@ -34,11 +33,13 @@ static std::vector<node::Setting> settings() {
       {"scan_trig", "serial", "serial (GM65 command trigger) | pin | continuous"},
       {"scan_pin", "-1", "trigger output for scan_trig=pin (pulled low 30 ms)"},
       {"scan_ms", "2000", "read timeout (ms) before reporting NO_READ"},
-      {"label_pin", "25", "applicator servo signal pin"},
-      {"label_rest", "10", "servo angle at rest (deg)"},
-      {"label_apply", "120", "servo angle at the end of the stroke (deg)"},
-      {"label_ms", "600", "time for each half of the stroke (ms)"},
+      {"label_step", "25", "DM556Y PU- (step), through the interface transistor"},
+      {"label_dir", "26", "DM556Y DR- (direction), through the interface transistor"},
+      {"label_ena", "27", "DM556Y MF- (motor free). HIGH frees the motor. -1 = tied enabled"},
+      {"label_steps", "400", "step pulses out, then the same number back"},
+      {"label_us", "500", "microseconds between steps (min 50)"},
       {"label_sense", "-1", "label-present sensor input, active low (-1 = none)"},
+      {"label_alarm", "-1", "DM556Y alarm output, active low (-1 = none)"},
   });
   return s;
 }
@@ -59,9 +60,9 @@ static Trigger trigger = Trigger::SERIAL_CMD;
 static int triggerPin = -1;
 static uint32_t readTimeoutMs = 2000;
 
-static Servo applicator;
-static int labelRest = 10, labelApply = 120, labelSensePin = -1;
-static uint32_t labelHalfMs = 600;
+static int stepPin = 25, dirPin = 26, enaPin = 27, labelSensePin = -1, alarmPin = -1;
+static uint32_t strokeSteps = 400, stepIntervalUs = 500;
+static bool runPermit = false;
 
 static uint16_t faults = 0;
 static uint16_t faultsWritten = 0xFFFF;
@@ -155,36 +156,79 @@ static bool reportScan() {
 }
 
 // ---------------------------------------------------------------------------
-// Label applicator: rest → apply → rest, only while permitted.
+// Label applicator: DM556Y Open Loop Stepper, step/dir. One stroke is `strokeSteps` pulses out
+// and the same number back. Called every loop(); the PLC poll only starts it.
+// GPIO HIGH sinks the opto through the interface transistor (opto on).
+// MF HIGH = coils off. A falling edge on PU- (GPIO rising) is one step.
 // ---------------------------------------------------------------------------
 
+static const uint32_t STEP_PULSE_US = 5;
+
 struct LabelJob {
-  enum State { IDLE, APPLYING, RETURNING, REPORT } state = IDLE;
+  enum State { IDLE, MOVING, REPORT } state = IDLE;
   uint16_t id = 0;
-  uint32_t phaseAt = 0;
+  bool returning = false;
+  uint32_t stepsLeft = 0;
+  uint32_t nextAt = 0;
+  bool pulsed = false;
 };
 static LabelJob label;
 
+static void motorFree(bool free) {
+  if (enaPin >= 0) digitalWrite(enaPin, free ? HIGH : LOW);
+}
+
+static void beginHalf(bool returning) {
+  label.returning = returning;
+  label.stepsLeft = strokeSteps;
+  label.pulsed = false;
+  digitalWrite(dirPin, returning ? LOW : HIGH);
+  motorFree(false);
+  label.nextAt = micros() + 10;  // direction setup before the first falling edge
+  label.state = LabelJob::MOVING;
+}
+
+static void stopLabel() {
+  digitalWrite(stepPin, LOW);
+  motorFree(true);
+  label = LabelJob();
+}
+
 static void stepLabel(bool permit) {
-  if (label.state == LabelJob::IDLE || label.state == LabelJob::REPORT) return;
+  if (label.state != LabelJob::MOVING) return;
   if (!permit) {
-    applicator.write(labelRest);  // stop the stroke; the PLC re-requests once permitted again
-    label = LabelJob();
+    stopLabel();  // the PLC keeps the request and the stroke starts over once permitted
     return;
   }
-  if (millis() - label.phaseAt < labelHalfMs) return;
-  if (label.state == LabelJob::APPLYING) {
-    applicator.write(labelRest);
-    label.state = LabelJob::RETURNING;
-    label.phaseAt = millis();
-  } else {
-    const bool labelled = labelSensePin < 0 || digitalRead(labelSensePin) == LOW;
-    if (labelled) {
-      label.state = LabelJob::REPORT;
-    } else {
-      faults |= 1 << reg::SCANNER_FAULT_BIT_LABELER;
-      label = LabelJob();
-    }
+  if (alarmPin >= 0 && digitalRead(alarmPin) == LOW) {
+    faults |= 1 << reg::SCANNER_FAULT_BIT_LABELER;
+    stopLabel();
+    return;
+  }
+  const uint32_t now = micros();
+  if (static_cast<int32_t>(now - label.nextAt) < 0) return;
+  if (!label.pulsed) {
+    digitalWrite(stepPin, HIGH);
+    label.pulsed = true;
+    label.nextAt = now + STEP_PULSE_US;
+    return;
+  }
+  digitalWrite(stepPin, LOW);
+  label.pulsed = false;
+  if (--label.stepsLeft > 0) {
+    label.nextAt = now + stepIntervalUs;
+    return;
+  }
+  if (!label.returning) {
+    beginHalf(true);
+    return;
+  }
+  motorFree(true);
+  const bool labelled = labelSensePin < 0 || digitalRead(labelSensePin) == LOW;
+  if (labelled) label.state = LabelJob::REPORT;
+  else {
+    faults |= 1 << reg::SCANNER_FAULT_BIT_LABELER;
+    label = LabelJob();
   }
 }
 
@@ -197,9 +241,16 @@ static void poll() {
 
   uint16_t mailbox[2];                          // Scan.Request, Scan.Done
   uint16_t station[3];                          // RunPermit, LabelRequest, LabelDone
-  if (!plc.read(reg::SCAN_REQUEST, mailbox, 2)) return;
-  if (!plc.read(reg::STATION_RUN_PERMIT, station, 3)) return;
+  if (!plc.read(reg::SCAN_REQUEST, mailbox, 2)) {
+    runPermit = false;
+    return;
+  }
+  if (!plc.read(reg::STATION_RUN_PERMIT, station, 3)) {
+    runPermit = false;
+    return;
+  }
   const bool permit = station[0] == 1 && plc.plcAlive();
+  runPermit = permit;
 
   // Scan: reading a barcode moves nothing, so it does not need RunPermit.
   const uint16_t scanReq = mailbox[0], scanDone = mailbox[1];
@@ -210,19 +261,13 @@ static void poll() {
     scan = ScanJob();
   }
 
-  // Label
+  // Label. Pulses run in loop(); this only starts a stroke and reports it.
   const uint16_t labelReq = station[1], labelDone = station[2];
-  if (label.state != LabelJob::IDLE && labelReq != label.id) {
-    applicator.write(labelRest);
-    label = LabelJob();
-  }
+  if (label.state != LabelJob::IDLE && labelReq != label.id) stopLabel();
   if (label.state == LabelJob::IDLE && permit && labelReq != 0 && labelReq != labelDone) {
     label.id = labelReq;
-    label.state = LabelJob::APPLYING;
-    label.phaseAt = millis();
-    applicator.write(labelApply);
+    beginHalf(false);
   }
-  stepLabel(permit);
   if (label.state == LabelJob::REPORT && plc.write(reg::STATION_LABEL_DONE, label.id)) label = LabelJob();
 
   // Fault bits
@@ -262,10 +307,16 @@ static bool command(const String& cmd, const String& args, Stream& out) {
       out.println("refused: the line is running");
       return true;
     }
-    applicator.write(labelApply);
-    delay(labelHalfMs);
-    applicator.write(labelRest);
-    out.println("done");
+    label.id = 0;
+    beginHalf(false);
+    const uint32_t started = millis();
+    while (label.state == LabelJob::MOVING && millis() - started < 30000) {
+      stepLabel(true);
+      node::watchdogFeed();
+    }
+    const bool done = label.state == LabelJob::REPORT;
+    stopLabel();
+    out.println(done ? "done" : "stopped");
     return true;
   }
   return false;
@@ -285,18 +336,28 @@ void setup() {
   }
   scanner.begin(config.getInt("scan_baud"), SERIAL_8N1, config.getInt("scan_rx"), config.getInt("scan_tx"));
 
-  labelRest = config.getInt("label_rest");
-  labelApply = config.getInt("label_apply");
-  labelHalfMs = config.getInt("label_ms");
+  stepPin = config.getInt("label_step");
+  dirPin = config.getInt("label_dir");
+  enaPin = config.getInt("label_ena");
+  strokeSteps = static_cast<uint32_t>(std::max(1L, config.getInt("label_steps")));
+  stepIntervalUs = static_cast<uint32_t>(std::max(50L, config.getInt("label_us")));
   labelSensePin = config.getInt("label_sense");
+  alarmPin = config.getInt("label_alarm");
+  pinMode(stepPin, OUTPUT);
+  pinMode(dirPin, OUTPUT);
+  digitalWrite(stepPin, LOW);
+  digitalWrite(dirPin, LOW);
+  if (enaPin >= 0) {
+    pinMode(enaPin, OUTPUT);
+    motorFree(true);
+  }
   if (labelSensePin >= 0) pinMode(labelSensePin, INPUT_PULLUP);
-  applicator.attach(config.getInt("label_pin"));
-  applicator.write(labelRest);
+  if (alarmPin >= 0) pinMode(alarmPin, INPUT_PULLUP);
 
-  plc.begin(config, "captsone-scanner");
+  plc.begin(config, "genesis-scanner");
   console.begin(&config, "  status               link, jobs and fault bits\n  scan                 trigger one read (bench test)\n  stroke               one applicator stroke (line stopped only)\n", command);
   node::watchdogBegin(5);
-  Serial.printf("Captsone scanner node, register map v%u. `help` for commands.\n", reg::PROTOCOL_VERSION);
+  Serial.printf("Genesis scanner node, register map v%u. `help` for commands.\n", reg::PROTOCOL_VERSION);
 }
 
 void loop() {
@@ -305,13 +366,14 @@ void loop() {
   console.loop();
   plc.loop();
   stepScanRead();
+  stepLabel(runPermit && plc.connected());
   if (millis() - lastPoll >= POLL_MS) {
     lastPoll = millis();
     if (plc.connected()) {
       poll();
       plc.heartbeat(reg::SCANNER_NODE_HEARTBEAT);
     } else {
-      stepLabel(false);
+      runPermit = false;
     }
   }
 }

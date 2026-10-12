@@ -16,9 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Captsone — Industrial Paint Mixing HMI",
-  description:
-    "Operator HMI for the Captsone Industrial Paint Mixing System: live OEE, line schematic, and 3D visualization of the digital twin.",
+  title: "Genesis — Industrial Paint Mixing HMI",
+  description: "Operator HMI for the Genesis paint mixing line.",
 };
 
 export default function RootLayout({
@@ -29,7 +28,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <TwinProvider>

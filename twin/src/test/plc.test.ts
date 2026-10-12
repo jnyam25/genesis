@@ -135,10 +135,10 @@ test("bridge decodes the virtual PLC into the same HMI state as the core", async
   }
 });
 
-test("PLC supervises the simulated nodes: label, scan (PLC validates), arm HOME → PICK_LID → PLACE_LID, sort height", () => {
+test("PLC supervises the simulated nodes: scan (PLC validates), arm HOME → PICK_LID → PLACE_LID, sort height", () => {
   const plc = new VirtualPlc({ feed: false });
   const r = plc.server.registers;
-  plc.core.enqueueBarcode("PT1|T250|100,80,70");
+  plc.core.enqueueBarcode("PT1|T200|100,100");
   const requested = new Set<string>();
   const armCmds: number[] = [];
   let lastSeq = 0;
@@ -154,11 +154,11 @@ test("PLC supervises the simulated nodes: label, scan (PLC validates), arm HOME 
     }
   }
   assert.equal(plc.core.counts.accepted, 1);
-  assert.deepEqual([...requested].sort(), ["label", "scan", "sort"]);
+  assert.deepEqual([...requested].sort(), ["scan", "sort"]);
   assert.deepEqual(armCmds, [ARM_CMD.HOME, ARM_CMD.PICK_LID, ARM_CMD.PLACE_LID, ARM_CMD.PICK_LID], "pre-picks the next lid after placing");
-  assert.deepEqual([r[SCAN.PARSE_RESULT], r[SCAN.RESULT_ID], r[SCAN.TOTAL_ML]], [0, 1, 250]);
+  assert.deepEqual([r[SCAN.PARSE_RESULT], r[SCAN.RESULT_ID], r[SCAN.TOTAL_ML]], [0, 1, 200]);
   assert.equal(r[STATION.SORT_HEIGHT_MM], DEFAULT_CONFIG.sort.lanes[0].bottleHeightMm);
-  assert.equal(r[SYS.COUNT_LANE_A], 1, "a 250 ml recipe is a small bottle (lane A)");
+  assert.equal(r[SYS.COUNT_LANE_A], 1, "a 200 ml recipe is lane 1");
   assert.equal(r[SYS.FAULT_CODE], 0);
   plc.core.eStop();
   plc.scan(0.1);
@@ -166,10 +166,10 @@ test("PLC supervises the simulated nodes: label, scan (PLC validates), arm HOME 
 });
 
 test("scan text packing: 2 ASCII characters per register, first in the high byte", () => {
-  const regs = packScanText("PT1|T250|100,80,70");
+  const regs = packScanText("PT1|T250|150,100");
   assert.equal(regs.length, 32);
   assert.equal(regs[0], ("P".charCodeAt(0) << 8) | "T".charCodeAt(0));
-  assert.equal(unpackScanText(regs, 18), "PT1|T250|100,80,70");
+  assert.equal(unpackScanText(regs, 16), "PT1|T250|150,100");
   assert.equal(unpackScanText(packScanText("x".repeat(80)), 80).length, 64, "truncated to 64 characters");
 });
 
@@ -255,7 +255,7 @@ test("sort sensor: the PLC classifies the raw height and rejects a bottle whose 
   const plc = new VirtualPlc({ feed: false, externalNodes: { station: true } });
   const node = new FakeStationNode(plc.server.registers);
   node.heightMm = DEFAULT_CONFIG.sort.lanes[1].bottleHeightMm; // a large bottle …
-  plc.core.enqueueBarcode("PT1|T250|100,80,70"); // … carrying a small-bottle recipe
+  plc.core.enqueueBarcode("PT1|T200|100,100"); // … carrying a small-bottle recipe
   runWith(plc, node, 60, () => plc.core.counts.total > 0);
   assert.equal(plc.core.counts.rejected, 1);
   assert.equal(plc.core.events.find((e) => e.code === EventCode.CONTAINER_REJECTED)?.arg2, RejectReason.BOTTLE_TYPE_MISMATCH);
@@ -324,29 +324,22 @@ test("bridge commands drive the PLC: digital E-Stop, release, reset, start, tank
     assert.ok(!plc.core.isHalted);
     assert.ok(bridge.status().lineState!.running);
 
-    assert.equal(await bridge.command({ command: "addTank" }), null);
-    await step();
-    assert.deepEqual(plc.core.tanks.map((t) => t.id), ["T1", "T2", "T3", "T4"]);
-    assert.deepEqual(bridge.hmiState()!.tanks.map((t) => t.id), ["T1", "T2", "T3", "T4"]);
-
+    assert.match((await bridge.command({ command: "addTank" }))!, /already enabled/);
     assert.equal(await bridge.command({ command: "removeTank", tankId: "T2" }), null);
     await step();
-    assert.deepEqual(plc.core.tanks.map((t) => t.id), ["T1", "T3", "T4"]);
+    assert.deepEqual(plc.core.tanks.map((t) => t.id), ["T1"]);
 
     assert.match((await bridge.command({ command: "removeTank", tankId: "T2" }))!, /not enabled/);
     assert.match((await bridge.command({ command: "nope" }))!, /unknown command/);
 
-    // Tank names/colors live on the Pi: the HMI and PLC event text use them; the PLC is untouched.
-    assert.equal(await bridge.command({ command: "setTankColor", tankId: "T3", name: "Navy", colorCode: "#000080" }), null);
+    assert.equal(await bridge.command({ command: "setTankColor", tankId: "T1", name: "Navy", colorCode: "#000080" }), null);
     assert.equal(await bridge.command({ command: "addTank", name: "Mint", colorCode: "#3EB489" }), null);
     await step();
     const tanks = bridge.hmiState()!.tanks;
-    const t3 = tanks.find((t) => t.id === "T3");
-    assert.deepEqual([t3?.name, t3?.colorCode], ["Navy", "#000080"]);
-    assert.equal(tanks.find((t) => t.id === "T2")?.name, "Mint", "addTank fills the lowest free slot with the given color");
+    assert.deepEqual([tanks.find((t) => t.id === "T1")?.name, tanks.find((t) => t.id === "T1")?.colorCode], ["Navy", "#000080"]);
+    assert.equal(tanks.find((t) => t.id === "T2")?.name, "Mint");
     assert.ok(bridge.hmiState()!.recentEvents!.some((e) => e.message.includes("T2 (Mint) added")));
-    assert.equal(plc.core.tanks.find((t) => t.id === "T3")?.name, DEFAULT_CONFIG.tanks[2].name);
-    assert.equal(bridge.hmiState()!.tankSlots!.find((s) => s.id === "T3")?.custom, true);
+    assert.equal(bridge.hmiState()!.tankSlots!.find((s) => s.id === "T1")?.custom, true);
 
     // HMI heartbeat reaches the PLC.
     await step();
@@ -367,16 +360,16 @@ test("physical E-Stop and local mode through the PLC: register bits, button name
   };
   try {
     await step();
-    assert.equal(await bridge.command({ command: "simPhysicalEStop", buttonId: "PANEL", pressed: true }), null);
+    assert.equal(await bridge.command({ command: "simPhysicalEStop", buttonId: "ENTRY", pressed: true }), null);
     await step();
     let safety = bridge.hmiState()!.safety!;
     assert.ok(safety.eStopActive && !safety.digitalEStop && !safety.running);
-    assert.deepEqual(safety.eStopButtons.filter((b) => b.pressed).map((b) => b.id), ["PANEL"]);
+    assert.deepEqual(safety.eStopButtons.filter((b) => b.pressed).map((b) => b.id), ["ENTRY"]);
     assert.equal(plc.server.registers[SYS.PHYSICAL_ESTOP_MASK], 1);
-    assert.ok(bridge.hmiState()!.recentEvents!.some((e) => /PHYSICAL E-STOP pressed at Local control panel/.test(e.message)));
+    assert.ok(bridge.hmiState()!.recentEvents!.some((e) => /PHYSICAL E-STOP pressed at Line start/.test(e.message)));
     assert.match((await bridge.command({ command: "firePusher" }))!, /emergency stop is active/);
 
-    assert.equal(await bridge.command({ command: "simPhysicalEStop", buttonId: "PANEL", pressed: false }), null);
+    assert.equal(await bridge.command({ command: "simPhysicalEStop", buttonId: "ENTRY", pressed: false }), null);
     await step();
     assert.ok(bridge.hmiState()!.safety!.resetRequired);
 
@@ -427,14 +420,14 @@ test("scan mailbox over Modbus: a real scanner node forwards raw text; the PLC v
     }
   };
   try {
-    await runBottle("PT1|T250|100,80,70");
+    await runBottle("PT1|T200|100,100");
     const r = plc.server.registers;
     assert.equal(plc.core.counts.accepted, 1);
-    assert.deepEqual([r[SCAN.PARSE_RESULT], r[SCAN.TOTAL_ML]], [0, 250]);
-    assert.equal(plc.core.containers[0].barcodeRaw, "PT1|T250|100,80,70");
+    assert.deepEqual([r[SCAN.PARSE_RESULT], r[SCAN.TOTAL_ML]], [0, 200]);
+    assert.equal(plc.core.containers[0].barcodeRaw, "PT1|T200|100,100");
 
     await runBottle("PT1|T200|200");
-    assert.equal(plc.core.counts.rejected, 1, "wrong tank count rides through and is rejected");
+    assert.equal(plc.core.counts.rejected, 1, "wrong tank count is ejected at the scan gate");
     assert.equal(r[SCAN.PARSE_RESULT], 3);
 
     await runBottle(null);

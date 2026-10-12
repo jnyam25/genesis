@@ -1,4 +1,4 @@
-# Installing Captsone on another computer
+# Installing Genesis on another computer
 
 This repo has two runnable Node projects, and the root `package.json` drives both:
 
@@ -11,12 +11,14 @@ When you start them from the root, the HMI shows the **live twin**. The browser 
 
 ## 1. Prerequisites
 
-- **Node.js 20.9 or newer.** The LTS release (22.x) is recommended; `.nvmrc` pins 22.
-  - Download: https://nodejs.org. npm comes with Node.
-  - With nvm / nvm-windows / fnm: `nvm install` then `nvm use` in the repo root.
+- **Node.js 20.9 or newer.** Install **Node.js 22 LTS**; `.nvmrc` pins 22. npm comes with Node. If a terminal says `npm` is not recognized, Node is not installed yet, or that terminal was opened before the installer updated `PATH` — close it and open a new one.
+  - **Windows (PowerShell):** `winget install --id OpenJS.NodeJS.LTS -e`
+  - **macOS:** `brew install node@22`
+  - **Linux:** your distro's Node 22 package when it is 20.9 or newer, or the LTS build from [nodejs.org](https://nodejs.org)
+  - **Any OS:** the LTS installer from [nodejs.org](https://nodejs.org), or a version manager. With nvm or fnm, run `nvm install` then `nvm use` in the repo root. On Windows, nvm-windows uses `nvm install 22` then `nvm use 22`.
 - **An internet connection for the first install.** npm downloads the packages, and the HMI downloads its Google font (Geist) the first time it builds.
 - Any editor or IDE (VS Code, WebStorm, Cursor, …). No IDE-specific setup is needed.
-- Git is optional.
+- Git is optional for a copied folder. A clone needs Git, then the Node.js install above, then `npm install` from the repo root.
 
 Check your versions:
 
@@ -107,9 +109,9 @@ Full reference: [docs/configuration.md](docs/configuration.md).
 
 | Setting | Where | Default |
 | --- | --- | --- |
-| Twin HTTP port | env `CAPTSONE_PORT` | `43124` |
-| Twin bind address | env `CAPTSONE_HOST` (use `0.0.0.0` to expose it on the LAN) | `127.0.0.1` |
-| Twin mode | env `CAPTSONE_MODE`: `sim`, or `plc` with `PLC_HOST` / `PLC_PORT` / `PLC_UNIT_ID` | `sim` |
+| Twin HTTP port | env `GENESIS_PORT` | `43124` |
+| Twin bind address | env `GENESIS_HOST` (use `0.0.0.0` to expose it on the LAN) | `127.0.0.1` |
+| Twin mode | env `GENESIS_MODE`: `sim`, or `plc` with `PLC_HOST` / `PLC_PORT` / `PLC_UNIT_ID` | `sim` |
 | Virtual PLC port | env `VPLC_PORT` | `5020` |
 | HMI port | `-p` flag in `hmi/package.json` scripts | `43123` |
 | HMI data source | env `NEXT_PUBLIC_TWIN_SOURCE` or `hmi/.env.local` (`mock`, `http`, `ws`) | `http` from the root scripts, `mock` when running `hmi/` alone |
@@ -119,9 +121,9 @@ Full reference: [docs/configuration.md](docs/configuration.md).
 
 Setting an environment variable for one command:
 
-- macOS / Linux: `CAPTSONE_PORT=5000 npm run dev`
-- Windows PowerShell: `$env:CAPTSONE_PORT=5000; npm run dev`
-- Windows cmd: `set CAPTSONE_PORT=5000 && npm run dev`
+- macOS / Linux: `GENESIS_PORT=5000 npm run dev`
+- Windows PowerShell: `$env:GENESIS_PORT=5000; npm run dev`
+- Windows cmd: `set GENESIS_PORT=5000 && npm run dev`
 
 **Opening the HMI from another device on the network:** use `http://<this-computer's-IP>:43123`. Next.js dev and start already listen on all interfaces. The twin can stay on `127.0.0.1`, because only the HMI server talks to it. You may need to allow port 43123 through the firewall.
 

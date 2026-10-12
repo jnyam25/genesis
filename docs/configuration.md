@@ -30,13 +30,13 @@
 | `mockSensorPeriodSec` | `3.0` | Simulated barcode feeder period |
 | `snapshotPeriodSec` | `0.5` | Snapshot file write period |
 
-**Tank slots** (`TANK_SLOTS`): eight fixed definitions `T1..T8`, each with a name, colour, `capacityMl`, `refillThresholdMl`, `dispenseRateMlPerSec` and `valveOpeningPct`. `valveOpeningPct` (default 80) is the proportional valve opening the PLC's analog output commands while dispensing; `dispenseRateMlPerSec` is the flow measured **at that opening**, so recalibrate the rate whenever you change the opening. Slot k always maps to bay `BAY-k` and PLC register block `Tank<k>`. Change calibration here.
+**Tank slots** (`TANK_SLOTS`): two definitions, `T1` and `T2`, each with a name, colour, `capacityMl`, `refillThresholdMl`, `dispenseRateMlPerSec` and `valveOpeningPct`. `valveOpeningPct` (default 80) is the proportional valve opening the PLC's analog output commands while dispensing; `dispenseRateMlPerSec` is the flow measured **at that opening**, so recalibrate the rate whenever you change the opening. Slot k always maps to bay `BAY-k` and PLC register block `Tank<k>`. Change calibration here.
 
-The names and colours in `TANK_SLOTS` are only **defaults**. Operators rename and recolour any slot (including spare ones) from **Controls → Tank colors** in the HMI, or give a new tank its name and colour when they add it. Edits are saved to `CAPTSONE_TANK_COLORS_FILE` (only the edited slots) and reloaded when the twin starts. "Reset" restores these defaults. Names and colours are display data on the Pi; they never go to the PLC.
+The names and colours in `TANK_SLOTS` are only **defaults**. Operators rename and recolour any slot (including spare ones) from **Controls → Tank colors** in the HMI, or give a new tank its name and colour when they add it. Edits are saved to `GENESIS_TANK_COLORS_FILE` (only the edited slots) and reloaded when the twin starts. "Reset" restores these defaults. Names and colours are display data on the Pi; they never go to the PLC.
 
-`MAX_TANKS` = 8 bounds the slots and the PLC register map.
+`MAX_TANKS` = 2 bounds the slots and the PLC register map.
 
-**Sample barcodes** (`SAMPLE_BARCODES`) feed the simulator. `PT1|T200|200` deliberately fails on a 3-tank line to exercise the bad-scan path: the bottle rides through unfilled and the reject diverter removes it. `PT1|T300|…` exercises sort lane B.
+**Sample barcodes** (`SAMPLE_BARCODES`) feed the simulator. `PT1|T200|200` deliberately fails on the 2-tank line to exercise the bad-scan path: the bottle rides through unfilled and the reject diverter removes it. `PT1|T300|…` exercises sort lane B.
 
 ## Environment variables
 
@@ -44,15 +44,15 @@ The names and colours in `TANK_SLOTS` are only **defaults**. Operators rename an
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `CAPTSONE_MODE` | `sim` | `sim` = simulated line; `plc` = bridge to a PLC |
-| `CAPTSONE_PORT` | `43124` | HTTP port |
-| `CAPTSONE_HOST` | `127.0.0.1` | Bind address (`0.0.0.0` exposes it on the network, which is normally not needed) |
+| `GENESIS_MODE` | `sim` | `sim` = simulated line; `plc` = bridge to a PLC |
+| `GENESIS_PORT` | `43124` | HTTP port |
+| `GENESIS_HOST` | `127.0.0.1` | Bind address (`0.0.0.0` exposes it on the network, which is normally not needed) |
 | `PLC_HOST` | — | PLC IP (**required** in `plc` mode) |
 | `PLC_PORT` | `502` | PLC Modbus TCP port |
 | `PLC_UNIT_ID` | `1` | Modbus unit id |
 | `PLC_POLL_MS` | `250` | Bridge poll period |
 | `PLC_COIL_BASE` | `0` | Modbus address of register-map coil 0. `0` for the virtual PLC and the Micro850, whose Modbus mapping puts coil 0 at CCW address 000001 ([prototype/micro850-plc.md §2](prototype/micro850-plc.md#2-modbus-address-mapping)). Only a PLC with fixed coil memory elsewhere needs another value |
-| `CAPTSONE_TANK_COLORS_FILE` | `twin/runtime/tank-colors.json` | Where operator tank name/colour edits are saved (both modes). Delete it to return to the `TANK_SLOTS` defaults. A missing or unreadable file means defaults |
+| `GENESIS_TANK_COLORS_FILE` | `twin/runtime/tank-colors.json` | Where operator tank name/colour edits are saved (both modes). Delete it to return to the `TANK_SLOTS` defaults. A missing or unreadable file means defaults |
 
 ### Virtual PLC (`npm run virtual-plc`)
 
@@ -97,4 +97,4 @@ See `hmi/.env.example`. An explicit `NEXT_PUBLIC_TWIN_SOURCE`, in the shell or `
 | Variable | Meaning |
 | --- | --- |
 | `VPLC_PORT` | Port used by `npm run dev:plc-sim` for the virtual PLC and the bridge |
-| `CAPTSONE_PORT` | Also used by `npm run doctor` and the root scripts to find the twin |
+| `GENESIS_PORT` | Also used by `npm run doctor` and the root scripts to find the twin |

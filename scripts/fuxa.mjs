@@ -2,7 +2,7 @@
  * Runs FUXA (open-source SCADA/HMI, MIT) natively — no Docker, no admin rights.
  *
  *   npm run fuxa            # installs deploy/fuxa on first use, then starts FUXA
- *   npm run fuxa -- --load  # also (re)loads the generated Captsone project
+ *   npm run fuxa -- --load  # also (re)loads the generated Genesis project
  *
  * FUXA is installed from npm into deploy/fuxa/node_modules and keeps its
  * project, logs and history in deploy/fuxa/data (both gitignored). On the very
@@ -82,7 +82,7 @@ if (firstRun || process.argv.includes("--load")) {
   if (!(await waitForFuxa())) {
     console.error(`[fuxa] FUXA did not answer on ${URL} — project not loaded.`);
   } else {
-    console.log("[fuxa] loading the Captsone project generated from the PLC register map ...");
+    console.log("[fuxa] loading the Genesis project generated from the PLC register map ...");
     const ok = npm(["run", "fuxa-project", "--", "--push"], join(ROOT, "twin"), { ...process.env, FUXA_URL: URL });
     if (!ok) console.error("[fuxa] project not loaded — run `npm run fuxa:project` once FUXA is up.");
   }

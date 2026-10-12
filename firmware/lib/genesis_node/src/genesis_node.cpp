@@ -1,4 +1,4 @@
-#include "captsone_node.h"
+#include "genesis_node.h"
 
 #include <ModbusIP_ESP8266.h>
 #include <Preferences.h>
@@ -14,7 +14,7 @@ namespace node {
 
 std::vector<Setting> networkSettings(const char* defaultIp) {
   return {
-      {"wifi_ssid", "captsone-ctl", "Wi-Fi network of the control access point"},
+      {"wifi_ssid", "genesis-ctl", "Wi-Fi network of the control access point"},
       {"wifi_pass", "", "Wi-Fi password (WPA2)"},
       {"ip", defaultIp, "static IP of this node (empty = DHCP)"},
       {"gateway", "192.168.10.1", "gateway (the control network has no uplink)"},

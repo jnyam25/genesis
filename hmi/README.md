@@ -1,6 +1,6 @@
-# Captsone HMI
+# Genesis HMI
 
-Operator HMI for the Captsone Industrial Paint Mixing System. It has a live OEE dashboard, a 2D line schematic, a 3D scene, a Controls screen (digital E-Stop, start/stop/reset, jog, tanks, simulated local panel), a global E-Stop/local-mode safety banner, and an Alarms screen.
+Operator HMI for the Genesis Industrial Paint Mixing System. It has a live OEE dashboard, a 2D line schematic, a 3D scene, a Controls screen (digital E-Stop, start/stop/reset, jog, tanks, simulated local panel), a global E-Stop/local-mode safety banner, and an Alarms screen.
 
 Stack: Next.js 16 (App Router, Turbopack), React 19, TypeScript, Tailwind CSS v4, shadcn/ui (Base UI), and react-three-fiber.
 

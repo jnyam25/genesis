@@ -11,7 +11,7 @@ export const PROJECTS = ["twin", "hmi"];
 
 /** Default ports: HMI (Next.js) and the twin's HTTP server. */
 export const HMI_PORT = 43123;
-export const TWIN_PORT = Number(process.env.CAPTSONE_PORT ?? 43124);
+export const TWIN_PORT = Number(process.env.GENESIS_PORT ?? 43124);
 
 /** Next.js 16 requires Node >= 20.9. */
 export const MIN_NODE = [20, 9, 0];
@@ -27,7 +27,7 @@ export function nodeVersionOk(version = process.versions.node) {
 export function checkNodeVersion() {
   if (nodeVersionOk()) return;
   console.error(
-    `\n[captsone] Node ${process.versions.node} is too old — Node ${MIN_NODE.join(".")} or newer is required.` +
+    `\n[genesis] Node ${process.versions.node} is too old — Node ${MIN_NODE.join(".")} or newer is required.` +
       `\n           Install the LTS from https://nodejs.org (or run \`nvm use\` — see .nvmrc).\n`,
   );
   process.exit(1);

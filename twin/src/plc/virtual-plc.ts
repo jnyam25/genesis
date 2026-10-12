@@ -103,6 +103,8 @@ export function containerStatusCode(status: string, lane = 0): number {
       return CONTAINER_STATUS.MIX;
     case "cap":
       return CONTAINER_STATUS.CAP;
+    case "press":
+      return CONTAINER_STATUS.PRESS;
     case "qc":
       return CONTAINER_STATUS.QC;
     case "sort":

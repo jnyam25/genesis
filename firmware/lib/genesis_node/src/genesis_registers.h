@@ -1,4 +1,4 @@
-// Captsone PLC register map for the ESP32 field nodes.
+// Genesis PLC register map for the ESP32 field nodes.
 // Generated from twin/src/plc/tag-map.ts (protocol v4) by `npm run tag-map`. Do not edit by hand.
 // Addresses are 0-based Modbus PDU addresses of holding registers.
 #pragma once

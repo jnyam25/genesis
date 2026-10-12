@@ -1,9 +1,10 @@
 # Physical prototype — integration guide
 
-This folder explains how to connect the Captsone digital twin and operator HMI to the physical bottling prototype described in the team's bill of materials. The prototype uses:
+This folder explains how to connect the Genesis digital twin and operator HMI to the physical bottling prototype described in the team's bill of materials. The prototype uses:
 
 - the team's **Allen-Bradley Micro850 PLC (2080-L50E-48QBB)**, which supervises the line (belt, tank valves, reject and sort diverters, E-Stop monitoring), with a small **touch panel** or hardwired buttons for local control;
-- two **ESP32 station nodes**: #1 runs the label applicator and barcode scanner, #2 runs the robotic capping arm (a Hiwonder xArm that lifts a lid from the lid magazine, places it and presses it down) and the sort sensor. They reach the PLC over **Wi-Fi** through an access point on the control switch, and they only execute the PLC's requests and report back: **the PLC makes every decision**. Their firmware is in [`firmware/`](../../firmware) ([esp32.md](esp32.md));
+- two **ESP32 station nodes**: #1 runs the label applicator (STEPPERONLINE DM556Y Open Loop Stepper and a NEMA 23 motor) and barcode scanner, #2 runs the robotic capping arm (a Hiwonder xArm that lifts a lid from the lid magazine, places it and presses it down) and the sort sensor. They reach the PLC over **Wi-Fi** through an access point on the control switch, and they only execute the PLC's requests and report back: **the PLC makes every decision**. Their firmware is in [`firmware/`](../../firmware) ([esp32.md](esp32.md));
+- a **DC motor speed controller** on the conveyor, **24 V touch sensors** for bottle presence at the dry stations, and an **ONN-M4W** wall-mounted stack light (DC 24 V, red / yellow / green, buzzer) driven by the PLC;
 - a **monitoring PC/laptop** (or a Raspberry Pi) on wired Ethernet, which runs the bridge, the web HMI and the **FUXA** SCADA;
 - **Modbus TCP** between them, with an OPC UA mapping for later;
 - only software that needs **no subscription**: free CCW Standard for the PLC, open-source tools elsewhere, including FUXA ([bom.md §2a](bom.md#2a-software-no-subscriptions)).
@@ -41,7 +42,7 @@ Related: [../api.md](../api.md) (HTTP API), [../configuration.md](../configurati
 │   └────────────────────────────┬──────────┘                                          │
 │                                │ HTTP 127.0.0.1:43124  (/hmi/state, /hmi/command)    │
 │   ┌────────────────────────────▼──────────┐                                          │
-│   │ Twin service, CAPTSONE_MODE=plc       │  PlcBridge: polls every 250 ms,          │
+│   │ Twin service, GENESIS_MODE=plc       │  PlcBridge: polls every 250 ms,          │
 │   │ (twin/src/run.ts + plc/bridge.ts)     │  command pulses, heartbeat               │
 │   └────────────────────────────┬──────────┘                                          │
 └────────────────────────────────┼─────────────────────────────────────────────────────┘
@@ -76,7 +77,7 @@ Related: [../api.md](../api.md) (HTTP API), [../configuration.md](../configurati
 
 - **Supervision stays in the PLC.** Timing-critical, safety-adjacent logic runs on deterministic, industrial hardware. The PC and HMI can reboot without stopping the line.
 - **The ESP32 nodes drive the fiddly hardware.** Bus-servo motion, the scanner module's serial link and the height sensor are awkward in ladder logic and cheap on an ESP32. The PLC stays in charge through a request/done handshake per station: it validates the raw barcode text, sends the arm one command at a time, and classifies the measured bottle height, so a node can't move or judge a bottle on its own. A node that fails or stops sending its heartbeat latches a station fault and stops the line.
-- **One register map is the contract.** [`twin/src/plc/tag-map.ts`](../../twin/src/plc/tag-map.ts) (protocol version 4) defines every address. The virtual PLC, the bridge, the documentation tables, the firmware header (`firmware/lib/captsone_node/src/captsone_registers.h`) and the FUXA project are all generated from or checked against it, so the PLC programmer, the firmware developers and the PC side can't drift apart.
+- **One register map is the contract.** [`twin/src/plc/tag-map.ts`](../../twin/src/plc/tag-map.ts) (protocol version 4) defines every address. The virtual PLC, the bridge, the documentation tables, the firmware header (`firmware/lib/genesis_node/src/genesis_registers.h`) and the FUXA project are all generated from or checked against it, so the PLC programmer, the firmware developers and the PC side can't drift apart.
 - **Modbus TCP first.** The Micro850, ESP32 libraries and the bridge all support it, and it's simple to debug. OPC UA uses the same tag names and is covered in [communication.md](communication.md).
 
 ## Development path: software first, then hardware
@@ -98,7 +99,7 @@ You can bring the prototype up in four stages. Each stage keeps the HMI and API 
 | Item | Status |
 | --- | --- |
 | Twin engine (BOM station order, 3 E-Stops, sort lanes, station faults), HMI, Modbus client/server, virtual PLC ↔ bridge round trip with simulated ESP32 nodes | Automated tests |
-| ESP32 firmware (`firmware/scanner-node`, `firmware/station-node`, `firmware/lib/captsone_node`) | Written against the register map ([esp32.md](esp32.md)); **not yet proven on the hardware** |
+| ESP32 firmware (`firmware/scanner-node`, `firmware/station-node`, `firmware/lib/genesis_node`) | Written against the register map ([esp32.md](esp32.md)); **not yet proven on the hardware** |
 | Micro850 program, wiring | **Not written or tested yet.** These documents are the specification for them |
 | 2080-L50E-48QBB facts (Modbus mapping, IO, connection limits, CCW 20.01+) | From Rockwell's published material; **verify** against the team's controller and its firmware ([micro850-plc.md](micro850-plc.md)) |
 | FUXA | Installed natively with `npm run fuxa`; the project is generated from the register map and runs against the virtual PLC ([scada.md](scada.md)). **Not tested against the Micro850 yet** (commissioning §3) |

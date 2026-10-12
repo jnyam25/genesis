@@ -1,10 +1,10 @@
-# Captsone ESP32 firmware
+# Genesis ESP32 firmware
 
 | Folder | Board | Job |
 | --- | --- | --- |
 | [`scanner-node/`](scanner-node/src/main.cpp) | ESP32 #1 (DevKit) | Label applicator + barcode scanner. Forwards the raw barcode text; the PLC validates it |
 | [`station-node/`](station-node/src/main.cpp) | ESP32 #2 (the xArm's controller, or a DevKit on the servo bus) | Robotic arm program (lift a lid from the magazine, place and press it onto the container) + sort height sensor |
-| [`lib/captsone_node/`](lib/captsone_node/src/captsone_node.h) | shared | Wi-Fi, Modbus TCP link to the PLC, PLC supervision, NVS settings, serial console, watchdog |
+| [`lib/genesis_node/`](lib/genesis_node/src/genesis_node.h) | shared | Wi-Fi, Modbus TCP link to the PLC, PLC supervision, NVS settings, serial console, watchdog |
 
 The Micro850 PLC makes every decision; the nodes execute its requests and report back. The protocol, settings, teach procedure and bench tests are in [docs/prototype/esp32.md](../docs/prototype/esp32.md).
 
@@ -24,4 +24,4 @@ First boot: `set wifi_ssid …`, `set wifi_pass …`, `set plc_ip …` (and `set
 
 ## Register map
 
-`lib/captsone_node/src/captsone_registers.h` is generated from `twin/src/plc/tag-map.ts`. After changing the map, run `npm run tag-map` at the repo root and rebuild both nodes. `npm test` fails if the header is out of date.
+`lib/genesis_node/src/genesis_registers.h` is generated from `twin/src/plc/tag-map.ts`. After changing the map, run `npm run tag-map` at the repo root and rebuild both nodes. `npm test` fails if the header is out of date.
