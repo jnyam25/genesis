@@ -4,7 +4,7 @@ Every design decision in the Genesis digital twin, with specific reasoning. Comp
 
 ## 1. System overview
 
-A container enters the belt and gets a label carrying a **preprinted custom barcode**. A scanner reads it. The controller parses the barcode into per-tank volumes, turns those into an ordered **mix_sequence** dispense plan, routes the container through the dispense bays it needs (one per tank, in belt order), dispenses with a small jitter, caps it (a robotic arm lifts a lid from the lid magazine, places it and presses it down), checks it at the sort sensor (QC), rejects it at the reject diverter (GATE) or sends it to the sort diverter (SORT), which splits accepted containers into two lanes by bottle size. The default station list (`LABEL, SCAN, BAY-1..3, CAP, QC, GATE, SORT`) follows the team's bill of materials (docs/prototype/bom.md); `LABEL`, `CAP`, `SORT` and an optional `MIX` are configuration, not code. There is no separate lid press: the arm seats the lid itself. There's no scan diverter: a container with a bad barcode visits no service station and is rejected at GATE. Multiple containers do this **concurrently** — each has its own record and its own sequence of operations. Tanks auto-refill when low. Every wait is bounded by a timeout (paused while the line is halted); a jam rejects the container and frees the station.
+A container enters the belt with a **preprinted QR** already on it. A scanner reads it. The controller parses the barcode into per-tank volumes, turns those into an ordered **mix_sequence** dispense plan, routes the container through the dispense bays (one per tank, in belt order), dispenses with a small jitter, caps it (a robotic arm lifts a lid from the lid magazine and places it; a cylinder at PRESS seats it), checks it at the sort sensor (QC), rejects it at the reject diverter (GATE) or sends it to the sort diverter (SORT), which splits accepted containers into two lanes by bottle size. The default station list is `SCAN, BAY-1, BAY-2, CAP, PRESS, QC, GATE, SORT`: the conveyor has two tanks. `LABEL`, `CAP`, `PRESS`, `SORT` and an optional `MIX` are configuration, not code. A bad QR is ejected at the scan gate before either valve opens. Multiple containers do this **concurrently** — each has its own record and its own sequence of operations. Tanks auto-refill when low. Every wait is bounded by a timeout (paused while the line is halted); a jam rejects the container and frees the station.
 
 Two faces, one model: `core.ts` + `run.ts` (the runnable Node twin), and the physical line's PLC (the team's Allen-Bradley Micro850), specified by the register map in `plc/tag-map.ts` with `plc/virtual-plc.ts` as its reference implementation and docs/prototype/micro850-plc.md as the program specification. The twin shares `config.ts`, `barcode.ts`, `recipe.ts`, `events.ts`, `safety.ts` and `metrics.ts`, and the PLC program implements the same rules. The PLC makes every line decision; the two ESP32 field nodes only execute its requests and report back (§6b). See docs/prototype/ for the hardware integration. The Node twin, the virtual PLC and the HMI's 2D/3D views cover simulation and virtual commissioning without any licensed simulator.
 
@@ -18,7 +18,7 @@ PT1|T<totalMl>|<v1>,<v2>,...,<vN>[|I<rounds>]
 
 - `PT1` — literal header ("PaintTwin", format version 1).
 - `T<totalMl>` — target total fill in milliliters, e.g. `T250`.
-- `<v1>,...,<vN>` — per-tank volume in ml, in `config.tanks` order, e.g. `100,80,70`.
+- `<v1>,...,<vN>` — per-tank volume in ml, in `config.tanks` order. This conveyor has two tanks, so a good label is `150,100`.
 - `|I<rounds>` — **optional** override of the interleaving round count from `config.mixPolicy`. Omit to use the config policy.
 
 | Barcode | Meaning |
@@ -29,7 +29,7 @@ PT1|T<totalMl>|<v1>,<v2>,...,<vN>[|I<rounds>]
 
 ### Why this format
 
-1. **Direct instructions, not a lookup.** The user's key requirement is that the barcode *encodes the dispense instructions directly* — how many units from each source — rather than a recipe ID the controller resolves against a database. `PT1|T250|100,80,70` is the entire instruction set. No recipe table, no lookup miss, no version skew between the printed label and the line's recipe store.
+1. **Direct instructions, not a lookup.** The user's key requirement is that the barcode *encodes the dispense instructions directly* — how many units from each source — rather than a recipe ID the controller resolves against a database. `PT1|T250|150,100` is the entire instruction set on the two-tank conveyor. No recipe table, no lookup miss, no version skew between the printed label and the line's recipe store.
 2. **Preprinted before entry.** The format is self-describing and stateless, so containers can be labeled at the filling plant and run on any Genesis line with the same tank order.
 3. **Trivially extensible to more tanks.** Adding a tank is appending one more comma-separated number. The parser splits on `,` and validates the count against `config.tanks.length`; it never indexes named fields. A 4-tank line prints `PT1|T300|100,80,70,50`; a 1-tank line prints `PT1|T200|200`. No parser code changes between configurations.
 4. **Versioned header.** `PT1` lets us evolve the format (`PT2`, …) without breaking existing labels. The parser rejects unknown headers with a structured `BAD_HEADER` error rather than misinterpreting them.
@@ -164,13 +164,13 @@ Implemented once in `safety.ts` (`LineSafety` state machine plus the pure `autho
 
 ## 6b. Station drivers and station faults
 
-**Decision: the PLC decides, the field nodes execute.** The ESP32 scanner node (label applicator + barcode scanner) and station node (Hiwonder xArm robotic arm + sort sensor) never make a line decision. They act on a PLC request, report a result through the register map, and set fault bits. Everything that decides a container's fate stays in the PLC, where it is deterministic and visible to the PLC programmer.
+**Decision: the PLC decides, the field nodes execute.** The ESP32 scanner node (barcode scanner) and station node (Hiwonder xArm robotic arm + sort sensor) never make a line decision. The conveyor has no label applicator. They act on a PLC request, report a result through the register map, and set fault bits. Everything that decides a container's fate stays in the PLC, where it is deterministic and visible to the PLC programmer.
 
 **Station drivers.** In the plain Node twin, LABEL, SCAN, CAP and QC complete on the core's own timers (`stationTimesSec`). The virtual PLC attaches a `StationDriver` to the core (`core.driver`), and those four stations then finish only when the driver reports back, exactly as on the real PLC:
 
 - **LABEL**: `Station.LabelRequest` / `LabelDone` handshake with the scanner node.
 - **SCAN**: the scan mailbox (§6 (b)). The node forwards raw text; the core validates it in `applyScan` and plans the route.
-- **CAP**: `plc/arm-sequencer.ts` sends the arm one command at a time (`HOME`, `PICK_LID` while the belt moves, `PLACE_LID` once a container is held at CAP, which places the lid, presses it down and releases). `NO_LID` is retried up to three times; a lid that was released during an aborted move rejects that container (`STATION_FAULT`), since the PLC can't tell whether it is seated.
+- **CAP**: `plc/arm-sequencer.ts` sends the arm one command at a time (`HOME`, `PICK_LID` while the belt moves, `PLACE_LID` once a container is held at CAP, which places the lid and releases). The lid-press cylinder seats it at PRESS. `NO_LID` is retried up to three times; a lid that was released during an aborted move rejects that container (`STATION_FAULT`), since the PLC can't tell whether it is seated.
 - **QC**: the station node reports the measured bottle height (`Station.SortHeightMm`). The PLC picks the lane whose `bottleHeightMm` is nearest and within `sort.heightToleranceMm`, and rejects the container with `BOTTLE_TYPE_MISMATCH` if that isn't the lane its recipe calls for.
 
 A driven station that doesn't report within `config.stationNodeTimeoutSec` (15 s) jams its container, like any other bounded wait (§6 (c)). By default `plc/simulated-nodes.ts` plays both nodes in-process with the same register contract as the firmware; `VPLC_NODES` swaps either one for a real ESP32.
@@ -202,7 +202,7 @@ interface Snapshot {
 ```json
 {
   "tanks": [
-    { "id": "T1", "name": "Titanium White", "colorCode": "#F4F1EA", "levelMl": 4889.6, "capacityMl": 5000 }
+    { "id": "T1", "name": "Sky Blue", "colorCode": "#7EC8E3", "levelMl": 4889.6, "capacityMl": 5000 }
   ],
   "containers": [
     { "id": 1, "status": "ACCEPTED", "fillMl": 247.1, "targetMl": 250 }
@@ -280,7 +280,7 @@ The HMI reaches these endpoints through its own `/api/twin/*` route handlers (a 
 - **Fix — pipelining cap.** The spawn gate originally compared `containers.length` (which retains finished containers) against `maxConcurrentContainers`, so the line admitted exactly 4 containers and then stalled forever. It now counts only containers still on the belt. A 300 s simulated run completes 54 containers (40 accepted, 14 rejected — the one-in-four mismatched sample barcode).
 - **Feeder backlog.** The mock feeder (every 3 s) is faster than the line; `run.ts` now holds back while `core.queuedBarcodes >= maxConcurrentContainers`, keeping the queue bounded.
 - **Throughput** was a since-start average; it is now a rolling 60 s rate (the HMI contract always documented it as rolling).
-- The Micro850 program is **specified, not yet built**. Commission it against the same checks per docs/prototype/commissioning.md.
+- The Micro850 project in `plc/` has the I/O and safety ladder (`Prog1`). Station logic is still the virtual PLC. Commission the controller against the same checks per docs/prototype/commissioning.md.
 
 ## 9. File map
 

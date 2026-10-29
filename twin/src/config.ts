@@ -135,7 +135,7 @@ export const TANK_SLOTS: TankConfig[] = [
   { id: "T2", name: "Amber", colorCode: "#F4C430", ...TANK_DEFAULTS },
 ];
 
-/** 1-based slot number for a tank id (`T4` → 4), or null if it is not a slot id. */
+/** 1-based slot number for a tank id (`T2` → 2), or null if it is not a slot id. */
 export function tankSlot(tankId: string): number | null {
   const m = /^T(\d+)$/.exec(tankId);
   const n = m ? Number(m[1]) : NaN;

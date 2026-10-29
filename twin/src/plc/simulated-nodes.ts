@@ -60,7 +60,7 @@ class Handshake {
   }
 }
 
-/** ESP32 #1: label applicator + barcode scanner. Forwards the raw text; never parses it. */
+/** ESP32 #1: barcode scanner. Completes a label handshake only when the PLC requests one. Forwards the raw text; never parses it. */
 export class SimulatedScannerNode {
   private heartbeat = 0;
   private readonly label = new Handshake(STATION.LABEL_REQUEST, STATION.LABEL_DONE, true);

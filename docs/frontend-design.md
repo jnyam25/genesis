@@ -133,24 +133,24 @@ they share one geometric model. `computeLayout(tanks)` returns station
 positions in "line units" (~1m each) along the X axis:
 
 ```
-                                                                              ┌─▶ [output-b] Lane B (branch up)
-[label] [scan] [fill bay 1] ... [fill bay N] [cap] [qc] [gate] [sort] ────────┴─▶ [output-a] Lane A
+                                                                              ┌─▶ [output-b] Lane 2 (branch up)
+[scan] [fill bay 1] [fill bay 2] [cap] [press] [qc] [gate] [sort] ────────────┴─▶ [output-a] Lane 1
+         │
+      [qr reject]  (bad QR, before either valve)
                                                           │
                                                        [reject]  (branch down)
 ```
 
-- **Labeling** at X=0.6 and **Barcode Scan** at 1.6; **fill bays** (internal
-  kind `nozzle`) start at 2.7 and space 1.1 apart, one per tank; **Capping
-  Arm** (the robotic arm that places and presses the lid), **Sort Sensor**
-  (`qc`), **Reject Diverter** (`gate`) and **Sort Diverter** follow at fixed
-  offsets. There is no lid press station.
-- Tanks sit above their fill bay (Y=+1.6); the reject lane branches down from
-  the reject diverter (Y=−1.7); Lane B branches up after the sort diverter
-  (Y=+1.3) while Lane A runs straight on.
+- **Scan gate** then two fill bays (internal kind `nozzle`), one per tank; **Robotic capping
+  arm** (places the lid), **Lid press**, **Fill check** (`qc`), **Fill reject**
+  (`gate`) and **Sort / split** follow. The layout has no labeling station.
+- Tanks sit above their fill bay (Y=+1.6). The QR reject branches down from the
+  scan gate. The fill reject slide branches down from the fill reject (Y=−1.7).
+  Lane 2 branches up after the sort diverter (Y=+1.3) while Lane 1 runs straight on.
 - `stationForStatus(container, layout)` maps a container's `status` (and
-  `lane`) to a station: `fill-i` maps to fill bay i, `output` goes to Lane B
-  when `lane === 1` and Lane A otherwise, and both `rejected` and
-  `scan-rejected` go to the reject lane. `mix` (only on lines configured with
+  `lane`) to a station: `fill-i` maps to fill bay i, `output` goes to Lane 2
+  when `lane === 1` and Lane 1 otherwise, `scan-rejected` goes to the QR reject,
+  and `rejected` goes to the fill reject slide. `mix` (only on lines configured with
   a mixer) is shown at the last fill bay. This is the single place that
   translates the snapshot into geometry, so both views stay consistent and
   both scale with the tank count automatically.
@@ -172,13 +172,13 @@ An inline `<svg>` (no images) drawn to a `viewBox` computed from the layout, so
 it scales responsively and scrolls horizontally on narrow screens.
 
 **Every component is identified with a label/callout:**
-- **Labeling**, **Barcode Scan**, each **Fill Bay** (labeled with its tank),
-  **Capping Arm**, **Sort Sensor**, **Reject Diverter**, **Sort
-  Diverter**, **Reject Lane**, **Lane A** and **Lane B** (each output lane with
+- **Scan gate**, **QR reject**, each **Fill Bay** (two on this line, labeled with its tank),
+  **Robotic capping arm**, **Lid press**, **Fill check**, **Fill reject**, **Sort
+  / split**, **Fill reject slide**, **Lane 1** and **Lane 2** (each output lane with
   its name and accepted count when the engine sends `sortLanes`), and every
   **Tank** (labeled "TANK n · Name" with fill %).
-- An amber **DIVERTER** callout sits between the reject diverter and the reject
-  lane; the sort diverter shows "→ Lane A/B" for the bottle at it.
+- An amber **DIVERTER** callout sits between the fill reject and the fill reject
+  slide; the sort diverter shows "→ Lane 1" or "→ Lane 2" for the can at it.
 
 **Live state shown on the schematic:**
 - Stations light **green** when a container is at them; QC turns **red** while a
@@ -195,7 +195,7 @@ The viewBox reserves `TOP_PAD` (tank half-height + label space) above the
 tank row, so the tank tops and their "TANK n" / name labels are never clipped.
 
 **State handling:** when `tanks[]` is empty the schematic still renders the
-fixed stations (label, scan, cap, sort sensor, diverters, lanes) with no fill bays; when containers are
+fixed stations (scan gate, capping arm, lid press, fill check, diverters, lanes) with no fill bays; when containers are
 absent the belt and stations simply show idle. No empty view is needed here
 because the belt itself is the empty state — the dashboard tab covers the
 explicit empty/loading/error states.
@@ -216,11 +216,11 @@ to zoom, right-drag to pan; polar angle clamped so you stay above the floor).
 - **Tanks** as cylinders above each fill bay, with an inner liquid cylinder
   scaled to `levelMl/capacityMl` in the tank color, a feed pipe to the bay,
   and a torus ring that glows amber/red when low/critical.
-- **Station props** — small animated parts for the label applicator, the
+- **Station props** — small animated parts for the
   robotic capping arm (its boom swings from the lid stack beside the belt to
-  over the container and lowers to seat the lid), the reject diverter (extends toward the reject lane while a
-  bottle is rejected) and sort diverter (swings toward Lane B when a large
-  bottle arrives), all tweened in `useFrame`.
+  over the container and lowers to place the lid), the fill reject (extends toward the fill reject slide while a
+  can is rejected) and sort diverter (swings toward Lane 2 when a large
+  can arrives), all tweened in `useFrame`. A label roller is drawn only if the layout includes a label station, which this line does not.
 - **Containers** as translucent cups with a liquid cylinder whose height tracks
   `fillMl/targetMl`, colored the same way as the schematic for consistency.
 
@@ -312,7 +312,7 @@ fill valve opens:
   - a dashed **"Local control panel & field E-Stops — SIMULATION"** card that appears only when `safety.simulated`, so the physical-control behaviour can be exercised from the browser.
   The mock engine implements the same rules (`MockSafety`), so the HMI behaves identically standalone.
 - **Tank colors** (`components/controls/tank-colors.tsx`, on `/manual`, shown when the source sends `tankSlots`):
-  - a **Tank colors** card listing all eight slots (ON LINE / SPARE, EDITED). **Edit** opens an inline editor with a native colour picker, a hex field, the tank name (max 24 characters) and preset swatches sized for touch; **Save** sends `setTankColor`, **Default** and **Reset all** send `resetTankColor`;
+  - a **Tank colors** card listing both slots (ON LINE / SPARE, EDITED). **Edit** opens an inline editor with a native colour picker, a hex field, the tank name (max 24 characters) and preset swatches sized for touch; **Save** sends `setTankColor`, **Default** and **Reset all** send `resetTankColor`;
   - **Add tank** opens `AddTankForm` for the next free slot, prefilled with its saved name/colour, and sends `addTank({ name, colorCode })`;
   - input is checked client-side (`lib/twin/tank-colors.ts`) before sending; the twin re-validates. Colour edits aren't safety commands, so they are never disabled by LOCAL mode or an E-Stop. The twin saves them (`GENESIS_TANK_COLORS_FILE`); the mock saves them in `localStorage`.
 - **Alarms screen** (`/alarms`): active alarms derived from the snapshot (feed
@@ -337,7 +337,7 @@ hmi/src/
     format.ts           # pct / clock / OEE color helpers
     twin/
       types.ts          # TwinState contract + TwinCommands
-      layout.ts         # shared line layout + status/lane→station mapping (reject lane, Lane A/B)
+      layout.ts         # shared line layout + status/lane→station mapping (QR reject, fill reject, Lane 1/2)
       mock-engine.ts    # mock twin (3→4 tanks, BOM station order, sort lanes, bad barcodes, OEE, events, commands, tank colours)
       tank-colors.ts    # default slot names/colours, presets, colour validation
       safety.ts         # client mirror of the twin's safety rules + MockSafety
@@ -349,8 +349,8 @@ hmi/src/
     dashboard/          # nav-bar, oee-grid, counts-card, tank-levels, event-log
     controls/tank-colors.tsx      # Tank colors card + Add tank form
     safety/safety-banner.tsx      # global E-Stop / reset / LOCAL banner
-    schematic/line-schematic.tsx  # 2D inline SVG (reject lane, Lane A/B)
-    scene/line-scene.tsx          # 3D react-three-fiber scene (station props, reject lane, Lane A/B)
+    schematic/line-schematic.tsx  # 2D inline SVG (QR reject, fill reject, Lane 1/2)
+    scene/line-scene.tsx          # 3D react-three-fiber scene (station props, QR reject, fill reject, Lane 1/2)
     ui/                 # shadcn primitives
 ```
 

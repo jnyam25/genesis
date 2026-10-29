@@ -1,0 +1,25 @@
+# systemd unit: Modbus door for a SCADA PC that is not on the control network.
+# Set SCADA_GATEWAY_HOST in /etc/genesis/genesis.env first, then:
+#   sudo cp genesis-scada-gateway.service /etc/systemd/system/
+#   sudo systemctl enable --now genesis-scada-gateway
+[Unit]
+Description=Genesis remote SCADA door
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=genesis
+Group=genesis
+WorkingDirectory=/opt/genesis/twin
+EnvironmentFile=/etc/genesis/genesis.env
+ExecStart=/usr/bin/node dist/plc/scada-gateway.js
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

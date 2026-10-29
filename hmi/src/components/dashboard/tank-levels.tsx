@@ -23,7 +23,7 @@ export function TankLevels({ tanks }: { tanks: Tank[] }) {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            No tanks reported by the twin.
+            —
           </p>
         </CardContent>
       </Card>
@@ -65,7 +65,7 @@ export function TankLevels({ tanks }: { tanks: Tank[] }) {
                     </Badge>
                   )}
                   <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                    {ml(t.levelMl)} / {t.capacityMl} ml
+                    {ml(t.levelMl)} ml · {pct(ratio)}
                   </span>
                 </div>
               </div>
@@ -77,9 +77,6 @@ export function TankLevels({ tanks }: { tanks: Tank[] }) {
                     backgroundColor: t.colorCode,
                   }}
                 />
-              </div>
-              <div className="text-right font-mono text-[11px] text-muted-foreground">
-                {pct(ratio)} full
               </div>
             </div>
           );

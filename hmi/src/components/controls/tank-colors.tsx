@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Check, Palette, Pencil, PlusCircle, RotateCcw, X } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PRESET_COLORS, isHexColor, validateTankColor } from "@/lib/twin/tank-colors";
@@ -127,10 +127,6 @@ export function TankColorsCard({ slots, commands, run }: { slots: TankSlot[]; co
           <CardTitle className="flex items-center gap-2">
             <Palette className="h-4 w-4" /> Tank colors
           </CardTitle>
-          <CardDescription>
-            Name and color each tank slot, including spare slots for tanks you add later. Changes show on every screen
-            right away and are saved. They only change what the HMI displays, so they&apos;re allowed at any time.
-          </CardDescription>
         </div>
         <Button
           variant="outline"

@@ -9,17 +9,20 @@
  * Environment: PLC_HOST (default 127.0.0.1, the virtual PLC), PLC_PORT (5020),
  * PLC_UNIT_ID (1), FUXA_POLL_MS (250, same cadence as the bridge), FUXA_URL, FUXA_COMMANDS=1 (adds the
  * command coils and buttons; by default SCADA is read-only, scada.md R10).
+ * FUXA_PEER_HOST adds a second device, the virtual PLC, and a PLC link view.
+ * `npm run line` sets that peer to 127.0.0.1:VPLC_PORT.
  *
  * The project holds one Modbus TCP device (every holding register of the map
  * except the 32 raw barcode text registers, plus the command coils when
- * enabled), alarms for every FaultCode plus E-Stop / reset / tank-low, and a
- * "Line overview" view: the concept line (scan gate, QR reject, two tanks,
- * capping arm, lid press, fill reject, sort into two lanes) plus production
- * counters and, when FUXA_COMMANDS=1, the command buttons. Fault and E-Stop
- * banners blink over the line, a tank-level chart sits beside the vessels,
- * and clicking a station opens a diagnostic card. A Trends view charts
- * throughput. Every decision stays in the PLC, which refuses remote
- * commands in LOCAL mode.
+ * enabled). With a peer it also holds a read-only Virtual PLC device for the
+ * words the link compares. Alarms cover every FaultCode plus E-Stop / reset /
+ * tank-low, and a "Line overview" view: the concept line (scan gate, QR
+ * reject, two tanks, capping arm, lid press, fill reject, sort into two lanes)
+ * plus production counters and, when FUXA_COMMANDS=1, the command buttons.
+ * Fault and E-Stop banners blink over the line, a tank-level chart sits beside
+ * the vessels, and clicking a station opens a diagnostic card. A Trends view
+ * charts throughput. Every decision stays in the PLC, which refuses remote
+ * commands in LOCAL mode. The line overview stays bound to the primary device.
  */
 
 import * as fs from "fs";
@@ -29,6 +32,12 @@ import { MAX_TANKS } from "../config";
 import { FAULT_TEXT, FaultCode } from "../events";
 import { ARM_STATUS_BITS, LINE_STATE_BITS, SCAN, TANK_FLAG_BITS, coilTable, registerTable, type RegisterDef } from "./tag-map";
 
+export interface FuxaPeer {
+  host: string;
+  port: number;
+  unitId: number;
+}
+
 export interface FuxaProjectOptions {
   plcHost: string;
   plcPort: number;
@@ -36,12 +45,16 @@ export interface FuxaProjectOptions {
   pollingMs: number;
   /** Command buttons (coil tags). False = read-only SCADA that never writes to the PLC. */
   commands: boolean;
+  /** Second Modbus server, the virtual PLC. Adds a read-only device and the PLC link view. */
+  peer?: FuxaPeer;
 }
 
 export const DEFAULT_FUXA_OPTIONS: FuxaProjectOptions = { plcHost: "127.0.0.1", plcPort: 5020, unitId: 1, pollingMs: 250, commands: false };
 
 const DEVICE_ID = "genesis-plc";
+const PEER_DEVICE_ID = "genesis-plc-peer";
 const VIEW_ID = "v_line_overview";
+const VIEW_LINK = "v_plc_link";
 const VIEW_TRENDS = "v_trends";
 const VIEW_TANKS = "v_diag_tanks";
 const VIEW_SCAN = "v_diag_scan";
@@ -113,6 +126,13 @@ export function tagId(name: string): string {
   return `t_${name.replace(/[^A-Za-z0-9]/g, "_")}`;
 }
 
+export function peerTagId(name: string): string {
+  return `peer_${tagId(name)}`;
+}
+
+/** Words the PLC link view shows for the virtual PLC. Command coils stay on the primary device. */
+const PEER_WATCH = ["Sys.ProtocolVersion", "Sys.PlcHeartbeat", "Sys.LineState", "Sys.TankCount", "Sys.PhysicalEStopMask", "Sys.FaultCode", "Station.RunPermit"] as const;
+
 /** Scaled registers state their factor in the unit ("ml × 10", "× 1000", "cpm × 100"). */
 function scaling(unit: string): { divisor?: number; format?: number } {
   const m = /×\s*(\d+)/.exec(unit);
@@ -142,6 +162,16 @@ function coilTag(r: RegisterDef): FuxaTag {
 export function fuxaTags(commands = true): FuxaTag[] {
   const regs = registerTable().filter((r) => r.address < SCAN.TEXT_BASE || r.address >= SCAN.PARSE_RESULT);
   return [...regs.map(registerTag), ...(commands ? coilTable().map(coilTag) : [])];
+}
+
+function peerTags(): FuxaTag[] {
+  const byName = new Map(registerTable().map((r) => [r.name, r]));
+  return PEER_WATCH.map((name) => {
+    const register = byName.get(name);
+    if (!register) throw new Error(`no register named ${name}`);
+    const tag = registerTag(register);
+    return { ...tag, id: peerTagId(name), name: `Virtual.${register.name}`, label: register.name };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -586,7 +616,7 @@ export function lineOverviewView(commands = true): { id: string; name: string; t
   v.rect(0, 0, W, H, BG);
   v.text(24, 38, "Genesis", 26, INK, "start", "bold");
   v.text(150, 38, "Filling, capping and inspection", 18, MUTED);
-  v.text(W - 24, 38, "Micro850 · Modbus TCP", 14, MUTED, "end");
+  v.text(W - 24, 38, "2080-L50E-24QBB · Modbus TCP", 14, MUTED, "end");
 
   // Product flow ------------------------------------------------------------
   const running = t("Sys.LineState");
@@ -727,8 +757,8 @@ export function lineOverviewView(commands = true): { id: string; name: string; t
     v.button(972, 726, 420, 56, t("Cmd.DigitalEStop"), "DIGITAL E-STOP", "#b91c1c");
     v.button(972, 798, 200, 44, t("Cmd.ReleaseEStop"), "Release E-Stop", "#334155");
     v.button(1192, 798, 200, 44, t("Cmd.FirePusher"), "Fire reject", "#334155");
-    v.text(972, 868, "The PLC refuses a command in LOCAL mode or when it is unsafe.", 12, MUTED);
-    v.text(972, 888, "STOP and the digital E-Stop are accepted in either mode.", 12, MUTED);
+    v.text(972, 868, "Jog in REMOTE runs the belt for 0.5 s. RESET is the blue panel button.", 12, MUTED);
+    v.text(972, 888, "STOP and the digital E-Stop work in either mode. Fire reject waits for the station program.", 12, MUTED);
   } else {
     v.text(972, 600, "Read-only. This project never writes to the PLC.", 15, INK);
     v.text(972, 628, "Run the line from the local panel or the web HMI.", 15, INK);
@@ -851,6 +881,32 @@ function armDiag(): FuxaView {
   return viewOf(VIEW_ARM, "Capping arm", v, 720, 480);
 }
 
+function plcLinkView(): FuxaView {
+  const v = new ViewBuilder(960, 640);
+  v.rect(0, 0, 960, 640, BG);
+  v.text(24, 36, "PLC link", 22, INK, "start", "bold");
+  v.text(24, 68, "The virtual PLC repeats the Micro850 status words. Command coils 0–6 are copied both ways.", 13, MUTED);
+  v.text(24, 90, "Heartbeats stay independent, so each controller can show that it is alive.", 13, MUTED);
+  v.text(300, 140, "Micro850", 16, INK, "end", "bold");
+  v.text(560, 140, "Virtual PLC", 16, INK, "end", "bold");
+  const rows: Array<[string, string]> = [
+    ["Protocol", "Sys.ProtocolVersion"],
+    ["Heartbeat", "Sys.PlcHeartbeat"],
+    ["Line state", "Sys.LineState"],
+    ["Tank count", "Sys.TankCount"],
+    ["E-Stop mask", "Sys.PhysicalEStopMask"],
+    ["Fault code", "Sys.FaultCode"],
+    ["Run permit", "Station.RunPermit"],
+  ];
+  rows.forEach(([label, name], i) => {
+    const y = 186 + i * 52;
+    v.text(24, y, label, 16);
+    v.value(300, y, tagId(name), `Micro850 ${label}`, 18);
+    v.value(560, y, peerTagId(name), `Virtual ${label}`, 18);
+  });
+  return viewOf(VIEW_LINK, "PLC link", v, 960, 640);
+}
+
 function sortDiag(): FuxaView {
   const v = new ViewBuilder(720, 480);
   const t = (name: string) => tagId(name);
@@ -879,42 +935,58 @@ function sortDiag(): FuxaView {
 
 export function buildFuxaProject(opts: FuxaProjectOptions = DEFAULT_FUXA_OPTIONS): FuxaProject {
   const tags = Object.fromEntries(fuxaTags(opts.commands).map((tag) => [tag.id, tag]));
+  const devices: FuxaProject["devices"] = {
+    [DEVICE_ID]: {
+      id: DEVICE_ID,
+      name: "Micro850 24QBB",
+      type: "ModbusTCP",
+      enabled: true,
+      polling: opts.pollingMs,
+      property: { address: `${opts.plcHost}:${opts.plcPort}`, port: opts.plcPort, slaveid: String(opts.unitId), delay: 10, options: false },
+      tags,
+    },
+  };
+  const views = [lineOverviewView(opts.commands), trendsView(), tankDiag(), scanDiag(), armDiag(), sortDiag()];
+  const nav = [
+    { icon: "dashboard", view: VIEW_ID, link: "", text: "Line overview" },
+    { icon: "timeline", view: VIEW_TRENDS, link: "", text: "Trends" },
+  ];
+  const alarms = fuxaAlarms();
+  if (opts.peer) {
+    devices[PEER_DEVICE_ID] = {
+      id: PEER_DEVICE_ID,
+      name: "Virtual PLC",
+      type: "ModbusTCP",
+      enabled: true,
+      polling: opts.pollingMs,
+      property: { address: `${opts.peer.host}:${opts.peer.port}`, port: opts.peer.port, slaveid: String(opts.peer.unitId), delay: 10, options: false },
+      tags: Object.fromEntries(peerTags().map((tag) => [tag.id, tag])),
+    };
+    views.push(plcLinkView());
+    nav.push({ icon: "link", view: VIEW_LINK, link: "", text: "PLC link" });
+    alarms.push({
+      name: "Virtual PLC not publishing",
+      property: { variableId: peerTagId("Sys.ProtocolVersion") },
+      highhigh: level(0, "Virtual PLC is not publishing protocol 4", "PLC link", RED, "ackactive"),
+    });
+  }
   return {
     version: "1.02",
     name: "Genesis filling line",
     server: { id: "0", name: "FUXA Server", type: "FuxaServer", property: {} },
-    devices: {
-      [DEVICE_ID]: {
-        id: DEVICE_ID,
-        name: "Micro850",
-        type: "ModbusTCP",
-        enabled: true,
-        polling: opts.pollingMs,
-        property: { address: `${opts.plcHost}:${opts.plcPort}`, port: opts.plcPort, slaveid: String(opts.unitId), delay: 10, options: false },
-        tags,
-      },
-    },
+    devices,
     hmi: {
-      views: [lineOverviewView(opts.commands), trendsView(), tankDiag(), scanDiag(), armDiag(), sortDiag()],
+      views,
       layout: {
         start: VIEW_ID,
         zoom: "autoresize",
-        navigation: {
-          mode: "over",
-          type: "inline",
-          bkcolor: "#ffffff",
-          fgcolor: INK,
-          items: [
-            { icon: "dashboard", view: VIEW_ID, link: "", text: "Line overview" },
-            { icon: "timeline", view: VIEW_TRENDS, link: "", text: "Trends" },
-          ],
-        },
+        navigation: { mode: "over", type: "inline", bkcolor: "#ffffff", fgcolor: INK, items: nav },
         header: { title: "Genesis SCADA", alarms: "fix", infos: "fix", bkcolor: "#f8fafc", fgcolor: INK },
         showdev: true,
         show_connection_error: true,
       },
     },
-    alarms: fuxaAlarms(),
+    alarms,
     texts: [],
     notifications: [],
     scripts: [],
@@ -936,16 +1008,24 @@ export const FUXA_PROJECT_FILE = path.join(__dirname, "..", "..", "..", "deploy"
 
 if (require.main === module) {
   const env = process.env;
+  const peerHost = env.FUXA_PEER_HOST;
   const project = buildFuxaProject({
     plcHost: env.PLC_HOST ?? DEFAULT_FUXA_OPTIONS.plcHost,
     plcPort: Number(env.PLC_PORT ?? DEFAULT_FUXA_OPTIONS.plcPort),
     unitId: Number(env.PLC_UNIT_ID ?? DEFAULT_FUXA_OPTIONS.unitId),
     pollingMs: Number(env.FUXA_POLL_MS ?? DEFAULT_FUXA_OPTIONS.pollingMs),
     commands: env.FUXA_COMMANDS === "1",
+    ...(peerHost
+      ? { peer: { host: peerHost, port: Number(env.FUXA_PEER_PORT ?? 5020), unitId: Number(env.FUXA_PEER_UNIT_ID ?? env.PLC_UNIT_ID ?? 1) } }
+      : {}),
   });
   fs.writeFileSync(FUXA_PROJECT_FILE, JSON.stringify(project, null, 2) + "\n");
-  const device = Object.values(project.devices)[0] as { property: { address: string }; tags: object };
-  console.log(`[fuxa-project] wrote ${FUXA_PROJECT_FILE} (${Object.keys(device.tags).length} tags, ${project.alarms.length} alarms, PLC ${device.property.address})`);
+  const devices = Object.values(project.devices) as Array<{ name: string; property: { address: string }; tags: object }>;
+  console.log(
+    `[fuxa-project] wrote ${FUXA_PROJECT_FILE} (${project.alarms.length} alarms; ` +
+      devices.map((device) => `${device.name} ${device.property.address}, ${Object.keys(device.tags).length} tags`).join("; ") +
+      ")",
+  );
   if (process.argv.includes("--push")) {
     const url = env.FUXA_URL ?? "http://127.0.0.1:1881";
     pushFuxaProject(project, url).then(

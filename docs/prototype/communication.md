@@ -7,11 +7,19 @@ The BOM's split ([bom.md](bom.md)): the **Micro850 PLC** talks to the monitoring
 The Micro850 has **one Ethernet port and no Wi-Fi**, so everything reaches it through the switch. The access point is wired to the switch and bridges the ESP32 nodes onto the same subnet:
 
 ```
- Monitoring PC/laptop ──┐                                              ┌── ESP32 #1 scanner node (label + scan)
+    Monitoring PC / Pi ────┐                                              ┌── ESP32 #1 scanner node (label + scan)
  (bridge + web HMI,     ├── switch ──┬── Micro850 PLC (Ethernet)       │
-  FUXA SCADA)           │            └── access point (bridge mode) ····┤
+  on-network FUXA)      │            └── access point (bridge mode) ····┤
  Engineering laptop ────┘                 all on 192.168.10.x           └── ESP32 #2 station node (robotic arm, sort sensor)
                                      Touch panel (if used): Ethernet on the switch, or RS-232/485 to the PLC's serial port
+
+ The Pi's second interface (operator Ethernet, operator Wi-Fi, or WireGuard).
+ No IP forwarding — 192.168.10.0/24 is not routed off the switch.
+         │
+         ├── Wired SCADA on another LAN  → WireGuard → door 10.44.0.1:5502
+         └── Wireless SCADA
+               same operator Wi-Fi       → door 192.168.20.20:5502
+               any other network         → WireGuard → door 10.44.0.1:5502
 ```
 
 Suggested addressing (adjust to your site):
@@ -45,7 +53,7 @@ Suggested addressing (adjust to your site):
 | Data types | UINT16 registers; scaled integers (see the `Unit` column in [io-map.md](io-map.md#4-register-map-modbus-tcp)). On the Micro850 they're `UINT` arrays in the Modbus mapping ([micro850-plc.md §2](micro850-plc.md#2-modbus-address-mapping)) |
 | Addressing | 0-based PDU addresses (Modicon = address + 40001). Micro850: holding register N is CCW address 400001 + N and coil N is 000001 + N, so `PLC_COIL_BASE=0` |
 | Byte order | Standard Modbus big-endian per register. No 32-bit values are used, so there's no word-order question |
-| Max registers per read | 125 (the bridge reads 4 blocks: 0–19, 20–67, 100–139, 200–232) |
+| Max registers per read | 125 (the bridge reads 4 blocks: 0–19, 20–31, 100–139, 200–232) |
 
 ### Who writes what
 
@@ -60,7 +68,7 @@ Each register has exactly one writer. The command coils are the only exception: 
 | ESP32 #1 scanner node | `Scan.Done`, `Scan.Status`, `Scan.Length`, `Scan.Text1..32` (301–335, `Scan.Done` written last), `Station.LabelDone`, `Station.ScannerNodeFaults`, `Field.ScannerNodeHeartbeat` |
 | ESP32 #2 station node | `Station.ArmDoneSeq`, `Station.ArmResult`, `Station.ArmStatus`, `Station.SortDone`, `Station.SortHeightMm`, `Station.StationNodeFaults`, `Field.StationNodeHeartbeat` |
 | ESP32 tank node (optional) | `Field.Tank<k>LevelMl`, `Field.TankNodeHeartbeat` |
-| SCADA (FUXA) | Nothing by default: the generated project is read-only. With `FUXA_COMMANDS=1`, only the command coils `Cmd.Start`, `Cmd.Stop`, `Cmd.Reset`, `Cmd.Jog`, `Cmd.DigitalEStop`, `Cmd.ReleaseEStop`, `Cmd.FirePusher`. Never holding registers. The PLC applies the same authority rules as for the bridge, so it refuses FUXA's commands in LOCAL mode |
+| SCADA (FUXA) | Nothing by default: the generated project is read-only. With `FUXA_COMMANDS=1`, only the command coils `Cmd.Start`, `Cmd.Stop`, `Cmd.Reset`, `Cmd.Jog`, `Cmd.DigitalEStop`, `Cmd.ReleaseEStop`, `Cmd.FirePusher`. Never holding registers. A SCADA PC that is not on the control network sends those coils to the Pi's SCADA door, which forwards the same coils and drops everything else ([§5](#5-scada-off-the-control-network)). The PLC applies the same authority rules as for the bridge, so it refuses commands in LOCAL mode |
 
 **Handshakes.** For label, scan and sort, a request is new while `Request ≠ 0` and `Request ≠ Done`; neither side stores sequence numbers. The node writes its results first and the `Done` id last. The robotic arm takes one command at a time: the PLC writes `Station.ArmCmd` (1 HOME, 2 PICK_LID, 3 PLACE_LID), then a new `Station.ArmCmdSeq`; the station node runs it, writes `Station.ArmResult`, then `Station.ArmDoneSeq` = `ArmCmdSeq`. The full sequences are in [io-map.md §5](io-map.md#5-handshakes).
 
@@ -109,11 +117,11 @@ Objects/
     Counts/     Accepted, Rejected, Total, LaneA, LaneB
     Perf/       ThroughputCpm
     Oee/        Availability, Performance, Quality, Overall
-    Tank1..8/   LevelMl, CapacityMl, Flags, RefillThresholdMl, DispenseRate, ValveOpeningPct
+    Tank1..2/   LevelMl, CapacityMl, Flags, RefillThresholdMl, DispenseRate, ValveOpeningPct
     Container1..8/  Id, Status, FillMl, TargetMl
     Event1..8/  Seq, Code, Arg1, Arg2        + Events/LastSeq
     Scan/       Request, Done, Status, Length, Text1..Text32, ParseResult, ResultId, TotalMl
-    Field/      Tank1..8LevelMl, TankNodeHeartbeat, ScannerNodeHeartbeat, StationNodeHeartbeat
+    Field/      Tank1LevelMl, Tank2LevelMl, TankNodeHeartbeat, ScannerNodeHeartbeat, StationNodeHeartbeat
     Station/    RunPermit, LabelRequest, LabelDone, ArmCmd, ArmCmdSeq, ArmDoneSeq, ArmResult, ArmStatus, SortRequest, SortDone, SortHeightMm, ScannerNodeFaults, StationNodeFaults
     Cmd/        DigitalEStop, ReleaseEStop, Jog, FirePusher, Start, Stop, Reset   (Boolean; same one-shot semantics)
 ```
@@ -140,4 +148,88 @@ The SCADA, FUXA, is an extra Modbus TCP client of the PLC. It runs natively on t
 - Poll no faster than 500 ms (the generated project polls every 1000 ms, `FUXA_POLL_MS`). The generated device reads every holding register of the map except the 32 raw barcode text registers (plus the command coils with `FUXA_COMMANDS=1`).
 - Record the event ring by `Seq` (de-duplicate like the bridge) to get a line history.
 
-Installation, tag addressing (FUXA addresses are the register number + 1) and alarms are in [scada.md](scada.md).
+Installation, tag addressing (FUXA addresses are the register number + 1) and alarms are in [scada.md](scada.md). A SCADA PC that cannot see the PLC uses the door in §5 instead of connecting to port 502.
+
+### The virtual PLC beside the Micro850
+
+`npm run line` also starts the virtual PLC on `127.0.0.1:5020` in follow mode, and `npm run plc-link`. The link is a client of both servers. A command coil that is set on one side and clear on the other (`Cmd.DigitalEStop` through `Cmd.Reset`) is copied across once, until that source coil returns to 0. The Micro850's status words, from line state through fault code plus run permit, are copied onto the virtual PLC every poll. Each heartbeat keeps counting on its own. `Sim.*` coils stay local. The virtual PLC does not run a second line while it is following.
+
+FUXA then has two devices. The line overview stays on the Micro850. The **PLC link** view reads protocol, heartbeat, line state, tank count, E-Stop mask, fault code and run permit from both. Set `PLC_LINK_COMMANDS=0` to watch without copying coils. Leave field power off until the station programs are in the controller. The bridge still talks only to the Micro850, so the HMI follows that controller.
+
+## 5. SCADA off the control network
+
+FUXA still speaks Modbus TCP. When the SCADA PC is not on `192.168.10.0/24`, it must not be given a route to the PLC or the ESP32s. Modbus has no login and no encryption. The Raspberry Pi (or the monitoring PC) is the only machine on both sides. It runs a **SCADA door**: a Modbus server that remote FUXA uses, and a single Modbus client onward to the PLC.
+
+| Direction | What moves |
+| --- | --- |
+| PLC → remote SCADA | Holding registers and coils, polled by FUXA (default 250 ms). Tank levels, counts, throughput, OEE, line state, station status |
+| Remote SCADA → PLC | One command coil per button: Start, Stop, Jog, Reject (`Cmd.FirePusher`), digital E-Stop, Release, Reset |
+| Refused at the door | Any holding-register write. `Sim.*` coils. Any coil above `Cmd.Reset` |
+
+The PLC still decides. LOCAL mode refuses Start, Jog, Reject, and Reset. Stop and the digital E-Stop are accepted in either mode. Reset from a remote screen works only when `safety.remoteResetAllowed` is on. The physical E-Stops stay hardwired.
+
+The door uses one connection to the PLC however many remote screens are open. The Micro850's 16-client budget is unchanged.
+
+### Where each SCADA sits
+
+| Method | Network | Where FUXA sends Modbus |
+| --- | --- | --- |
+| Wired, cable in the control switch | Same network as the PLC | The PLC itself, `192.168.10.10:502`. No door |
+| Wired, cable on any other LAN | Not the control network | WireGuard to the Pi, then the door at `10.44.0.1:5502` |
+| Wireless, joined to the Pi's operator Wi-Fi | Same network as the Pi's second interface, not the control LAN | The door on that interface, for example `192.168.20.20:5502`. No tunnel |
+| Wireless, any other Wi-Fi | Not the control network and not the operator Wi-Fi | WireGuard to the Pi, then the door at `10.44.0.1:5502` |
+
+The operator Wi-Fi is a different SSID from the ESP32 access point. The Pi does not forward packets between them. A phone on the operator Wi-Fi can reach the door. It cannot reach `192.168.10.10`.
+
+### On the Pi
+
+Give the Pi a second interface: Ethernet to the office LAN, or Wi-Fi that has a path to the SCADA PCs. Leave `eth0` on the control switch. Do not enable IP forwarding.
+
+```bash
+# /etc/genesis/genesis.env
+SCADA_GATEWAY_HOST=192.168.20.20,10.44.0.1
+SCADA_GATEWAY_PORT=5502
+```
+
+`192.168.20.20` is the operator-Wi-Fi address (wireless SCADA on that network). `10.44.0.1` is the WireGuard address (wired or wireless SCADA on any other network). Then either:
+
+```bash
+npm run scada-gateway
+```
+
+or start the line with the same variable set. `npm run line` and `npm run dev:plc-sim` start the door when `SCADA_GATEWAY_HOST` is set. The door binds only the addresses you name. It refuses `0.0.0.0`.
+
+```bash
+sudo ufw allow in on wlan0 to any port 5502 proto tcp
+sudo ufw allow in on wg0 to any port 5502 proto tcp
+```
+
+Do not allow port 5502 on `eth0`. Example unit: [`deploy/raspberry-pi/genesis-scada-gateway.service`](../../deploy/raspberry-pi/genesis-scada-gateway.service). Example tunnel: [`deploy/scada-remote/`](../../deploy/scada-remote/).
+
+### On the SCADA PC
+
+Install the repo and run FUXA there. Point the project at the door, not at the PLC.
+
+Wireless on the operator Wi-Fi:
+
+```powershell
+$env:PLC_HOST = "192.168.20.20"
+$env:PLC_PORT = "5502"
+$env:FUXA_COMMANDS = "1"
+npm run fuxa
+npm run fuxa:project
+```
+
+Wired or wireless on a different network, after WireGuard is up (`AllowedIPs = 10.44.0.1/32` on the SCADA PC):
+
+```powershell
+$env:PLC_HOST = "10.44.0.1"
+$env:PLC_PORT = "5502"
+$env:FUXA_COMMANDS = "1"
+npm run fuxa
+npm run fuxa:project
+```
+
+Open http://127.0.0.1:1881/home on that PC. The browser stays local. Only the Modbus session crosses the network, and it ends at the Pi.
+
+To try the door against the virtual PLC on one machine: `$env:SCADA_GATEWAY_HOST="127.0.0.1"; $env:PLC_HOST="127.0.0.1"; $env:PLC_PORT="5020"; npm run dev:plc-sim`, then point a second FUXA at `127.0.0.1:5502`.

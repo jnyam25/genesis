@@ -2,16 +2,16 @@
 
 This folder explains how to connect the Genesis digital twin and operator HMI to the physical bottling prototype described in the team's bill of materials. The prototype uses:
 
-- the team's **Allen-Bradley Micro850 PLC (2080-L50E-48QBB)**, which supervises the line (belt, tank valves, reject and sort diverters, E-Stop monitoring), with a small **touch panel** or hardwired buttons for local control;
-- two **ESP32 station nodes**: #1 runs the label applicator (STEPPERONLINE DM556Y Open Loop Stepper and a NEMA 23 motor) and barcode scanner, #2 runs the robotic capping arm (a Hiwonder xArm that lifts a lid from the lid magazine, places it and presses it down) and the sort sensor. They reach the PLC over **Wi-Fi** through an access point on the control switch, and they only execute the PLC's requests and report back: **the PLC makes every decision**. Their firmware is in [`firmware/`](../../firmware) ([esp32.md](esp32.md));
+- the team's **Allen-Bradley Micro850 PLC (2080-L50E-24QBB)**, which supervises the line (belt, tank valves, reject and sort diverters, E-Stop monitoring), with a small **touch panel** or hardwired buttons for local control;
+- two **ESP32 station nodes**: #1 reads the preprinted QR (there is no labeler on this conveyor), #2 runs the robotic capping arm (a Hiwonder xArm that lifts a lid from the lid magazine and places it; a separate cylinder seats it) and the sort sensor. They reach the PLC over **Wi-Fi** through an access point on the control switch, and they only execute the PLC's requests and report back: **the PLC makes every decision**. Their firmware is in [`firmware/`](../../firmware) ([esp32.md](esp32.md));
 - a **DC motor speed controller** on the conveyor, **24 V touch sensors** for bottle presence at the dry stations, and an **ONN-M4W** wall-mounted stack light (DC 24 V, red / yellow / green, buzzer) driven by the PLC;
 - a **monitoring PC/laptop** (or a Raspberry Pi) on wired Ethernet, which runs the bridge, the web HMI and the **FUXA** SCADA;
 - **Modbus TCP** between them, with an OPC UA mapping for later;
 - only software that needs **no subscription**: free CCW Standard for the PLC, open-source tools elsewhere, including FUXA ([bom.md §2a](bom.md#2a-software-no-subscriptions)).
 
-Station order: labeling → barcode scan → Tank 1/2/3 fill → capping arm → sort sensor → reject diverter → sort diverter (lane A / lane B).
+Station order on the conveyor: scan gate (bad QR ejected here, before either valve opens) → Tank 1 → Tank 2 → capping arm (places the lid) → lid press → sort sensor → reject diverter → sort diverter (lane 1 / lane 2). Two tanks, not three. The QR is already on the can.
 
-> **Read [safety.md](safety.md) before powering anything.** Physical E-Stops (at the control panel, the **line entry** and the **line exit**) act in hardware. The HMI's **Digital E-Stop** opens the same safety circuit through a fail-safe PLC output, so it shuts the machine down too. Either one puts the whole control system into E-Stop, and the line restarts only after release, a **reset at the machine**, and START.
+> **Read [safety.md](safety.md) before powering anything.** Physical E-Stops (at the **line entry** and the **line exit**) act in hardware. The HMI's **Digital E-Stop** opens the same safety circuit through a fail-safe PLC output, so it shuts the machine down too. Either one puts the whole control system into E-Stop, and the line restarts only after release, a **reset at the machine**, and START.
 
 ## Documents
 
@@ -21,13 +21,14 @@ Station order: labeling → barcode scan → Tank 1/2/3 fill → capping arm →
 | [bom.md](bom.md) | Buying parts: the BOM mapped to the software, the gaps, the budget, and open decisions |
 | [safety.md](safety.md) | Before designing the panel and before first power-up |
 | [io-map.md](io-map.md) | Wiring field devices, writing the PLC program, and writing ESP32 firmware. Contains the full **register map** |
-| [communication.md](communication.md) | Setting up the network (wired + Wi-Fi), Modbus TCP, or OPC UA |
-| [micro850-plc.md](micro850-plc.md) | The 2080-L50E-48QBB's IO, mapping the register map in CCW, and writing the PLC program |
+| [communication.md](communication.md) | Setting up the network (wired + Wi-Fi), Modbus TCP, OPC UA, and a SCADA PC that is not on the control network |
+| [micro850-plc.md](micro850-plc.md) | The 2080-L50E-24QBB's IO, mapping the register map in CCW, and writing the PLC program. The CCW project goes in [`plc/`](../../plc/README.md) |
+| [plc/instruction-manual.md](../../plc/instruction-manual.md) | Creating that project in CCW, building it, and downloading it |
 | [esp32.md](esp32.md) | Building and flashing the scanner node and the station node (firmware in `firmware/`) |
 | [scada.md](scada.md) | Running FUXA (`npm run fuxa`) for history, alarms and trends |
 | [raspberry-pi.md](raspberry-pi.md) | Running the bridge and HMI on a Pi instead of the laptop |
 | [commissioning.md](commissioning.md) | Bringing the line up step by step, with acceptance checks |
-| [troubleshooting.md](troubleshooting.md) | Something doesn't work |
+| [troubleshooting.md](troubleshooting.md) | Something doesn't work: PC, simulation, virtual PLC, physical line, HMI, FUXA, Pi, Micro850, or either ESP32 |
 
 Related: [../api.md](../api.md) (HTTP API), [../configuration.md](../configuration.md) (line configuration), [../operator-guide.md](../operator-guide.md) (using the HMI).
 
@@ -54,11 +55,11 @@ Related: [../api.md](../api.md) (HTTP API), [../configuration.md](../configurati
        │ 24 V DI/DO, 0–10 V   │ Modbus TCP or serial    │ Modbus TCP over Wi-Fi (AP on the switch)
        ▼                     ▼                         ▼
  Presence sensors,     Touch panel          ┌──────────────────────┐  ┌──────────────────────────┐
- belt motor, valves,   (START, recipe,      │ ESP32 #1 scanner node│  │ ESP32 #2 station node    │
- diverters, stack      status)              │ label applicator,    │  │ xArm capping arm,        │
- light                                      │ raw barcode → Scan.* │  │ sort sensor → Station.*  │
+ belt motor, two       (START, recipe,      │ ESP32 #1 scanner node│  │ ESP32 #2 station node    │
+ valves, diverters,    status)              │ preprinted QR → Scan.*│ │ xArm places the lid,     │
+ lid press, stack light                     │                      │  │ sort sensor → Station.*  │
                                             └──────────────────────┘  └──────────────────────────┘
- Hardwired E-Stop chain (panel, line entry, line exit) → safety relay → removes power from every
+ Hardwired E-Stop chain (line start, line end) → safety relay → removes power from every
  actuator, including the ones the ESP32 nodes drive
 ```
 
@@ -69,7 +70,7 @@ Related: [../api.md](../api.md) (HTTP API), [../configuration.md](../configurati
 | **Safety relay and E-Stop chain** | Removing actuator power when a physical E-Stop is pressed, a guard opens, or the PLC's fail-safe **digital E-Stop** output drops | Depend on software (or Wi-Fi) for the physical buttons |
 | **Local control station** (touch panel + hardwired STOP/RESET, key switch) | LOCAL/REMOTE, START/JOG and recipe on the touch panel; hardwired STOP and RESET; operates the line without the monitoring PC | Get overridden by the web HMI in LOCAL mode |
 | **Micro850 PLC** | Every line decision: container tracking, stoppers or belt stops, barcode validation, valve timing, robotic arm sequencing, bottle-type classification, reject/QC decision, sort lane, counters, OEE, event ring; watching the ESP32 heartbeats and fault bits and latching station faults (`Sys.FaultCode`); E-Stop state, reset/start/stop logic, LOCAL/REMOTE authority, the digital E-Stop output; `Station.RunPermit` for the ESP32 nodes | Wait for the monitoring PC. The line (and the local panel) keeps working if the PC or HMI goes away |
-| **ESP32 nodes** | Executing and reporting: the label applicator; reading the barcode and forwarding the raw text (`Scan.*`); one robotic arm command at a time (home, pick a lid, place and press it); measuring the bottle height (`Station.SortHeightMm`). Each runs on a PLC request and only while `Station.RunPermit` = 1 and the PLC heartbeat is alive | Any line decision (they don't parse barcodes, choose lanes or reject bottles), and anything safety-related. Their actuators are powered through the safety relay ([safety.md §2a](safety.md#2a-actuators-driven-by-the-esp32-nodes)) |
+| **ESP32 nodes** | Executing and reporting: reading the preprinted QR and forwarding the raw text (`Scan.*`); one robotic arm command at a time (home, pick a lid, place it — the press cylinder seats it); measuring the bottle height (`Station.SortHeightMm`). Each runs on a PLC request and only while `Station.RunPermit` = 1 and the PLC heartbeat is alive | Any line decision (they don't parse barcodes, choose lanes or reject bottles), and anything safety-related. Their actuators are powered through the safety relay ([safety.md §2a](safety.md#2a-actuators-driven-by-the-esp32-nodes)) |
 | **Monitoring PC: twin service** | Translating PLC registers into the HMI's JSON; turning operator commands into command pulses | Run control logic |
 | **Monitoring PC: HMI / SCADA** | Operator screens, logging | Talk to the PLC directly (HMI); write to the PLC (SCADA) |
 
@@ -88,8 +89,8 @@ You can bring the prototype up in four stages. Each stage keeps the HMI and API 
 | --- | --- | --- |
 | 1. Simulation | `npm run dev` | Nothing. The twin simulates the line |
 | 2. Virtual PLC | `npm run dev:plc-sim` (+ `npm run fuxa`) | The **Modbus protocol path**: virtual PLC ↔ bridge ↔ HMI, and virtual PLC ↔ FUXA. Optionally real ESP32 nodes (`VPLC_NODES`) |
-| 3. Real PLC, no field devices | Twin service with `PLC_HOST=<plc ip>` (`PLC_COIL_BASE=0`); PLC with simulated inputs | PLC program and network |
-| 4. Full prototype | Same as 3 | Everything |
+| 3. Real PLC, no field devices | `PLC_HOST=<plc ip> npm run line` | PLC program and network. Virtual PLC in follow mode, status and coil link, bridge, HMI and FUXA (line overview on the Micro850, PLC link view on both). ESP32s stay off |
+| 4. Full prototype | `npm run line` with the ESP32 nodes powered and joined to the PLC | Everything |
 
 - **Stage 2** runs [`twin/src/plc/virtual-plc.ts`](../../twin/src/plc/virtual-plc.ts), which exposes the simulated line on the exact register map the Micro850 must implement. Use it as the **reference implementation** when writing the PLC program. It simulates both ESP32 nodes in-process by default. To test real nodes before the PLC exists, point their firmware at `<dev PC IP>:5020` and start the virtual PLC with `VPLC_NODES=scanner`, `station` or `all` ([../configuration.md](../configuration.md#virtual-plc-npm-run-virtual-plc)); the virtual PLC then watches their heartbeats and latches a fault if one goes offline.
 - **Automated tests** (`npm test`) cover the Modbus implementation, the register encoding, the scan mailbox, the robotic arm handshake, station faults, command handshakes against the virtual PLC, and that the generated firmware header and FUXA project match the register map.
@@ -98,9 +99,10 @@ You can bring the prototype up in four stages. Each stage keeps the HMI and API 
 
 | Item | Status |
 | --- | --- |
-| Twin engine (BOM station order, 3 E-Stops, sort lanes, station faults), HMI, Modbus client/server, virtual PLC ↔ bridge round trip with simulated ESP32 nodes | Automated tests |
+| Twin engine (scan gate, two tanks, lid press, two E-Stops, Lane 1 / Lane 2, station faults), HMI, Modbus client/server, virtual PLC ↔ bridge round trip with simulated ESP32 nodes | Automated tests |
 | ESP32 firmware (`firmware/scanner-node`, `firmware/station-node`, `firmware/lib/genesis_node`) | Written against the register map ([esp32.md](esp32.md)); **not yet proven on the hardware** |
-| Micro850 program, wiring | **Not written or tested yet.** These documents are the specification for them |
-| 2080-L50E-48QBB facts (Modbus mapping, IO, connection limits, CCW 20.01+) | From Rockwell's published material; **verify** against the team's controller and its firmware ([micro850-plc.md](micro850-plc.md)) |
+| Micro850 program ([`plc/`](../../plc/README.md)) | **Partial.** `Prog1` is in the CCW project (I/O, safety, commands, and the registers the bridge reads). Station logic and the rest of the publish are not in the ladder, and nothing has been downloaded |
+| Wiring | Specified in [commissioning.md](commissioning.md). Not built |
+| 2080-L50E-24QBB facts (Modbus mapping, IO, connection limits, CCW 20.01+) | From Rockwell's published material; **verify** against the team's controller and its firmware ([micro850-plc.md](micro850-plc.md)) |
 | FUXA | Installed natively with `npm run fuxa`; the project is generated from the register map and runs against the virtual PLC ([scada.md](scada.md)). **Not tested against the Micro850 yet** (commissioning §3) |
 | OPC UA | Tag mapping specified; the bridge implements Modbus TCP only |

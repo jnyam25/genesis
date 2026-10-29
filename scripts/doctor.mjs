@@ -8,9 +8,8 @@
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
-import { createServer } from "node:net";
 import { join } from "node:path";
-import { ROOT, PROJECTS, HMI_PORT, TWIN_PORT, MIN_NODE, nodeVersionOk, npmSpawnArgs } from "./lib.mjs";
+import { ROOT, PROJECTS, HMI_PORT, TWIN_PORT, MIN_NODE, nodeVersionOk, npmSpawnArgs, portInUse } from "./lib.mjs";
 
 let problems = 0;
 const ok = (msg) => console.log(`  \x1b[32m✓\x1b[0m ${msg}`);
@@ -48,21 +47,12 @@ if (existsSync(hmiNext)) {
   else if (swc.length) ok(`hmi native binaries match ${process.platform}/${process.arch}`);
 }
 
-// Ports
-const portFree = (port) =>
-  new Promise((resolve) => {
-    const srv = createServer()
-      .once("error", () => resolve(false))
-      .once("listening", () => srv.close(() => resolve(true)))
-      .listen(port, "127.0.0.1");
-  });
-
 for (const [name, port, fix] of [
   ["HMI", HMI_PORT, "stop the other process, or edit the -p flag in hmi/package.json"],
   ["Twin", TWIN_PORT, "stop the other process, or set GENESIS_PORT to another port"],
 ]) {
-  if (await portFree(port)) ok(`${name} port ${port} is free`);
-  else bad(`${name} port ${port} is in use (already running, or another app)`, fix);
+  if (await portInUse(port)) bad(`${name} port ${port} is in use (already running, or another app)`, fix);
+  else ok(`${name} port ${port} is free`);
 }
 
 console.log(problems ? `\n${problems} problem(s) found.\n` : "\nAll good. Run `npm run dev`.\n");

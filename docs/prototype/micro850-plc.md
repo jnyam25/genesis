@@ -1,6 +1,6 @@
 # Allen-Bradley Micro850 PLC program specification
 
-This is the functional specification for the line PLC program on the team's **Allen-Bradley Micro850, catalog number 2080-L50E-48QBB**. The team already owns the controller, so it isn't a purchase line in the [BOM](bom.md). This page isn't a program export: nothing here has been run on the Micro850 yet.
+This is the functional specification for the line PLC program on the team's **Allen-Bradley Micro850, catalog number 2080-L50E-24QBB**. The team already owns the controller, so it isn't a purchase line in the [BOM](bom.md). The Connected Components Workbench project goes in [`plc/`](../../plc/README.md). [plc/instruction-manual.md](../../plc/instruction-manual.md) is the procedure for creating it in CCW and downloading it. This page isn't a program export: nothing here has been run on the Micro850 yet.
 
 **The PLC is the supervisor: it makes every decision.** The two ESP32 nodes and the robotic arm only execute what the PLC requests and report raw results back. In particular:
 
@@ -13,7 +13,7 @@ No node may start motion on its own, retry on its own or skip a station. Each on
 
 **The reference implementation is the virtual PLC.** For every rule below, [`twin/src/core.ts`](../../twin/src/core.ts), [`twin/src/safety.ts`](../../twin/src/safety.ts) (E-Stop, reset, start/stop, local/remote authority, fault latch), [`twin/src/barcode.ts`](../../twin/src/barcode.ts) (barcode rules), [`twin/src/plc/arm-sequencer.ts`](../../twin/src/plc/arm-sequencer.ts) (robotic arm) and [`twin/src/plc/virtual-plc.ts`](../../twin/src/plc/virtual-plc.ts) (handshakes, node supervision, sort classification) show the expected behaviour, and `npm test` shows the handshakes working. When in doubt, match the virtual PLC. The register map is vendor-neutral: any PLC with a Modbus TCP server can implement it.
 
-Hardware and software facts below come from Rockwell's Micro830/850/870 user manual (2080-UM002), the Micro800 selection guide (2080-SG001), the CCW Modbus Mapping help and Rockwell knowledgebase articles QA14133, QA20567 and QA23703, checked in September 2026. **Confirm them against the controller's firmware revision, the 48-point installation instructions that came with it and the CCW help before wiring.**
+Hardware and software facts below come from Rockwell's Micro830/850/870 user manual (2080-UM002), the Micro800 selection guide (2080-SG001), the CCW Modbus Mapping help and Rockwell knowledgebase articles QA14133, QA20567 and QA23703, checked in September 2026. **Confirm them against the controller's firmware revision, the 24-point installation instructions that came with it and the CCW help before wiring.**
 
 ## 1. Controller, software and IO
 
@@ -27,16 +27,16 @@ Hardware and software facts below come from Rockwell's Micro830/850/870 user man
 
 The 2080-L50E is the current Micro850; it replaced the 2080-LC50, which was discontinued in 2023. **An L50E needs CCW 20.01 or later.** Use a CCW version whose project revision matches the controller's firmware (CCW shows the firmware when you connect), and update the firmware from CCW if the project needs a newer one.
 
-### The controller: 2080-L50E-48QBB
+### The controller: 2080-L50E-24QBB
 
-From the Micro800 selection guide (2080-SG001):
+From the Micro800 selection guide (2080-SG001) and the Micro800 technical data (2080-TD001):
 
-| Feature | 2080-L50E-48QBB |
+| Feature | 2080-L50E-24QBB |
 | --- | --- |
-| Digital inputs | **28** × 12/24 V DC, sink or source |
-| Digital outputs | **20** × 24 V DC **sourcing** (transistor): drive 24 V solenoids, stoppers and indicators directly |
-| PTO/PWM | 3 channels on the embedded outputs (the installation instructions name the outputs) |
-| High-speed counters | 6, on the embedded inputs |
+| Digital inputs | **14** × 12/24 V DC, sink or source |
+| Digital outputs | **10** × 24 V DC **sourcing** (transistor): drive 24 V solenoids, stoppers and indicators directly |
+| PTO/PWM | 2 channels on the embedded outputs (the installation instructions name the outputs) |
+| High-speed counters | 4, on the embedded inputs |
 | Embedded analog | **None**: analog outputs come from plug-ins |
 | Plug-in slots | **5** (2080-… plug-ins, e.g. analog output 2080-OF2, IO 2080-IQ4OB4) |
 | Expansion | Up to 4 **2085-…** modules on the right side, finished with a 2085-ECR end cap |
@@ -51,15 +51,15 @@ Before designing the panel, list any plug-in or expansion modules already fitted
 
 [io-map.md §3](io-map.md#3-io-count-and-sizing) needs **15 DI / 8 DO / 2–3 AO** for 2 tanks, or about **23 DI / 20 DO / 3 AO** with stoppers, the recommended extra inputs and indicators.
 
-| Need | 2080-L50E-48QBB | What to add |
+| Need | 2080-L50E-24QBB | What to add |
 | --- | --- | --- |
-| Digital inputs | 28 embedded: covers the required 15 and the full 23 | Nothing. With everything fitted 5 are spare |
-| Digital outputs | 20 embedded: covers the required 8 plus 7 stoppers, with 5 left for the 5 indicator outputs (ONN-M4W red, yellow, green and buzzer, plus the RESET lamp) | Nothing spare once stoppers and the tower are both fitted. One-bottle mode frees the stopper outputs |
+| Digital inputs | 14 embedded | The 14 embedded points are the safety, panel and station-present inputs in [plc/instruction-manual.md](../../plc/instruction-manual.md). `I_Sort_Present`, the lane-full sensors, the diverter home switches, the tank-low floats, and hardwired START and JOG are on a **2085-IQ16** |
+| Digital outputs | 10 embedded | The 8 required outputs fit, with 2 left for stack-light green and red. Stoppers (7), amber, the buzzer and the RESET lamp need a **2085-OB16** |
 | Analog outputs (valve angles, belt speed) | None embedded | **One 2080-OF2** (2 channels, 0–10 V or 0–20 mA, 12-bit, non-isolated) covers the two valves. Add a second OF2, or use a PWM output, only if belt speed is an analog channel |
 
-- **Belt speed without an AO channel.** Drive the conveyor speed controller's speed input from one of the PWM outputs if the controller accepts PWM. The two valves then need one 2080-OF2.
-- **One-bottle mode** ([bom.md D1](bom.md#6-open-decisions-for-the-team)) drops the 7 stopper outputs, so the embedded outputs cover everything with room to spare.
-- **More tanks.** Each extra tank adds 2 inputs, 2 outputs (valve shutoff and stopper) and 1 analog output. The embedded IO runs out at about 4 tanks with stoppers; beyond that add a 2085-IQ16 / 2085-OB16 and a third 2080-OF2 or a 2085-OF4.
+- **Belt speed without an AO channel.** Drive the conveyor speed controller's speed input from one of the two PWM outputs if the controller accepts PWM. The two valves then need one 2080-OF2.
+- **One-bottle mode** ([bom.md D1](bom.md#6-open-decisions-for-the-team)) drops the 7 stopper outputs. Amber, the buzzer and the RESET lamp still need 3 outputs past the 10 embedded, so a 2080-IQ4OB4 or the 2085-OB16 still belongs on the quote.
+- **More tanks.** Each extra tank adds 2 inputs, 2 outputs (valve shutoff and stopper) and 1 analog output. The embedded points are already full at 2 tanks, so another tank means more of the 2085-IQ16 / 2085-OB16 and another analog channel (a second 2080-OF2 or a 2085-OF4).
 - **Distributor prices in September 2026** (they vary a lot, so get a quote): 2080-OF2 about $120–160; 2085-OF4 about $210–350. **Check the lab's parts bin first.**
 - DC inputs must match the sensors (PNP sensors → wire the input common for sourcing sensors). The sourcing outputs switch +24 V to the load; return the load to 0 V.
 
@@ -103,7 +103,7 @@ The Micro850 has **no fixed Modbus memory**. You map global variables to Modbus 
 | --- | --- | --- | --- |
 | `MB_Cmd` | `ARRAY[0..15] OF BOOL` | `000001` | Coils 0–15 (`Cmd.*`, `Sim.Local*`) |
 | `MB_Sys` | `ARRAY[0..19] OF UINT` | `400001` | 0–19 system, counts, OEE |
-| `MB_Tank` | `ARRAY[0..47] OF UINT` | `400021` | 20–67 tank slots |
+| `MB_Tank` | `ARRAY[0..11] OF UINT` | `400021` | 20–31, two tank slots |
 | `MB_Cont` | `ARRAY[0..39] OF UINT` | `400101` | 100–139 container tracking |
 | `MB_Event` | `ARRAY[0..32] OF UINT` | `400201` | 200–232 event ring |
 | `MB_Scan` | `ARRAY[0..38] OF UINT` | `400301` | 300–338 scan mailbox (raw barcode text and the PLC's result) |
@@ -114,7 +114,7 @@ The Micro850 has **no fixed Modbus memory**. You map global variables to Modbus 
 
 So `Sys.PlcHeartbeat` (register 1) is `MB_Sys[1]`, `Sys.FaultCode` (19) is `MB_Sys[19]`, `Scan.Text1` (304) is `MB_Scan[4]`, `Station.ArmCmd` (423) is `MB_Station[3]` and `Cmd.Stop` (coil 5) is `MB_Cmd[5]`.
 
-**Map every address in each block**, including unused ones such as 13 or 413–419. The bridge and SCADA read whole blocks (0–19, 20–67, 100–139, 200–232), and a read that touches an unmapped address fails or returns zeros depending on the firmware. Whole-block arrays avoid gaps.
+**Map every address in each block**, including unused ones such as 13 or 402–409 and 413–419. The bridge and SCADA read whole blocks (0–19, 20–31, 100–139, 200–232), and a read that touches an unmapped address fails or returns zeros depending on the firmware. Whole-block arrays avoid gaps.
 
 **Keep the program's own data out of the map.** Only the `MB_*` arrays are mapped. Give the program named variables (`RunCmd`, `DigitalEStop`, `ContStatus[s]` …), copy the inputs the bridge and ESP32 nodes write out of `MB_*` at the start of the scan (§3, `S00_Inputs`), and copy the published values into `MB_*` at the end (`S07_Publish`). Put the register-map tag name in each copy's comment so the program stays readable.
 
@@ -126,24 +126,24 @@ So `Sys.PlcHeartbeat` (register 1) is `MB_Sys[1]`, `Sys.FaultCode` (19) is `MB_S
 
 ## 3. Program structure
 
-A Micro850 project runs its programs one after another in each scan, in the order set in CCW's Project Organizer. Each program can be ladder, structured text or function block diagram. Create these programs, in this order:
+A Micro850 project runs its programs one after another in each scan, in the order set in CCW's Project Organizer. Each program can be ladder, structured text or function block diagram. `Prog1` in the CCW project is the ladder for S00, S01, S02 and the S06 output map. It also clears `MB_Cmd[0..6]` and `MB_Cmd[8..11]` at the end of the scan, and it writes `MB_Sys[0]` (4), `MB_Sys[1]` (heartbeat), `MB_Sys[2]` (`LineState`), `MB_Sys[3]` (2), `MB_Sys[16]` and `MB_Station[0]`. That is the part the bridge and FUXA need before the station programs exist. Create the remaining programs, in this order:
 
-1. `S00_Inputs`: copy the bridge- and ESP32-written registers out of `MB_*`; debounce presence sensors (20 ms `TON`/`TOF`); build `PhysicalMask` from `I_EStop_<Panel|Entry|Exit>_Mon`; read the low floats; update the tank level estimates (§5).
-2. `S01_SafetyMode`: E-Stops, reset, run state, control authority (§6).
-3. `S02_Commands`: rising-edge handling of `MB_Cmd[0..15]` ([io-map.md §5](io-map.md#5-handshakes)); tank-enable-mask writes (§7). Reset every command coil (`MB_Cmd[i] := FALSE`) in the scan it is handled.
-4. `S03_Admission`: a bottle at LABEL (`I_Label_Present` rising) with a free container slot, the line running, `ActiveContainers < MaxConcurrent`, and lanes not full → create a container record.
-5. `S04_Supervisor`: node supervision and the fault latch (§6a), then the scan mailbox and barcode parser (§4a), the robotic arm sequencer (§4b) and the sort-height classification (§4c). It runs before the station state machines so they see this scan's results.
-6. `S05_Stations`: one state machine per station (§4). Each station is **acquired** before the container upstream is released.
-7. `S06_Outputs`: map station, tank and belt states onto `O_*` / `AO_*`. **All motion outputs are forced off while `NOT Running`**, except stoppers, which de-energize to extended (holding). `O_Safety_RemoteEStopOK := NOT DigitalEStop`. `Station.RunPermit := Running` (a latched fault clears `RunCmd`, so it drops the permit too).
-8. `S07_Publish`, gated by a 100 ms self-resetting `TON`: heartbeat, `Sys.LineState`, `Sys.FaultCode`, counters, OEE, throughput, container table, event ring (§8); then copy everything published into `MB_*`.
+1. `S00_Inputs`: copy the bridge- and ESP32-written registers out of `MB_*`; debounce presence sensors (20 ms `TON`/`TOF`); build `PhysicalMask` from `I_EStop_Entry_Mon` and `I_EStop_Exit_Mon` (0 = pressed); read the low floats; update the tank level estimates (§5). The ladder already copies the embedded and expansion inputs.
+2. `S01_SafetyMode`: E-Stops, reset, run state, control authority (§6). This logic is in `Prog1`.
+3. `S02_Commands`: rising-edge handling of `MB_Cmd[0..15]` ([io-map.md §5](io-map.md#5-handshakes)); tank-enable-mask writes (§7). Reset every command coil (`MB_Cmd[i] := FALSE`) in the scan it is handled. `Prog1` clears the coils. It does not act on `Cmd.FirePusher` or `Cmd.Reset`.
+4. `S03_Admission`: a can at SCAN (`I_Scan_Present` rising) with a free container slot, the line running, `ActiveContainers < MaxConcurrent`, and lanes not full → create a container record. Not in `Prog1`.
+5. `S04_Supervisor`: node supervision and the fault latch (§6a), then the scan mailbox and barcode parser (§4a), the robotic arm sequencer (§4b) and the sort-height classification (§4c). It runs before the station state machines so they see this scan's results. The virtual PLC (`twin/src/plc/virtual-plc.ts`) is this program until it is written in CCW. Set `FaultSet` for one scan; `Prog1` seals `FaultHold`.
+6. `S05_Stations`: one state machine per station (§4). Each station is **acquired** before the container upstream is released. Not in `Prog1`. The station bits (`Valve1Cmd`, `RelScan`, and the rest) stay false, so those outputs stay off.
+7. `S06_Outputs`: map station, tank and belt states onto `O_*` / `AO_*`. **All motion outputs are forced off while `NOT Running`**, except stoppers, which de-energize to extended (holding). `O_Safety_RemoteEStopOK := NOT DigitalEStop`. `Station.RunPermit := Running` (a latched fault clears `RunCmd`, so it drops the permit too). The field-output map and `RunPermit` are in `Prog1`. `RunPermit` is held at 0 while `SimInputs` is on. The valve-angle analog is not.
+8. `S07_Publish`, gated by a 100 ms self-resetting `TON`: heartbeat, `Sys.LineState`, `Sys.FaultCode`, counters, OEE, throughput, container table, event ring (§8); then copy everything published into `MB_*`. `Prog1` already writes version, heartbeat, `LineState`, tank count, the E-Stop mask and `RunPermit`. Counters, OEE, containers and the event ring are still this program.
 
 **Data layout.** Use arrays indexed by slot rather than one variable per slot:
 
 ```text
 Container slot s (s = 0..7):  ContId[s], ContStatus[s], ContStation[s], ContLane[s] (0 A / 1 B),
                               ContParseResult[s], ContRejectReason[s], ContManualReject[s], ContFillMl_x10[s],
-                              ContTargetMl_x10[s], ContStepTimer[s] (RTO instance), ContVolumeMl[s, 1..8]
-Tank slot k (k = 1..8):       TankEnabled[k], TankLow[k], TankLevelMl_x10[k], TankCapacityMl[k],
+                              ContTargetMl_x10[s], ContStepTimer[s] (RTO instance), ContVolumeMl[s, 1..2]
+Tank slot k (k = 1..2):       TankEnabled[k], TankLow[k], TankLevelMl_x10[k], TankCapacityMl[k],
                               TankRateMlPerS_x10[k], TankValveOpeningPct[k]
 Robotic arm:                  ArmSeq, ArmPending, ArmPendingCmd, ArmPendingTarget, ArmNeedHome,
                               ArmPickFailures, CapOutcomeId, CapOutcome (0 none, 1 capped, 2 failed)
@@ -161,39 +161,42 @@ Event ring:                   MB_Event itself (§8)
 Station order and codes come from [`config.ts`](../../twin/src/config.ts). This mirrors `TwinCore.progressContainer` in [`core.ts`](../../twin/src/core.ts).
 
 ```text
-LABEL (station 2, status 3):  hold (I_Label_Present). LabelRequest := id.
-                              wait LabelDone = id → LabelRequest := 0, release.
+LABEL (optional; not on this conveyor): the QR is already on the can. If a LABEL
+                              station is configured, hold and run LabelRequest/LabelDone.
 SCAN  (station 1, status 1):  hold. Scan.Request := id; wait Scan.Done = id; parse the raw text (§4a).
-                              ParseResult ≠ 0 (including 7 NO_READ) → the container keeps only GATE:
-                              it SKIPS every bay, CAP and QC (no scan diverter; it rides through
-                              unfilled). Event BARCODE_REJECTED (3, arg1 id, arg2 ParseResult).
-                              ParseResult = 0 → store volumes, TotalMl, Lane (§4c); event BARCODE_READ
-                              (32, arg1 id, arg2 TotalMl).
-BAY-k (station 10+k, status 10+k), for each enabled tank slot k in belt order with Volume > 0:
+                              ParseResult ≠ 0 (including 7 NO_READ, and 3 TANK_COUNT_MISMATCH
+                              when the label does not carry two volumes) → eject at the scan
+                              gate. Do not open a valve. Status 2. Event BARCODE_REJECTED
+                              (3, arg1 id, arg2 ParseResult).
+                              ParseResult = 0 → store the two volumes, TotalMl, Lane (§4c);
+                              event BARCODE_READ (32, arg1 id, arg2 TotalMl).
+BAY-k (station 10+k, status 10+k), k = 1 and 2, in belt order, when Volume > 0:
                               hold (I_Bay<k>_Present). AO_Valve_Tk_Angle := ValveOpeningPct,
                               O_Valve_Tk_Open := 1 for Volume / Rate seconds (RTO).
                               Close; FillMl += delivered; level estimate −= delivered; release.
                               Tank disabled meanwhile → skip, event DISPENSE_SKIPPED.
 CAP   (station 23, status 24):  hold. The arm sequencer (§4b) issues PLACE_LID for this id.
-                              Outcome "capped" → release. Outcome "failed" → ContRejectReason :=
-                              STATION_FAULT (7), release (the rest of its stations are skipped up to GATE).
+                              Outcome "capped" → release to PRESS. Outcome "failed" →
+                              ContRejectReason := STATION_FAULT (7); skip ahead to GATE.
+PRESS (status 25):            hold (I_Press_Present). Pulse O_LidPress_Extend to seat the lid,
+                              then retract and release. The arm does not seat the lid.
 QC    (station 21, status 21):  sort sensor. hold. SortRequest := id; wait SortDone = id → SortRequest := 0.
                               Classify SortHeightMm (§4c). Type ≠ Lane → ContRejectReason :=
                               BOTTLE_TYPE_MISMATCH (6). Release straight into GATE (no transit).
 GATE  (station 22):  decide, in this order:
-                       ParseResult ≠ 0                                     → reject (BAD_BARCODE, 1)
                        ManualReject (Cmd.FirePusher, §7)                   → reject (MANUAL_PUSHER, 3)
                        ContRejectReason ≠ 0 (CAP failed, bottle type)       → reject (that reason)
                        |Fill − Target| > max(1 ml, Target × (variance + 1 %)) → reject (FILL_OUT_OF_TOLERANCE, 2)
-                     reject → pulse O_RejectDiverter_Extend, wait !I_Gate_Present, status 23 (or 2 for
-                              a bad barcode), event CONTAINER_REJECTED (5, arg2 = reason).
+                     reject → pulse O_RejectDiverter_Extend, wait !I_Gate_Present, status 23,
+                              event CONTAINER_REJECTED (5, arg2 = reason).
                      else    → release to SORT.
-SORT  (station 25, status 26):  O_SortDiverter_LaneB := (Lane = B) while the container passes.
-                              Status 22 (lane A) or 27 (lane B); Counts.LaneA/B += 1;
+                     A bad QR never reaches GATE; it was ejected at SCAN.
+SORT  (status 26):            O_SortDiverter_LaneB := (Lane = B) while the container passes.
+                              Status 22 (lane 1) or 27 (lane 2); Counts.LaneA/B += 1;
                               event CONTAINER_ACCEPTED (4, arg2 = fill × 10).
 ```
 
-Status 25 was the lid press, which is removed; it stays reserved. The robotic arm now places **and** presses the lid (§4b).
+Status 25 is the lid press. The arm places the lid; the cylinder seats it (§4b).
 
 **Analog output scaling.** A 2080-OF2 channel takes a raw integer for its range (see the plug-in's manual for the counts per volt or mA). Scale `ValveOpeningPct` (0–100) to that range in `S06_Outputs`; 0 % must give the valve's closed signal.
 
@@ -211,7 +214,7 @@ The scanner node doesn't interpret the label. It triggers the GM65-class scanner
 1. When `Scan.Done = Scan.Request ≠ 0` for the container held at SCAN, validate the text (below) into `ParseResult`.
 2. Publish `Scan.ParseResult`, `Scan.ResultId := id` and `Scan.TotalMl` (0 when rejected); record `BARCODE_READ` or `BARCODE_REJECTED`; then `Scan.Request := 0` and release the container (§4).
 
-**Validation rules**, checked in this order, first failure wins. They are the rules of [`barcode.ts`](../../twin/src/barcode.ts) for the label format `PT1|T<totalMl>|<v1>,…,<vN>[|I<rounds>]`, e.g. `PT1|T250|100,80,70`:
+**Validation rules**, checked in this order, first failure wins. They are the rules of [`barcode.ts`](../../twin/src/barcode.ts) for the label format `PT1|T<totalMl>|<v1>,…,<vN>[|I<rounds>]`, e.g. `PT1|T250|150,100` (two volumes, one per tank):
 
 | # | Rule | `ParseResult` if it fails |
 | --- | --- | --- |
@@ -326,7 +329,7 @@ The station node drives the Hiwonder xArm (6 bus servos with the gripper) and ru
 | --- | --- |
 | 1 HOME | Move to the home pose, gripper open |
 | 2 PICK_LID | Lift a lid from the lid magazine and hold it (checks the gripper actually closed on a lid) |
-| 3 PLACE_LID | Place the held lid on the container at CAP, press it down to seat it, release, return home |
+| 3 PLACE_LID | Place the held lid on the container at CAP, release, return home. The press cylinder seats it |
 
 | Result (`Station.ArmResult`) | Meaning |
 | --- | --- |
@@ -373,11 +376,11 @@ The CAP station (§4) waits for its container's outcome: **capped** → release;
 
 The station node measures the bottle height with the VL53L1X time-of-flight sensor when `Station.SortRequest` changes to a new id, writes the median of its samples into `Station.SortHeightMm` (0 = no valid reading), then `Station.SortDone` = id. The PLC classifies it:
 
-- **Expected lane** from the recipe, set at SCAN: `TotalMl ≤ SmallBottleMaxMl` (250 ml) → lane A (0, diverter at rest), else lane B (1).
+- **Expected lane** from the recipe, set at SCAN: `TotalMl ≤ SmallBottleMaxMl` (250 ml) → Lane 1 (index 0, diverter at rest), else Lane 2 (index 1).
 - **Measured type**: the lane whose nominal height is nearest the reading **and** within `HeightToleranceMm` (±15 mm). A reading of 0, or one outside every lane's tolerance, is "unknown".
 - Measured type ≠ expected lane (unknown included) → `ContRejectReason := BOTTLE_TYPE_MISMATCH` (6), rejected at GATE.
 
-The nominal heights are placeholders (**120 mm** for lane A and **180 mm** for lane B, from `config.ts`). Measure the team's real bottles, then set the same numbers in the PLC constants and in `config.ts` so the twin and the PLC agree.
+The nominal heights are placeholders (**120 mm** for Lane 1 and **180 mm** for Lane 2, from `config.ts`). Measure the team's real bottles, then set the same numbers in the PLC constants and in `config.ts` so the twin and the PLC agree.
 
 ## 5. Tanks without level sensors
 
@@ -392,7 +395,7 @@ The BOM has no level sensor or refill valve ([bom.md G8](bom.md#3-gaps-between-t
 State variables are **not retained**: every power-up starts with `DigitalEStop = 0`, `RunCmd = 0`, and the safety relay needing a reset. Check that these variables don't have the **Retained** attribute set in CCW, and clear them on the first scan (`_SYSVA_FIRST_SCAN`) anyway. Putting the controller in Program mode turns every output off, which de-energizes `O_Safety_RemoteEStopOK` and opens the safety circuit.
 
 ```text
-PhysicalMask bit i := NOT I_EStop_<i>_Mon      // i = 0 PANEL, 1 ENTRY, 2 EXIT (config.safety.eStopButtons)
+PhysicalMask bit i := NOT I_EStop_<i>_Mon      // i = 0 ENTRY (Line start), 1 EXIT (Line end)
 EStopActive        := DigitalEStop OR (PhysicalMask <> 0)
 SafetyOK           := I_Safety_OK
 LocalMode          := I_Panel_LocalMode
@@ -467,7 +470,7 @@ The PLC detects a mask write by comparing `MB_Sys[4]` with its own copy each sca
 | `Sys.ProtocolVersion` | Constant `4`. Change it only together with [`tag-map.ts`](../../twin/src/plc/tag-map.ts) |
 | `Sys.PlcHeartbeat` | +1 every 100 ms, wrapping to 0 after 65 535 (§2) |
 | `Sys.LineState` | bit0 `Running`, bit1 `EStopActive`, bit2 `SafetyOK`, bit3 any latched fault (§6a), bit4 HMI heartbeat changed within 3 s, bit5 `DigitalEStop`, bit6 `PhysicalMask <> 0`, bit7 `ResetRequired`, bit8 `LocalMode`, bit9 remote reset allowed (constant), bit10 `SimInputs` |
-| `Sys.PhysicalEStopMask` | `PhysicalMask` (bit 0 PANEL, 1 ENTRY, 2 EXIT) |
+| `Sys.PhysicalEStopMask` | `PhysicalMask` (bit0 line start `ENTRY`, bit1 line end `EXIT`) |
 | `Sys.FaultCode` | The first latched fault (§6a), 0 when none |
 | `Scan.ParseResult` / `ResultId` / `TotalMl` | The last container validated at SCAN (§4a) |
 | `Counts.LaneA` / `Counts.LaneB` | Accepted containers per sort lane |
@@ -485,7 +488,7 @@ For [commissioning stage 3](commissioning.md#4-stage-3-real-plc-no-field-devices
 - take the physical E-Stop mask from `Sim.PhysicalEStopMask` (register 450, `MB_Sim[0]`) and the key switch from `Sim.LocalMode` (451, `MB_Sim[1]`);
 - take panel push-buttons from `Sim.LocalStart/Stop/Reset/Jog` (coils 8–11, `MB_Cmd[8..11]`);
 - synthesize presence sensors from the station state machines (0.5 s arrival delay);
-- if no ESP32 is connected: complete LABEL and CAP after the `stationTimesSec` values, have SCAN "read" a fixed test label (e.g. `PT1|T250|100,80,70`, still run through the §4a validation), have QC "measure" the expected lane's nominal height, and set the node-fitted constants FALSE (§6a) unless a Modbus tool plays that node;
+- if no ESP32 is connected: complete LABEL and CAP after the `stationTimesSec` values, have SCAN "read" a fixed test label (e.g. `PT1|T250|150,100`, still run through the §4a validation), have QC "measure" the expected lane's nominal height, and set the node-fitted constants FALSE (§6a) unless a Modbus tool plays that node;
 - drop the tank level estimates by the dispensed volume;
 - treat `SafetyOK` as `NOT EStopActive` after a simulated reset;
 - keep **all field outputs OFF** and `Station.RunPermit` = 0.

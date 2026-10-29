@@ -1,6 +1,7 @@
 /** Shared helpers for the root orchestration scripts (no dependencies). */
 
 import { existsSync, readFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -37,6 +38,24 @@ export function checkNodeVersion() {
  * Arguments for spawning npm cross-platform. On Windows npm is `npm.cmd`, which
  * needs a shell; pass one command string (args here are static, never user input).
  */
+/**
+ * True when this port already has a listener on IPv4 or IPv6.
+ * Next.js binds `::`, so an IPv4-only check can report a busy HMI port as free.
+ */
+export async function portInUse(port) {
+  const taken = (host) =>
+    new Promise((resolve) => {
+      const srv = createServer();
+      srv.once("error", (err) => resolve(err.code === "EADDRINUSE"));
+      srv.once("listening", () => srv.close(() => resolve(false)));
+      srv.listen(port, host);
+    });
+  for (const host of ["127.0.0.1", "::"]) {
+    if (await taken(host)) return true;
+  }
+  return false;
+}
+
 export function npmSpawnArgs(args, options = {}) {
   if (process.platform === "win32") return [`npm ${args.join(" ")}`, { ...options, shell: true }];
   return ["npm", args, options];

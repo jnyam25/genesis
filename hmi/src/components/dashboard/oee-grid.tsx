@@ -9,33 +9,11 @@ import {
 import { oeeBg, oeeColor, ratio } from "@/lib/format";
 import type { Oee } from "@/lib/twin/types";
 
-interface Metric {
-  key: keyof Oee;
-  label: string;
-  hint: string;
-}
-
-const METRICS: Metric[] = [
-  {
-    key: "overall",
-    label: "OEE",
-    hint: "Availability × Performance × Quality",
-  },
-  {
-    key: "availability",
-    label: "Availability",
-    hint: "Run time / planned time",
-  },
-  {
-    key: "performance",
-    label: "Performance",
-    hint: "Throughput / ideal throughput",
-  },
-  {
-    key: "quality",
-    label: "Quality",
-    hint: "Accepted / total produced",
-  },
+const METRICS: { key: keyof Oee; label: string }[] = [
+  { key: "overall", label: "OEE" },
+  { key: "availability", label: "Availability" },
+  { key: "performance", label: "Performance" },
+  { key: "quality", label: "Quality" },
 ];
 
 export function OeeGrid({ oee }: { oee: Oee }) {
@@ -66,9 +44,6 @@ export function OeeGrid({ oee }: { oee: Oee }) {
                   style={{ width: `${Math.min(100, v * 100)}%` }}
                 />
               </div>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                {m.hint}
-              </p>
             </CardContent>
           </Card>
         );

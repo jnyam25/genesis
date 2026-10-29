@@ -71,7 +71,7 @@ export interface Container {
   targetMl: number;
   /**
    * Output lane after the sort diverter (index into `TwinState.sortLanes`;
-   * 0 = Lane A, 1 = Lane B). Set once the recipe is known: where a `sort`
+   * 0 = Lane 1, 1 = Lane 2). Set once the recipe is known: where a `sort`
    * container is headed and where an `output` container went.
    */
   lane?: number;

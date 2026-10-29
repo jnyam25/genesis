@@ -5,11 +5,10 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertTriangle, Bell, ShieldAlert, WifiOff } from "lucide-react";
+import { AlertTriangle, Bell, ShieldAlert } from "lucide-react";
 import { useTwin } from "@/lib/twin/twin-context";
 import { clockTime, ml, tankIsLow } from "@/lib/format";
 import type { TwinEvent } from "@/lib/twin/types";
@@ -30,7 +29,7 @@ export default function AlarmsPage() {
       id: "feed-stale",
       severity: "error",
       source: "Data source",
-      message: "Twin feed stale — no snapshot within freshness window",
+      message: "No data",
     });
   }
   const safety = state.safety;
@@ -40,7 +39,7 @@ export default function AlarmsPage() {
         id: `estop-physical-${b.id}`,
         severity: "error",
         source: "Safety · physical E-Stop",
-        message: `PHYSICAL E-STOP pressed at ${b.name} — line shut down`,
+        message: `E-STOP · ${b.name}`,
       });
     }
     if (safety.digitalEStop) {
@@ -48,7 +47,7 @@ export default function AlarmsPage() {
         id: "estop-digital",
         severity: "error",
         source: "Safety · digital E-Stop",
-        message: "DIGITAL E-STOP active (from HMI) — safety circuit open, line shut down",
+        message: "E-STOP · Digital",
       });
     }
     if (!safety.eStopActive && safety.resetRequired) {
@@ -56,9 +55,7 @@ export default function AlarmsPage() {
         id: "reset-required",
         severity: "warn",
         source: "Safety",
-        message: safety.remoteResetAllowed
-          ? "Safety reset required — reset, then START"
-          : "Safety reset required at the local control panel, then START",
+        message: "Reset required",
       });
     }
     if (safety.controlMode === "local") {
@@ -66,7 +63,7 @@ export default function AlarmsPage() {
         id: "local-mode",
         severity: "info",
         source: "Control mode",
-        message: "LOCAL control — HMI is view-only (Digital E-Stop and Stop available)",
+        message: "LOCAL",
       });
     }
   } else if (state.oee.availability === 0 && state.connected) {
@@ -74,7 +71,7 @@ export default function AlarmsPage() {
       id: "line-halted",
       severity: "error",
       source: "Line",
-      message: "Line halted (availability 0)",
+        message: "Stopped",
     });
   }
   for (const t of state.tanks) {
@@ -83,7 +80,7 @@ export default function AlarmsPage() {
         id: `tank-${t.id}-low`,
         severity: "warn",
         source: `Tank ${t.name}`,
-        message: `Tank ${t.name} low — ${ml(t.levelMl)} ml`,
+        message: `${t.name} · ${ml(t.levelMl)} ml`,
       });
     }
   }
@@ -94,32 +91,19 @@ export default function AlarmsPage() {
 
   const iconFor = (s: ActiveAlarm["severity"]) =>
     s === "error" ? (
-      <ShieldAlert className="h-4 w-4 text-rose-400" />
+      <ShieldAlert className="h-4 w-4 text-rose-800" />
     ) : (
-      <AlertTriangle className="h-4 w-4 text-amber-400" />
+      <AlertTriangle className="h-4 w-4 text-amber-800" />
     );
 
   return (
     <main className="mx-auto w-full max-w-[1100px] flex-1 px-3 py-4 sm:px-6 space-y-4">
-      <div>
-        <h2 className="text-lg font-semibold">Alarms</h2>
-        <p className="text-sm text-muted-foreground">
-          Active faults derived from the live twin snapshot, plus the rolling
-          warn/error history.
-        </p>
-      </div>
-
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle className="flex items-center gap-2">
               <Bell className="h-4 w-4" /> Active Alarms
             </CardTitle>
-            <CardDescription>
-              {active.length === 0
-                ? "No active alarms — line nominal"
-                : `${active.length} active`}
-            </CardDescription>
           </div>
           <Badge variant={active.length ? "destructive" : "secondary"}>
             {active.length}
@@ -127,9 +111,9 @@ export default function AlarmsPage() {
         </CardHeader>
         <CardContent>
           {active.length === 0 ? (
-            <div className="flex items-center gap-2 text-sm text-emerald-400">
+            <div className="flex items-center gap-2 text-sm text-emerald-800">
               <ShieldAlert className="h-4 w-4 opacity-0" />
-              All clear — no tanks low, feed live, line running.
+              Clear
             </div>
           ) : (
             <ul className="space-y-2">
@@ -163,12 +147,11 @@ export default function AlarmsPage() {
           <CardTitle className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4" /> Alarm History
           </CardTitle>
-          <CardDescription>Recent warn / error events</CardDescription>
         </CardHeader>
         <CardContent>
           {history.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No warn/error events yet.
+              —
             </p>
           ) : (
             <ScrollArea className="h-[320px] pr-3">
@@ -179,16 +162,16 @@ export default function AlarmsPage() {
                     className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-muted/40"
                   >
                     {e.severity === "error" ? (
-                      <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+                      <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose-800" />
                     ) : (
-                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-800" />
                     )}
                     <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
                       {clockTime(e.at)}
                     </span>
                     <span
                       className={`text-sm ${
-                        e.severity === "error" ? "text-rose-300" : "text-amber-300"
+                        e.severity === "error" ? "text-rose-800" : "text-amber-900"
                       }`}
                     >
                       {e.message}
@@ -201,11 +184,6 @@ export default function AlarmsPage() {
         </CardContent>
       </Card>
 
-      <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-        <WifiOff className="h-3 w-3" /> Alarms are derived client-side from the
-        snapshot; a real PLC can also push dedicated alarm tags through the same
-        source.
-      </p>
     </main>
   );
 }

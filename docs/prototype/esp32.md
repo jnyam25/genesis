@@ -1,6 +1,6 @@
 # ESP32 station nodes
 
-The bill of materials ([bom.md](bom.md)) budgets **two ESP32 boards**, linked to the Micro850 PLC **wirelessly** through an access point on the control switch. They run the stations that are awkward for a PLC: the label applicator, the barcode scanner, the robotic arm that lifts a lid and places it on the container, and the sort height sensor. Both are **Modbus TCP clients** of the PLC.
+The bill of materials ([bom.md](bom.md)) budgets **two ESP32 boards**, linked to the Micro850 PLC **wirelessly** through an access point on the control switch. On this conveyor they run the stations that are awkward for a PLC: the barcode scanner, the robotic arm that lifts a lid and places it (the press cylinder seats it), and the sort height sensor. The scanner-node firmware can also step a label applicator, which this conveyor does not have. Both are **Modbus TCP clients** of the PLC.
 
 **The PLC makes every decision.** A node executes one PLC request at a time and reports what happened; it never validates a barcode, classifies a bottle, retries, or decides what the arm does next. The PLC validates the raw barcode text, classifies the measured bottle height, sequences the arm, and latches a fault (stopping the line) when a node fails or goes silent ([micro850-plc.md](micro850-plc.md)).
 
@@ -52,7 +52,7 @@ If your level sensors have 4–20 mA outputs, wire them to PLC analog inputs ins
 | More than 64 characters | 2 `TOO_LONG` | the first 64 characters |
 | Nothing within `scan_ms` (2 s) | 1 `NO_READ` | 0 |
 
-It writes status, length and all 32 text registers in one request, then `Scan.Done` = the container id. Reading moves nothing, so it does not wait for `RunPermit`. The PLC validates the text (`PT1|T<totalMl>|<v1>,…,<vN>[|I<rounds>]`) and publishes `Scan.ParseResult`: 0 OK, 1–6 as in [`twin/src/barcode.ts`](../../twin/src/barcode.ts), 7 `NO_READ`. A rejected container rides through unfilled and is diverted at the reject gate.
+It writes status, length and all 32 text registers in one request, then `Scan.Done` = the container id. Reading moves nothing, so it does not wait for `RunPermit`. The PLC validates the text (`PT1|T<totalMl>|<v1>,…,<vN>[|I<rounds>]`) and publishes `Scan.ParseResult`: 0 OK, 1–6 as in [`twin/src/barcode.ts`](../../twin/src/barcode.ts), 7 `NO_READ`. A non-zero result ejects the can at the scan gate before either valve opens.
 
 **Label.** On a new `Station.LabelRequest` while permitted, the node enables the DM556Y and sends `label_steps` step pulses, then the same number back (`label_us` between pulses). Direction is set before the first step. If the optional label sensor doesn't see a label at the end, or the driver alarm input is low, the node sets fault bit0 instead of `LabelDone` and turns the motor coils off. If the permit drops mid-stroke, pulsing stops and the motor is freed; the PLC keeps the request, so the stroke starts over once the permit returns.
 
@@ -91,7 +91,7 @@ Each PLC command is a short list of moves between **taught poses** (servos 2–6
 
 ### Sort height
 
-On a new `Station.SortRequest`, the node takes five fresh VL53L1X readings (up to 1 s), and writes the median height (`tof_mount` − distance) to `Station.SortHeightMm`, or 0 if fewer than three readings were valid or the height is below `tof_min`. Then it writes `Station.SortDone` = id. The PLC compares the height with the sort lanes (`config.sort`: lane A 120 mm, lane B 180 mm, ±15 mm) and rejects a bottle whose type doesn't match its recipe.
+On a new `Station.SortRequest`, the node takes five fresh VL53L1X readings (up to 1 s), and writes the median height (`tof_mount` − distance) to `Station.SortHeightMm`, or 0 if fewer than three readings were valid or the height is below `tof_min`. Then it writes `Station.SortDone` = id. The PLC compares the height with the sort lanes (`config.sort`: Lane 1 120 mm, Lane 2 180 mm, ±15 mm) and rejects a can whose type doesn't match its recipe.
 
 ### Fault bits (`Station.StationNodeFaults`), live while the cause lasts
 

@@ -201,7 +201,7 @@ export const BARCODE_ERROR_CODES = {
 } as const;
 export type BarcodeErrorName = keyof typeof BARCODE_ERROR_CODES;
 
-/** Fixed station codes. BAY-n is 10+n; 0 = none/unknown. 24 was the lid press (removed; reserved). */
+/** Fixed station codes. BAY-n is 10+n; 0 = none/unknown. */
 const STATION_CODES: Record<string, number> = {
   SCAN: 1,
   LABEL: 2,
@@ -209,12 +209,14 @@ const STATION_CODES: Record<string, number> = {
   QC: 21,
   GATE: 22,
   CAP: 23,
+  /** Pneumatic lid press after the arm. The conveyor seats the lid here, not with the arm. */
+  PRESS: 24,
   SORT: 25,
 };
 
 /**
  * Station codes: SCAN=1, LABEL=2, BAY-n=10+n, MIX=20, QC=21, GATE=22, CAP=23,
- * SORT=25, 0 = none/unknown.
+ * PRESS=24, SORT=25, 0 = none/unknown.
  */
 export function stationCode(stationId: string | null | undefined): number {
   if (!stationId) return 0;

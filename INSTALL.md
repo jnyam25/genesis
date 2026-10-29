@@ -81,6 +81,7 @@ npm start
 | --- | --- |
 | `npm run dev:mock` | Twin + HMI, but the HMI uses its built-in simulated line instead of the twin |
 | `npm run dev:plc-sim` | Virtual PLC (Modbus TCP on port 5020) + twin in PLC-bridge mode + HMI: the physical-prototype architecture, in software ([docs/prototype/](docs/prototype/README.md)) |
+| `npm run line` | Real PLC: virtual PLC (following) + status and coil link + bridge + HMI + FUXA. Set `PLC_HOST` first (port defaults to 502). SCADA reads both controllers |
 | `npm run virtual-plc` | Virtual PLC only, e.g. for testing ESP32 firmware or a Modbus tool against it |
 | `npm run dev:hmi` | HMI only, on its built-in mock feed (no twin needed) |
 | `npm run dev:twin` | Twin only (its own mini dashboard is at http://127.0.0.1:43124/) |
@@ -95,6 +96,7 @@ npm start
 | `npm run doctor` | Diagnoses the environment |
 | `npm run dev` / `dev:mock` / `dev:twin` / `dev:hmi` | Development servers (see above) |
 | `npm run dev:plc-sim` / `virtual-plc` | Virtual PLC stack (see above) |
+| `npm run line` | Physical line: bridge, HMI and FUXA against `PLC_HOST` |
 | `npm run build` / `build:mock` | Builds twin (`tsc`) + HMI (`next build`) |
 | `npm test` | Twin test suite (engine, Modbus, virtual PLC ↔ bridge) |
 | `npm run tag-map` | Regenerates the register tables in `docs/prototype/io-map.md` from `twin/src/plc/tag-map.ts` |
@@ -125,7 +127,7 @@ Setting an environment variable for one command:
 - Windows PowerShell: `$env:GENESIS_PORT=5000; npm run dev`
 - Windows cmd: `set GENESIS_PORT=5000 && npm run dev`
 
-**Opening the HMI from another device on the network:** use `http://<this-computer's-IP>:43123`. Next.js dev and start already listen on all interfaces. The twin can stay on `127.0.0.1`, because only the HMI server talks to it. You may need to allow port 43123 through the firewall.
+**Opening the HMI from another device on the network:** use `http://<this-computer's-IP>:43123`. Next.js listens on all interfaces. When `npm run dev` starts, it allows that computer's own LAN addresses, `127.0.0.1`, and `*.local`, so hot reload works without editing a config file for the new machine. The twin stays on `127.0.0.1`, because only the HMI server talks to it. Allow port 43123 through the firewall if the page does not load. If the computer's address changes, restart `npm run dev`.
 
 ## Troubleshooting
 
@@ -134,9 +136,10 @@ Setting an environment variable for one command:
 | `Cannot find module '@next/swc-…'`, `lightningcss…node`, or `@tailwindcss/oxide` errors | `node_modules` came from another OS or CPU. Run `npm run clean`, then `npm install`. |
 | `EADDRINUSE` / "port … is already in use" | Another instance is running, or another app has the port. Stop it, or change the port (see Configuration). `npm run doctor` shows which port. |
 | HMI shows "Connecting…" or "Feed stale" | The twin isn't running or can't be reached. Use `npm run dev` (not `dev:hmi`), and check `http://localhost:43123/api/twin/state`: a 502 response includes the reason. |
-| HMI shows Red/Green/Blue tanks instead of the twin's White/Red/Blue | It's on the mock feed. Check `NEXT_PUBLIC_TWIN_SOURCE` in your shell or `hmi/.env.local`, and rebuild if you're using `npm start`. |
+| Tank names or colours are not Sky Blue and Amber | A saved palette is overriding the defaults. Delete `twin/runtime/tank-colors.json` for the live twin, or clear the mock palette in the browser. The mock feed (`npm run dev:mock`) starts from the same Sky Blue / Amber defaults. |
 | `dev:plc-sim`: "port 5020 is already in use" | Another virtual PLC is running; stop it or set `VPLC_PORT` |
 | `/health` shows `online: false` in PLC mode | See [docs/prototype/troubleshooting.md](docs/prototype/troubleshooting.md) |
+| HMI, SCADA, and the twin show different numbers | They are not reading the same PLC. See [docs/prototype/troubleshooting.md](docs/prototype/troubleshooting.md#2-startup-commands-and-matching-numbers) |
 | `npm ci` says the lockfile is out of sync | The install script falls back to `npm install` automatically. Commit the updated lockfile. |
 | `EPERM` / symlink errors during install | You're installing on a FAT32/exFAT USB drive. Copy the project to the computer's own disk. |
 | `Failed to fetch font 'Geist'` during build or dev | You're offline. Connect once so Next.js can download and cache the font. |

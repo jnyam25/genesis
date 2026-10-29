@@ -11,17 +11,17 @@ import { clockTime } from "@/lib/format";
 import type { TwinEvent } from "@/lib/twin/types";
 
 const SEVERITY_STYLE: Record<TwinEvent["severity"], string> = {
-  info: "text-sky-400",
-  success: "text-emerald-400",
-  warn: "text-amber-400",
-  error: "text-rose-400",
+  info: "text-sky-800",
+  success: "text-emerald-800",
+  warn: "text-amber-800",
+  error: "text-rose-800",
 };
 
 const SEVERITY_DOT: Record<TwinEvent["severity"], string> = {
-  info: "bg-sky-400",
-  success: "bg-emerald-400",
-  warn: "bg-amber-400",
-  error: "bg-rose-400",
+  info: "bg-sky-700",
+  success: "bg-emerald-700",
+  warn: "bg-amber-700",
+  error: "bg-rose-700",
 };
 
 export function EventLog({ events }: { events: TwinEvent[] }) {
@@ -36,7 +36,7 @@ export function EventLog({ events }: { events: TwinEvent[] }) {
       <CardContent className="flex-1 overflow-hidden">
         {events.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Waiting for events from the twin…
+            —
           </p>
         ) : (
           <ScrollArea className="h-[260px] lg:h-[320px] pr-3">

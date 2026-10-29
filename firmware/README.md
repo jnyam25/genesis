@@ -2,7 +2,7 @@
 
 | Folder | Board | Job |
 | --- | --- | --- |
-| [`scanner-node/`](scanner-node/src/main.cpp) | ESP32 #1 (DevKit) | Label applicator + barcode scanner. Forwards the raw barcode text; the PLC validates it |
+| [`scanner-node/`](scanner-node/src/main.cpp) | ESP32 #1 (DevKit) | Barcode scanner. Forwards the raw barcode text; the PLC validates it. The same firmware can step a label applicator; this conveyor leaves that unwired |
 | [`station-node/`](station-node/src/main.cpp) | ESP32 #2 (the xArm's controller, or a DevKit on the servo bus) | Robotic arm program (lift a lid from the magazine, place and press it onto the container) + sort height sensor |
 | [`lib/genesis_node/`](lib/genesis_node/src/genesis_node.h) | shared | Wi-Fi, Modbus TCP link to the PLC, PLC supervision, NVS settings, serial console, watchdog |
 

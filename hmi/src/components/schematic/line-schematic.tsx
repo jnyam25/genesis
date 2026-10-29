@@ -92,9 +92,9 @@ export function LineSchematic({ state }: { state: TwinState }) {
       >
         <defs>
           <linearGradient id="belt" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#dbe4ee" />
-            <stop offset="50%" stopColor="#c5d0dc" />
-            <stop offset="100%" stopColor="#dbe4ee" />
+            <stop offset="0%" stopColor="#94a3b8" />
+            <stop offset="50%" stopColor="#64748b" />
+            <stop offset="100%" stopColor="#94a3b8" />
           </linearGradient>
           <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b" />
@@ -150,7 +150,7 @@ export function LineSchematic({ state }: { state: TwinState }) {
           height={Math.abs(layout.rejectY) * SCALE}
           rx={6}
           fill="#fee2e2"
-          stroke="#f87171"
+          stroke="#991b1b"
         />
         {/* Reject diverter */}
         <g>
@@ -174,7 +174,7 @@ export function LineSchematic({ state }: { state: TwinState }) {
           </text>
         </g>
 
-        {/* Flow direction arrows (Lane A and Lane B) */}
+        {/* Flow direction arrows (Lane 1 and Lane 2) */}
         {[0, laneBStation.y].map((y) => (
           <line
             key={y}
@@ -241,7 +241,7 @@ export function LineSchematic({ state }: { state: TwinState }) {
                 {p.id.replace("C-", "")}
               </text>
               {c.status === "scan-rejected" && (
-                <text x={cx} y={cy - 17} textAnchor="middle" className="fill-orange-300 font-mono" fontSize={7}>
+                <text x={cx} y={cy - 17} textAnchor="middle" className="fill-orange-800 font-mono" fontSize={7}>
                   BAD BARCODE
                 </text>
               )}
@@ -269,8 +269,8 @@ function StationGlyph({
   const color = flagged
     ? "#7f1d1d"
     : active
-      ? "#22c55e"
-      : "#475569";
+      ? "#166534"
+      : "#1e293b";
 
   return (
     <g>
@@ -293,12 +293,12 @@ function StationGlyph({
           height={28}
           rx={6}
           fill="#fee2e2"
-          stroke="#f87171"
+          stroke="#991b1b"
           strokeWidth={active ? 2.5 : 1.5}
         />
       )}
 
-      <text x={cx} y={cy + 5} textAnchor="middle" fontSize={GLYPHS[station.kind].size} className={flagged ? "fill-rose-400" : GLYPHS[station.kind].className}>
+      <text x={cx} y={cy + 5} textAnchor="middle" fontSize={GLYPHS[station.kind].size} className={flagged ? "fill-rose-900" : GLYPHS[station.kind].className}>
         {station.kind === "output" ? `${LANE_LETTER[station.lane ?? 0]} ▶` : GLYPHS[station.kind].glyph}
       </text>
 
@@ -371,14 +371,14 @@ function TankGlyph({
         fill={tank.colorCode}
         opacity={0.9}
       />
-      <rect x={x - 22} y={yTop} width={44} height={tankHeight} rx={6} fill="none" stroke={crit ? "#f59e0b" : low ? "#ef4444" : "#334155"} strokeWidth={low || crit ? 2 : 1.5} />
+      <rect x={x - 22} y={yTop} width={44} height={tankHeight} rx={6} fill="none" stroke={crit ? "#9a3412" : low ? "#991b1b" : "#1e293b"} strokeWidth={low || crit ? 2 : 1.5} />
       <text x={x} y={yTop - 8} textAnchor="middle" className="fill-slate-800 font-sans" fontSize={11} fontWeight={600}>
         {tank.name}
       </text>
-      <text x={x} y={yTop - 20} textAnchor="middle" className="fill-slate-600 font-mono" fontSize={9}>
+      <text x={x} y={yTop - 20} textAnchor="middle" className="fill-slate-900 font-mono" fontSize={9} fontWeight={700}>
         TANK {index + 1}
       </text>
-      <text x={x} y={yBottom + 14} textAnchor="middle" className="fill-slate-300 font-mono" fontSize={9}>
+      <text x={x} y={yBottom + 14} textAnchor="middle" className="fill-slate-800 font-mono" fontSize={9}>
         {Math.round(ratio * 100)}%
       </text>
     </g>

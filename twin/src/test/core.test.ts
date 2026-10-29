@@ -55,7 +55,7 @@ test("default line matches the concept: two tanks, lid press, two e-stops", () =
   }
 });
 
-test("physical E-Stop at the line entry and at the line exit each stop the line and are named", () => {
+test("physical E-Stop at the line start and at the line end each stop the line and are named", () => {
   for (const [buttonId, name] of [["ENTRY", "Line start"], ["EXIT", "Line end"]]) {
     const core = new TwinCore(DEFAULT_CONFIG);
     run(core, 10, (i) => SAMPLE_BARCODES[i % 4]);
@@ -67,7 +67,7 @@ test("physical E-Stop at the line entry and at the line exit each stop the line 
   }
 });
 
-test("sort diverter: small bottles go to lane A, large bottles to lane B", () => {
+test("sort diverter: small bottles go to Lane 1, large bottles to Lane 2", () => {
   const core = new TwinCore(DEFAULT_CONFIG);
   const lanes = new Map<string, number>();
   const barcodes = ["PT1|T200|100,100", "PT1|T260|130,130"];
@@ -83,6 +83,7 @@ test("sort diverter: small bottles go to lane A, large bottles to lane B", () =>
   }
   const snap = core.snapshot();
   assert.deepEqual(snap.sortLanes.map((l) => l.id), ["A", "B"]);
+  assert.deepEqual(snap.sortLanes.map((l) => l.name), ["Lane 1", "Lane 2"]);
   assert.ok(snap.sortLanes[0].count > 0 && snap.sortLanes[1].count > 0, JSON.stringify(snap.sortLanes));
   assert.equal(snap.sortLanes[0].count + snap.sortLanes[1].count, core.counts.accepted);
   for (const c of core.containers.filter((x) => x.state === "ACCEPTED")) {

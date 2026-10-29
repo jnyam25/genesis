@@ -1,10 +1,10 @@
 # SCADA: FUXA
 
-**The team's SCADA is [FUXA](https://github.com/frangoteam/FUXA)** ([documentation](https://frangoteam.github.io/FUXA/)): open source (MIT), web-based, with no runtime licence and no subscription. It runs on the monitoring laptop next to the bridge and reads the Micro850 (2080-L50E-48QBB) over Modbus TCP, using the same register map as the bridge.
+**The team's SCADA is [FUXA](https://github.com/frangoteam/FUXA)** ([documentation](https://frangoteam.github.io/FUXA/)): open source (MIT), web-based, with no runtime licence and no subscription. It reads the Micro850 (2080-L50E-24QBB) over Modbus TCP, using the same register map as the bridge. On the control network it talks to the PLC directly. A wired or wireless SCADA PC on any other network talks to the Raspberry Pi's SCADA door, which forwards reads and the command coils ([communication.md §5](communication.md#5-scada-off-the-control-network)).
 
 This page explains what SCADA adds (§1–§2), why FUXA was chosen (§3–§4), how to install and configure it (§5), and how to map the register map onto trends, history and alarms (§6). FUXA is installed from the repo (`npm run fuxa`) and has been tested against the virtual PLC; it hasn't been connected to the real Micro850 yet. Record results in the §7 checklist. Facts were checked against FUXA's repository and documentation and vendor sources in September 2026. Anything marked **unverified** still needs checking.
 
-Two team constraints apply: the PLC is the team's **Allen-Bradley Micro850 2080-L50E-48QBB**, and the software must work **without a subscription** (no annual fees, leased or time-limited licences).
+Two team constraints apply: the PLC is the team's **Allen-Bradley Micro850 2080-L50E-24QBB**, and the software must work **without a subscription** (no annual fees, leased or time-limited licences).
 
 ## 1. Purpose and scope
 
@@ -172,20 +172,22 @@ Whatever the install, FUXA listens on port **1881**.
 
 ### 5.2 Connect to the PLC
 
-The generated project already contains the PLC as a Modbus TCP device named **Micro850**; you don't create it by hand. Its settings:
+The generated project already contains the PLC as a Modbus TCP device named **Micro850 24QBB**; you don't create it by hand. Its settings:
 
 | Setting | Virtual PLC (stage 2) | Micro850 (stage 3 onward) |
 | --- | --- | --- |
 | Type | Modbus TCP | Modbus TCP |
 | Address | `127.0.0.1:5020` | `192.168.10.10:502` |
 | Slave ID (unit id) | 1 | 1 |
-| Polling | 1000 ms | 1000 ms |
+| Polling | 250 ms | 250 ms |
 
 To switch to the real PLC, regenerate and reload the project with the PLC's address (PowerShell shown; use `PLC_HOST=... npm run fuxa:project` in bash):
 
 ```powershell
 $env:PLC_HOST="192.168.10.10"; $env:PLC_PORT="502"; npm run fuxa:project
 ```
+
+`npm run line` does this for you: it starts the virtual PLC on port 5020, the coil link, the bridge, the HMI and FUXA. FUXA's line overview reads the Micro850 at `PLC_HOST:502`. A second device, **Virtual PLC**, and the **PLC link** view read `127.0.0.1:5020`. Command coils 0–6 are copied both ways. The virtual PLC repeats the Micro850 status words; the heartbeats stay independent.
 
 `npm run fuxa:project` needs FUXA running; it replaces the whole FUXA project (edits made in the FUXA editor are lost, §5.5). You can also change the address under **Connections** in the editor. Allow port 5020 through the Windows firewall if FUXA can't reach the virtual PLC, and start the virtual PLC with `npm run virtual-plc` (alone) or `npm run dev:plc-sim` (the whole chain with the HMI).
 
@@ -227,7 +229,7 @@ FUXA saves the project to its internal database (`deploy/fuxa/data`, not in git)
 
 ### 6.1 What to read, trend and log
 
-The bridge (`twin/src/plc/bridge.ts`) reads **0–19** (system), **20–67** (tanks), **100–139** (containers) and **200–232** (event ring). The generated FUXA project reads those plus the barcode scan mailbox (**300–303** and **336–338**, without the raw text), the field block (**400–412**: ESP32 heartbeats), the station block (**420–432**: run permit, robotic arm command/result/status, sort height, node fault bits) and the simulation inputs (450–451). Scaling follows the `Unit` column in [io-map.md §4](io-map.md#4-register-map-modbus-tcp), and the generator applies it (§5.3). DAQ stores every tag on change and at least once a minute, which covers the table below.
+The bridge (`twin/src/plc/bridge.ts`) reads **0–19** (system), **20–31** (tanks), **100–139** (containers) and **200–232** (event ring). The generated FUXA project reads those plus the barcode scan mailbox (**300–303** and **336–338**, without the raw text), the field block (**400–412**: ESP32 heartbeats), the station block (**420–432**: run permit, robotic arm command/result/status, sort height, node fault bits) and the simulation inputs (450–451). Scaling follows the `Unit` column in [io-map.md §4](io-map.md#4-register-map-modbus-tcp), and the generator applies it (§5.3). DAQ stores every tag on change and at least once a minute, which covers the table below.
 
 | Data | Registers (0-based) | Scale | Store |
 | --- | --- | --- | --- |

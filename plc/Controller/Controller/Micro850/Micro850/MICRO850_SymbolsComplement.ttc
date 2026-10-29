@@ -1,0 +1,10 @@
+[BEGIN FB INPUTS]
+I1=micro850.micro850.jogtimer.in,0x468,BOOL
+I2=micro850.micro850.jogtimer.pt,0x21C8,TIME
+I3=micro850.micro850.ton_buzzon.in,0x217C,BOOL
+I4=micro850.micro850.ton_buzzon.pt,0x21CC,TIME
+I5=micro850.micro850.ton_buzzoff.in,0x46A,BOOL
+I6=micro850.micro850.ton_buzzoff.pt,0x21CC,TIME
+I7=micro850.micro850.ton_publish.in,0x217C,BOOL
+I8=micro850.micro850.ton_publish.pt,0x21D0,TIME
+[END]

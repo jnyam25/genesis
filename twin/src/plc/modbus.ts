@@ -45,7 +45,7 @@ export class ModbusException extends Error {
 }
 
 /** Splits a TCP byte stream into complete MBAP frames. */
-class FrameReader {
+export class FrameReader {
   private buf = Buffer.alloc(0);
 
   push(chunk: Buffer, onFrame: (frame: Buffer) => void): void {
@@ -65,7 +65,7 @@ class FrameReader {
   }
 }
 
-function frame(transactionId: number, unitId: number, pdu: Buffer): Buffer {
+export function frame(transactionId: number, unitId: number, pdu: Buffer): Buffer {
   const header = Buffer.alloc(MBAP_LEN);
   header.writeUInt16BE(transactionId, 0);
   header.writeUInt16BE(0, 2);
@@ -253,6 +253,23 @@ export class ModbusTcpClient extends EventEmitter {
     req.writeUInt8(values.length * 2, 5);
     values.forEach((v, i) => req.writeUInt16BE(v & 0xffff, 6 + i * 2));
     await this.request(req);
+  }
+
+  async writeMultipleCoils(address: number, values: boolean[]): Promise<void> {
+    if (values.length < 1 || values.length > MAX_READ_COILS) throw new RangeError(`quantity must be 1..${MAX_READ_COILS}`);
+    const packed = packBits(values);
+    const req = Buffer.alloc(6 + packed.length);
+    req.writeUInt8(FC.WRITE_MULTIPLE_COILS, 0);
+    req.writeUInt16BE(address, 1);
+    req.writeUInt16BE(values.length, 3);
+    req.writeUInt8(packed.length, 5);
+    packed.copy(req, 6);
+    await this.request(req);
+  }
+
+  /** Send one PDU and return the response PDU. Used by the SCADA gateway. */
+  exchange(pdu: Buffer): Promise<Buffer> {
+    return this.request(Buffer.from(pdu));
   }
 }
 

@@ -1,19 +1,14 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Activity, Boxes, LayoutGrid, LineChart } from "lucide-react";
+import { Boxes, LayoutGrid, LineChart } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { OeeGrid } from "@/components/dashboard/oee-grid";
 import { CountsCard } from "@/components/dashboard/counts-card";
 import { TankLevels } from "@/components/dashboard/tank-levels";
 import { EventLog } from "@/components/dashboard/event-log";
 import { LineSchematic } from "@/components/schematic/line-schematic";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useTwin } from "@/lib/twin/twin-context";
 
@@ -49,32 +44,15 @@ export default function Page() {
 
           <TabsContent value="schematic" className="mt-4">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Activity className="h-4 w-4" /> Line Schematic
-                </CardTitle>
-                <span className="font-mono text-xs text-muted-foreground">
-                  {state.tanks.length} tanks · {state.containers.length} in-flight
-                </span>
-              </CardHeader>
-              <CardContent>
+              <CardContent className="pt-4">
                 <LineSchematic state={state} />
-                <SchematicLegend />
               </CardContent>
             </Card>
           </TabsContent>
 
           <TabsContent value="scene3d" className="mt-4">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Boxes className="h-4 w-4" /> 3D Visualization
-                </CardTitle>
-                <span className="text-xs text-muted-foreground">
-                  Drag to orbit · scroll to zoom · click a station
-                </span>
-              </CardHeader>
-              <CardContent>
+              <CardContent className="pt-4" title="Drag to orbit. Scroll to zoom. Click a station.">
                 <LineScene state={state} />
               </CardContent>
             </Card>
@@ -99,15 +77,7 @@ function DashboardView({
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <Card className="h-full">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <LineChart className="h-4 w-4" /> Line Schematic
-              </CardTitle>
-              <span className="font-mono text-xs text-muted-foreground">
-                {state.tanks.length} tanks · {state.containers.length} in-flight
-              </span>
-            </CardHeader>
-            <CardContent>
+            <CardContent className="pt-4">
               <LineSchematic state={state} />
             </CardContent>
           </Card>
@@ -119,32 +89,12 @@ function DashboardView({
   );
 }
 
-function SchematicLegend() {
-  const items = [
-    { c: "#22c55e", t: "Active station" },
-    { c: "#475569", t: "Idle station" },
-    { c: "#ef4444", t: "Reject in flight / reject lane" },
-    { c: "#f59e0b", t: "Reject & sort diverters" },
-    { c: "#fb923c", t: "Bad barcode (rejected unfilled)" },
-  ];
-  return (
-    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-      {items.map((i) => (
-        <span key={i.t} className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: i.c }} />
-          {i.t}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 function LoadingState() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 py-24 text-center">
       <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent" />
       <p className="text-sm text-muted-foreground">
-        Connecting to the paint mixing twin…
+        Connecting
       </p>
     </div>
   );
@@ -153,7 +103,7 @@ function LoadingState() {
 function SceneSkeleton() {
   return (
     <div className="flex h-[520px] w-full items-center justify-center rounded-lg border border-border/60 bg-slate-50 text-sm text-muted-foreground">
-      Loading 3D scene…
+      …
     </div>
   );
 }
@@ -161,11 +111,8 @@ function SceneSkeleton() {
 function StaleAlert() {
   return (
     <Alert variant="destructive" className="mb-4">
-      <AlertTitle>Feed stale</AlertTitle>
-      <AlertDescription>
-        No snapshot received from the twin within the freshness window. Check
-        the engine worker or the data source configuration.
-      </AlertDescription>
+      <AlertTitle>No data</AlertTitle>
+      <AlertDescription>Twin offline.</AlertDescription>
     </Alert>
   );
 }

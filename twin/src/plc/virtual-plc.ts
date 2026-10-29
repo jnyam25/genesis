@@ -9,7 +9,7 @@
  *
  * The PLC makes every line decision. The ESP32 field nodes only execute its
  * requests and report back through the register map:
- *   LABEL  Station.LabelRequest/Done            (scanner node: label applicator)
+ *   LABEL  Station.LabelRequest/Done            (scanner node, only when a LABEL station is configured)
  *   SCAN   Scan.Request → raw text → Scan.Done  (scanner node; the PLC validates the barcode)
  *   CAP    Station.ArmCmd/Seq → Result/DoneSeq  (station node on the xArm; see arm-sequencer.ts)
  *   QC     Station.SortRequest → SortHeightMm   (station node; the PLC classifies the bottle)
@@ -124,7 +124,7 @@ function wireSeq(seq: number): number {
 }
 
 export interface ExternalNodes {
-  /** ESP32 #1 (label applicator + barcode scanner) is real. */
+  /** ESP32 #1 (barcode scanner; label applicator only when a LABEL station is configured) is real. */
   scanner?: boolean;
   /** ESP32 #2 (xArm robotic arm + sort sensor) is real. */
   station?: boolean;
@@ -133,6 +133,11 @@ export interface ExternalNodes {
 export interface VirtualPlcOptions {
   /** Bottles arrive on the feed timer like the Node harness does. */
   feed?: boolean;
+  /**
+   * Repeat the Micro850 instead of simulating a second line. plc-link writes
+   * the status words; this process only keeps its own heartbeat and protocol.
+   */
+  follow?: boolean;
   /** Field nodes that are real ESP32s on the network; the others are simulated. */
   externalNodes?: ExternalNodes;
   unitId?: number;
@@ -164,6 +169,7 @@ export class VirtualPlc implements StationDriver {
   private lastHmiHeartbeat = -1;
   private hmiHeartbeatChangedAt = -Infinity;
   private readonly feed: boolean;
+  private readonly follow: boolean;
   private readonly external: Required<ExternalNodes>;
   private readonly scannerSim: SimulatedScannerNode | null;
   private readonly stationSim: SimulatedStationNode | null;
@@ -173,6 +179,7 @@ export class VirtualPlc implements StationDriver {
 
   constructor(options: VirtualPlcOptions = {}) {
     this.feed = options.feed ?? true;
+    this.follow = options.follow ?? false;
     this.external = { scanner: false, station: false, ...options.externalNodes };
     this.server = new ModbusTcpServer({
       holdingRegisters: REGISTER_SPACE,
@@ -207,6 +214,12 @@ export class VirtualPlc implements StationDriver {
 
   /** One PLC scan: inputs → logic → outputs. Public for tests. */
   scan(dt: number): void {
+    if (this.follow) {
+      this.heartbeat = u16(this.heartbeat + 1);
+      this.server.registers[SYS.PROTOCOL_VERSION] = PROTOCOL_VERSION;
+      this.server.registers[SYS.PLC_HEARTBEAT] = this.heartbeat;
+      return;
+    }
     // The simulated field nodes act between PLC scans, like the real ESP32s.
     const find = (id: number) => this.core.containers.find((c) => c.id === id);
     this.scannerSim?.step(this.server.registers, dt, find);
@@ -274,7 +287,7 @@ export class VirtualPlc implements StationDriver {
   }
 
   private onWrite(w: WriteEvent): void {
-    if (w.kind !== "register") return;
+    if (this.follow || w.kind !== "register") return;
     const touched = (addr: number) => addr >= w.address && addr < w.address + w.values.length;
     if (touched(SYS.TANK_ENABLE_MASK)) this.applyTankMask(this.server.registers[SYS.TANK_ENABLE_MASK]);
   }
@@ -507,13 +520,15 @@ if (require.main === module) {
   const host = process.env.VPLC_HOST ?? "0.0.0.0";
   const unitId = process.env.VPLC_UNIT_ID ? Number(process.env.VPLC_UNIT_ID) : 1;
   const externalNodes = parseExternalNodes(process.env.VPLC_NODES);
-  const plc = new VirtualPlc({ feed: process.env.VPLC_FEED !== "0", externalNodes, unitId });
+  const follow = process.env.VPLC_FOLLOW === "1";
+  const plc = new VirtualPlc({ feed: process.env.VPLC_FEED !== "0" && !follow, externalNodes, unitId, follow });
   const node = (real: boolean | undefined) => (real ? "REAL ESP32 (heartbeat watched)" : "simulated");
   plc
     .start(port, host)
     .then(() => {
       console.log(`[virtual-plc] Modbus TCP server on ${host}:${port} (unit id ${unitId}, protocol v${PROTOCOL_VERSION})`);
-      console.log(`[virtual-plc] bottle feed ${process.env.VPLC_FEED === "0" ? "OFF" : "ON"}`);
+      console.log("[virtual-plc] supervisor stand-in for the 2080-L50E-24QBB. The checked-in ladder publishes safety and run state; this process also runs admission, the arm, the stations and the counters.");
+      console.log(follow ? "[virtual-plc] following the Micro850. Status words come from the plc-link. This heartbeat stays local." : `[virtual-plc] bottle feed ${process.env.VPLC_FEED === "0" ? "OFF" : "ON"}`);
       console.log(`[virtual-plc] scanner node (label + barcode): ${node(externalNodes.scanner)}`);
       console.log(`[virtual-plc] station node (robotic arm + sort sensor): ${node(externalNodes.station)}`);
     })

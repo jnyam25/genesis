@@ -107,10 +107,12 @@ sudo apt install -y ufw
 sudo ufw default deny incoming
 sudo ufw allow in on eth0 to any port 22 proto tcp     # SSH from the control network only
 sudo ufw allow 43123/tcp                                # HMI
+sudo ufw allow in on wlan0 to any port 5502 proto tcp   # SCADA door, operator Wi-Fi only
+sudo ufw allow in on wg0 to any port 5502 proto tcp     # SCADA door, WireGuard only
 sudo ufw enable
 ```
 
-Keep the twin service bound to `127.0.0.1` (the default `GENESIS_HOST`). The HMI reaches it locally; nothing else needs to.
+Keep the twin service bound to `127.0.0.1` (the default `GENESIS_HOST`). The HMI reaches it locally; nothing else needs to. Do not allow port 5502 on `eth0`. That port is the remote SCADA door, and the control network already has the PLC.
 
 ## 6. Optional: kiosk screen
 
@@ -127,8 +129,19 @@ The template launches Chromium in kiosk mode on `http://localhost:43123` and ret
 
 | Task | Command |
 | --- | --- |
-| Live logs | `journalctl -u genesis-twin -u genesis-hmi -f` |
+| Live logs | `journalctl -u genesis-twin -u genesis-hmi -u genesis-scada-gateway -f` |
 | PLC link state | `curl -s http://127.0.0.1:43124/health` |
 | Last snapshot on disk | `cat /opt/genesis/twin/runtime/snapshot.json` |
 | Restart after config change | `sudo systemctl restart genesis-twin` |
 | Rebuild after changing `NEXT_PUBLIC_*` | `npm run build`, then `sudo systemctl restart genesis-hmi` |
+
+## 8. Remote SCADA
+
+A wired or wireless FUXA that is not on the control network connects to the Pi, not to the PLC. Set `SCADA_GATEWAY_HOST` in `/etc/genesis/genesis.env` to the Pi's operator address, its WireGuard address, or both. Build the twin (`npm run build` in `twin/`), then:
+
+```bash
+sudo cp deploy/raspberry-pi/genesis-scada-gateway.service /etc/systemd/system/
+sudo systemctl enable --now genesis-scada-gateway
+```
+
+The service exits if `SCADA_GATEWAY_HOST` is empty, so leave it disabled until that line is set. How the two SCADA PCs reach the door is in [communication.md §5](communication.md#5-scada-off-the-control-network).

@@ -3,7 +3,7 @@ import * as assert from "node:assert/strict";
 import * as fs from "fs";
 
 import { FaultCode } from "../events";
-import { buildFuxaProject, tagId } from "../plc/fuxa-project";
+import { buildFuxaProject, peerTagId, tagId } from "../plc/fuxa-project";
 import { FIRMWARE_HEADER, renderFirmwareHeader } from "../plc/print-tag-map";
 import { SCAN, STATION, SYS, coilTable, registerTable } from "../plc/tag-map";
 
@@ -34,9 +34,10 @@ test("FUXA project: tags use 1-based Modbus addresses and every view item and al
 
   const views = project.hmi.views as View[];
   assert.ok(views.length >= 2, "overview plus trends");
+  const allTags = Object.assign({}, ...Object.values(project.devices).map((device) => (device as Device).tags));
   for (const view of views) {
     for (const [id, item] of Object.entries(view.items)) {
-      assert.ok(tags[item.property.variableId], `${id} → ${item.property.variableId}`);
+      assert.ok(allTags[item.property.variableId], `${id} → ${item.property.variableId}`);
       assert.ok(view.svgcontent.includes(`id="${id}"`), `${id} has an SVG element`);
       if (item.type === "svg-ext-html_button") {
         assert.equal(tags[item.property.variableId].type, "Bool", "buttons write command coils");
@@ -53,7 +54,7 @@ test("FUXA project: tags use 1-based Modbus addresses and every view item and al
       assert.ok(tags[line.id], line.id);
     }
   }
-  for (const alarm of project.alarms) assert.ok(tags[alarm.property.variableId], alarm.name);
+  for (const alarm of project.alarms) assert.ok(allTags[alarm.property.variableId], alarm.name);
   const faultAlarms = project.alarms.filter((a) => a.property.variableId === tagId("Sys.FaultCode"));
   assert.equal(faultAlarms.length, Object.values(FaultCode).filter((v) => typeof v === "number").length);
 });
@@ -65,4 +66,32 @@ test("FUXA project: read-only variant has no coil tags and no buttons", () => {
   for (const view of project.hmi.views as View[]) {
     assert.ok(Object.values(view.items).every((i) => i.type !== "svg-ext-html_button"));
   }
+});
+
+test("FUXA project: a virtual-PLC peer is read-only and the PLC link view resolves", () => {
+  const project = buildFuxaProject({
+    plcHost: "192.168.10.10",
+    plcPort: 502,
+    unitId: 1,
+    pollingMs: 250,
+    commands: true,
+    peer: { host: "127.0.0.1", port: 5020, unitId: 1 },
+  });
+  const devices = project.devices as Record<string, Device & { id: string; name: string }>;
+  const peer = devices["genesis-plc-peer"];
+  assert.equal(peer.name, "Virtual PLC");
+  assert.equal(peer.property.address, "127.0.0.1:5020");
+  assert.ok(Object.values(peer.tags).every((tag) => tag.memaddress === "400000"));
+  assert.equal(peer.tags[peerTagId("Station.RunPermit")].address, String(STATION.RUN_PERMIT + 1));
+  assert.equal(peer.tags[peerTagId("Sys.ProtocolVersion")].address, "1");
+
+  const tags = Object.assign({}, ...Object.values(devices).map((device) => device.tags));
+  const link = (project.hmi.views as Array<View & { name: string }>).find((view) => view.name === "PLC link");
+  assert.ok(link);
+  for (const item of Object.values(link.items)) assert.ok(tags[item.property.variableId], item.property.variableId);
+  assert.ok(project.alarms.some((alarm) => alarm.property.variableId === peerTagId("Sys.ProtocolVersion")));
+  const charts = project.charts as Array<{ lines: Array<{ device: string }> }>;
+  for (const chart of charts) for (const line of chart.lines) assert.equal(line.device, "genesis-plc");
+  const nav = (project.hmi.layout as { navigation: { items: Array<{ text: string }> } }).navigation.items;
+  assert.ok(nav.some((item) => item.text === "PLC link"));
 });

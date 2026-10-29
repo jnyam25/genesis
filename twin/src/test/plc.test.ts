@@ -3,6 +3,8 @@ import * as assert from "node:assert/strict";
 import { once } from "node:events";
 
 import { ModbusException, ModbusTcpClient, ModbusTcpServer } from "../plc/modbus";
+import { coilsToForward, exchange, linkDifferences, retainForwarded, type PlcWords } from "../plc/plc-link";
+import { ScadaGateway } from "../plc/scada-gateway";
 import { PlcBridge } from "../plc/bridge";
 import { NODE_HEARTBEAT_TIMEOUT_SEC, VirtualPlc } from "../plc/virtual-plc";
 import {
@@ -56,6 +58,73 @@ test("modbus: registers and coils round-trip; illegal address raises an exceptio
     client.close();
     await server.close();
   }
+});
+
+test("scada gateway forwards reads and command coils, and refuses every other write", async () => {
+  const plc = new ModbusTcpServer({ holdingRegisters: 20, coils: 16, unitId: 1 });
+  await plc.listen(0, "127.0.0.1");
+  plc.registers[8] = 2500;
+  const upstream = new ModbusTcpClient({ host: "127.0.0.1", port: plc.address!.port, timeoutMs: 1000 });
+  upstream.on("error", () => {});
+  const upstreamReady = once(upstream, "connect");
+  upstream.connect();
+  await upstreamReady;
+  const gateway = new ScadaGateway({ listenHosts: ["127.0.0.1"], listenPort: 0, upstream, unitId: 1 });
+  await gateway.listen();
+  const scada = await connectedClient(gateway.port);
+  try {
+    assert.deepEqual(await scada.readHoldingRegisters(8, 1), [2500]);
+
+    await scada.writeSingleCoil(COIL.CMD_START, true);
+    assert.equal(plc.coils[COIL.CMD_START], 1);
+
+    await scada.writeMultipleCoils(COIL.CMD_DIGITAL_ESTOP, [true, false, false, false, false, true, false]);
+    assert.equal(plc.coils[COIL.CMD_DIGITAL_ESTOP], 1);
+    assert.equal(plc.coils[COIL.CMD_STOP], 1);
+    assert.equal(plc.coils[COIL.CMD_RESET], 0);
+
+    await assert.rejects(
+      scada.writeSingleCoil(COIL.SIM_LOCAL_START, true),
+      (err: unknown) => err instanceof ModbusException && err.exceptionCode === 2,
+    );
+    assert.equal(plc.coils[COIL.SIM_LOCAL_START], 0);
+
+    await assert.rejects(
+      scada.writeSingleCoil(7, true),
+      (err: unknown) => err instanceof ModbusException && err.exceptionCode === 2,
+    );
+
+    await assert.rejects(
+      scada.writeMultipleCoils(COIL.CMD_START, [true, true, true, true, true]),
+      (err: unknown) => err instanceof ModbusException && err.exceptionCode === 2,
+    );
+    assert.equal(plc.coils[COIL.SIM_LOCAL_START], 0);
+
+    await assert.rejects(
+      scada.writeSingleRegister(8, 1),
+      (err: unknown) => err instanceof ModbusException && err.exceptionCode === 1,
+    );
+    assert.equal(plc.registers[8], 2500);
+
+    const upstreamClosed = once(upstream, "close");
+    await plc.close();
+    await upstreamClosed;
+    await assert.rejects(
+      scada.readHoldingRegisters(8, 1),
+      (err: unknown) => err instanceof ModbusException && err.exceptionCode === 4,
+    );
+  } finally {
+    scada.close();
+    upstream.close();
+    await gateway.close();
+    await plc.close();
+  }
+});
+
+test("scada gateway refuses to listen on every interface", async () => {
+  const upstream = new ModbusTcpClient({ host: "127.0.0.1", port: 1, timeoutMs: 200 });
+  const gateway = new ScadaGateway({ listenHosts: ["0.0.0.0"], listenPort: 0, upstream });
+  await assert.rejects(() => gateway.listen(), /refusing to bind 0\.0\.0\.0/);
 });
 
 test("bridge coilBase offsets command coils (for PLCs with fixed coil memory); registers unchanged", async () => {
@@ -451,5 +520,145 @@ test("bridge reports offline when the PLC is unreachable", async () => {
     assert.match((await bridge.command({ command: "eStop" }))!, /PLC offline/);
   } finally {
     bridge.stop();
+  }
+});
+
+function linkWords(protocol: number, tankCount: number): PlcWords {
+  return { protocol, heartbeat: 1, lineState: 0, tankCount, estopMask: 0, faultCode: 0, runPermit: 1 };
+}
+
+test("plc link copies command coils once each way and leaves holding registers alone", async () => {
+  assert.deepEqual(coilsToForward([false, false, false, false, true, false, false], [false, false, false, false, false, false, false], new Set()), [COIL.CMD_START]);
+  assert.deepEqual(coilsToForward([true, false, false, false, false, false, false], [false, false, false, false, false, false, false], new Set([0])), []);
+  assert.deepEqual([...retainForwarded([false], new Set([0]))], []);
+  assert.deepEqual(linkDifferences(linkWords(4, 2), linkWords(4, 1)), ["tank count virtual 2 / Micro850 1"]);
+
+  const virtual = new ModbusTcpServer({ holdingRegisters: 421, coils: 16 });
+  const micro = new ModbusTcpServer({ holdingRegisters: 421, coils: 16 });
+  await virtual.listen(0, "127.0.0.1");
+  await micro.listen(0, "127.0.0.1");
+  virtual.registers[SYS.PROTOCOL_VERSION] = 4;
+  virtual.registers[SYS.TANK_COUNT] = 2;
+  micro.registers[SYS.PROTOCOL_VERSION] = 4;
+  micro.registers[SYS.TANK_COUNT] = 2;
+  const virtualClient = await connectedClient(virtual.address!.port);
+  const microClient = await connectedClient(micro.address!.port);
+  const forwarded = { virtual: new Set<number>(), micro: new Set<number>() };
+  try {
+    virtual.coils[COIL.CMD_START] = 1;
+    virtual.registers[5] = 99;
+    virtual.coils[8] = 1;
+    let result = await exchange(virtualClient, microClient, forwarded, false);
+    assert.equal(result.relays.length, 0);
+    assert.equal(micro.coils[COIL.CMD_START], 0, "PLC_LINK_COMMANDS=0 writes nothing");
+
+    result = await exchange(virtualClient, microClient, forwarded, true);
+    assert.equal(micro.coils[COIL.CMD_START], 1);
+    assert.equal(micro.registers[5], 0, "holding registers stay on the publisher");
+    assert.equal(micro.coils[8], 0, "Sim coils stay local");
+    assert.deepEqual(result.relays.map((relay) => relay.name), ["Cmd.Start"]);
+
+    micro.coils[COIL.CMD_START] = 0;
+    await exchange(virtualClient, microClient, forwarded, true);
+    assert.equal(micro.coils[COIL.CMD_START], 0, "a consumed Start is not sent again while the source is still 1");
+
+    virtual.coils[COIL.CMD_START] = 0;
+    await exchange(virtualClient, microClient, forwarded, true);
+    assert.equal(virtual.coils[COIL.CMD_START], 0, "clearing the source does not copy the command back");
+
+    virtual.coils[COIL.CMD_STOP] = 1;
+    micro.coils[COIL.CMD_DIGITAL_ESTOP] = 1;
+    result = await exchange(virtualClient, microClient, forwarded, true);
+    assert.equal(micro.coils[COIL.CMD_STOP], 1);
+    assert.equal(virtual.coils[COIL.CMD_DIGITAL_ESTOP], 1);
+    assert.deepEqual(result.relays.map((relay) => relay.name).sort(), ["Cmd.DigitalEStop", "Cmd.Stop"]);
+
+    micro.registers[SYS.PROTOCOL_VERSION] = 3;
+    result = await exchange(virtualClient, microClient, forwarded, true);
+    assert.deepEqual(linkDifferences(result.virtual!.words, result.micro!.words), ["protocol virtual 4 / Micro850 3"]);
+  } finally {
+    virtualClient.close();
+    microClient.close();
+    await virtual.close();
+    await micro.close();
+  }
+});
+
+test("plc link mirrors the Micro850 status image and leaves each heartbeat alone", async () => {
+  const virtual = new ModbusTcpServer({ holdingRegisters: 421, coils: 16 });
+  const micro = new ModbusTcpServer({ holdingRegisters: 421, coils: 16 });
+  await virtual.listen(0, "127.0.0.1");
+  await micro.listen(0, "127.0.0.1");
+  virtual.registers[SYS.PROTOCOL_VERSION] = 4;
+  virtual.registers[SYS.PLC_HEARTBEAT] = 4;
+  virtual.registers[SYS.TANK_COUNT] = 2;
+  virtual.registers[SYS.COUNT_TOTAL] = 50;
+  micro.registers[SYS.PROTOCOL_VERSION] = 4;
+  micro.registers[SYS.PLC_HEARTBEAT] = 9;
+  micro.registers[SYS.LINE_STATE] = 5;
+  micro.registers[SYS.TANK_COUNT] = 2;
+  micro.registers[SYS.PHYSICAL_ESTOP_MASK] = 1;
+  micro.registers[STATION.RUN_PERMIT] = 1;
+  micro.coils[COIL.CMD_START] = 1;
+  const virtualClient = await connectedClient(virtual.address!.port);
+  const microClient = await connectedClient(micro.address!.port);
+  const forwarded = { virtual: new Set<number>(), micro: new Set<number>() };
+  try {
+    await exchange(virtualClient, microClient, forwarded, true, true);
+    assert.equal(virtual.registers[SYS.LINE_STATE], 5);
+    assert.equal(virtual.registers[SYS.COUNT_TOTAL], 0);
+    assert.equal(virtual.registers[SYS.PHYSICAL_ESTOP_MASK], 1);
+    assert.equal(virtual.registers[STATION.RUN_PERMIT], 1);
+    assert.equal(virtual.registers[SYS.PLC_HEARTBEAT], 4, "virtual heartbeat stays local");
+    assert.equal(micro.registers[SYS.PLC_HEARTBEAT], 9, "Micro850 heartbeat is not written");
+    assert.equal(virtual.coils[COIL.CMD_START], 1);
+    assert.equal(micro.registers[SYS.COUNT_TOTAL], 0, "status copy is one way");
+
+    micro.coils[COIL.CMD_START] = 0;
+    await exchange(virtualClient, microClient, forwarded, true, true);
+    assert.equal(virtual.coils[COIL.CMD_START], 0, "a coil the Micro850 released is released on the virtual PLC");
+    assert.deepEqual(linkDifferences(
+      { protocol: 4, heartbeat: 4, lineState: 5, tankCount: 2, estopMask: 1, faultCode: 0, runPermit: 1 },
+      { protocol: 4, heartbeat: 9, lineState: 5, tankCount: 2, estopMask: 1, faultCode: 0, runPermit: 1 },
+    ), []);
+  } finally {
+    virtualClient.close();
+    microClient.close();
+    await virtual.close();
+    await micro.close();
+  }
+});
+
+test("virtual PLC in follow mode keeps the Micro850 image and only steps its heartbeat", () => {
+  const plc = new VirtualPlc({ follow: true, feed: false });
+  plc.server.registers[SYS.LINE_STATE] = 5;
+  plc.server.registers[SYS.COUNT_TOTAL] = 3;
+  const beat = plc.server.registers[SYS.PLC_HEARTBEAT];
+  plc.scan(0.1);
+  assert.equal(plc.server.registers[SYS.LINE_STATE], 5);
+  assert.equal(plc.server.registers[SYS.COUNT_TOTAL], 3);
+  assert.equal(plc.server.registers[SYS.PROTOCOL_VERSION], 4);
+  assert.notEqual(plc.server.registers[SYS.PLC_HEARTBEAT], beat);
+});
+
+test("plc link does not write when a controller is offline", async () => {
+  const virtual = new ModbusTcpServer({ holdingRegisters: 421, coils: 16 });
+  await virtual.listen(0, "127.0.0.1");
+  virtual.registers[SYS.PROTOCOL_VERSION] = 4;
+  virtual.coils[COIL.CMD_START] = 1;
+  const virtualClient = await connectedClient(virtual.address!.port);
+  const microClient = new ModbusTcpClient({ host: "127.0.0.1", port: 1, timeoutMs: 200, reconnectMs: 60_000 });
+  microClient.on("error", () => {});
+  microClient.connect();
+  const forwarded = { virtual: new Set<number>(), micro: new Set<number>() };
+  try {
+    const result = await exchange(virtualClient, microClient, forwarded, true);
+    assert.equal(result.micro, null);
+    assert.equal(result.relays.length, 0);
+    assert.equal(virtual.coils[COIL.CMD_START], 1);
+  } finally {
+    virtualClient.close();
+    microClient.close();
+    await virtual.close();
   }
 });

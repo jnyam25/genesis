@@ -26,7 +26,7 @@ export interface StationPosition {
   label: string;
   /** Tank id this station is fed by (nozzles only). */
   tankId?: string;
-  /** Output lane index (outputs only): 0 = Lane A, 1 = Lane B. */
+  /** Output lane index (outputs only): 0 = Lane 1, 1 = Lane 2. */
   lane?: number;
 }
 

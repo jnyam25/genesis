@@ -26,10 +26,7 @@ export function NavBar() {
           GN
         </div>
         <div>
-          <h1 className="text-base font-semibold leading-tight">
-            Genesis Paint Mixing — Operator HMI
-          </h1>
-          <p className="text-xs text-muted-foreground">Digital twin · Line A</p>
+          <h1 className="text-base font-semibold leading-tight">Genesis</h1>
         </div>
       </div>
 
@@ -69,8 +66,8 @@ export function NavBar() {
             title="Digital E-Stop — opens the safety circuit and shuts down the physical line. Always available."
             className={`inline-flex h-8 items-center gap-1.5 rounded-md border-2 px-3 text-xs font-extrabold tracking-wider transition-colors ${
               safety?.eStopActive
-                ? "animate-pulse border-red-400 bg-red-600 text-white"
-                : "border-red-700 bg-red-600 text-white hover:bg-red-500 active:bg-red-700"
+                ? "animate-pulse border-red-200 bg-red-800 text-white"
+                : "border-red-950 bg-red-800 text-white hover:bg-red-700 active:bg-red-950"
             } disabled:cursor-not-allowed`}
           >
             <OctagonX className="h-4 w-4" />
@@ -81,7 +78,7 @@ export function NavBar() {
           <Gauge className="h-3 w-3" />
           <span
             className={`inline-block h-2 w-2 rounded-full ${
-              connected ? "bg-emerald-300 animate-pulse" : "bg-rose-300"
+              connected ? "bg-emerald-700 animate-pulse" : "bg-rose-700"
             }`}
           />
           {loading ? "Connecting" : stale ? "Feed stale" : "Live"}

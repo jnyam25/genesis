@@ -19,24 +19,21 @@ export function CountsCard({
   throughputCpm: number;
   sortLanes?: SortLane[];
 }) {
-  const acceptRate =
-    counts.total > 0 ? counts.accepted / counts.total : 1;
-
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+            <CheckCircle2 className="h-4 w-4 text-emerald-800" />
             Accepted
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="font-mono text-3xl font-semibold tabular-nums text-emerald-400">
+          <div className="font-mono text-3xl font-semibold tabular-nums text-emerald-800">
             {counts.accepted}
           </div>
           {sortLanes && sortLanes.length > 0 && (
-            <ul className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+            <ul className="mt-1 space-y-0.5 text-[11px] text-foreground">
               {sortLanes.map((lane) => (
                 <li key={lane.id} className="flex justify-between gap-2">
                   <span className="truncate">{lane.name}</span>
@@ -51,12 +48,12 @@ export function CountsCard({
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <XCircle className="h-4 w-4 text-rose-400" />
+            <XCircle className="h-4 w-4 text-rose-800" />
             Rejected
           </CardTitle>
         </CardHeader>
         <CardContent className="pt-0">
-          <div className="font-mono text-3xl font-semibold tabular-nums text-rose-400">
+          <div className="font-mono text-3xl font-semibold tabular-nums text-rose-800">
             {counts.rejected}
           </div>
         </CardContent>
@@ -65,7 +62,7 @@ export function CountsCard({
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <Package className="h-4 w-4 text-sky-400" />
+            <Package className="h-4 w-4 text-sky-800" />
             Total
           </CardTitle>
         </CardHeader>
@@ -73,16 +70,13 @@ export function CountsCard({
           <div className="font-mono text-3xl font-semibold tabular-nums">
             {counts.total}
           </div>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            {Math.round(acceptRate * 100)}% accept rate
-          </p>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <Gauge className="h-4 w-4 text-amber-400" />
+            <Gauge className="h-4 w-4 text-amber-800" />
             Throughput
           </CardTitle>
         </CardHeader>
@@ -90,9 +84,7 @@ export function CountsCard({
           <div className="font-mono text-3xl font-semibold tabular-nums">
             {cpm(throughputCpm)}
           </div>
-          <p className="mt-1 text-[11px] text-muted-foreground">
-            containers / min
-          </p>
+          <p className="mt-1 font-mono text-[11px] text-foreground">/min</p>
         </CardContent>
       </Card>
     </div>

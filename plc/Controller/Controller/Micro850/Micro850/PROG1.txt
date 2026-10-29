@@ -1,0 +1,1890 @@
+(****** QuickLD compiler *******************************)
+(****** Copyright Rockwell Automation Canada, Ltd ******)
+(****** ST *********************************************)
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,1
+__ENDSTEPPRAGMA
+(*Label :*)(*S00embeddedinputsNCEStopmonitors0pressed*)
+__GL __LG0001 ;
+ENTRYPRESSED := NOT(_IO_EM_DI_01) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0002 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,3
+__ENDSTEPPRAGMA
+(*Label :*)(*S00_3*)
+__GL __LG0003 ;
+EXITPRESSED := NOT(_IO_EM_DI_02) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0004 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,5
+__ENDSTEPPRAGMA
+(*Label :*)(*S00safetyrelayaux*)
+__GL __LG0005 ;
+SAFETYOK := _IO_EM_DI_00 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0006 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,7
+__ENDSTEPPRAGMA
+(*Label :*)(*S00LOCALkey*)
+__GL __LG0007 ;
+LOCALMODE := _IO_EM_DI_04 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0008 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,9
+__ENDSTEPPRAGMA
+(*Label :*)(*S00expansion2085IQ16is_IO_X1_Sortgatesensor*)
+__GL __LG0009 ;
+SORTPRESENT := X1_DI_00 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG000A ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,11
+__ENDSTEPPRAGMA
+(*Label :*)(*S00lane1full*)
+__GL __LG000B ;
+LANEAFULL := X1_DI_01 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG000C ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,13
+__ENDSTEPPRAGMA
+(*Label :*)(*S00lane2full*)
+__GL __LG000D ;
+LANEBFULL := X1_DI_02 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG000E ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,15
+__ENDSTEPPRAGMA
+(*Label :*)(*S00rejectlanefull*)
+__GL __LG000F ;
+REJECTFULL := X1_DI_03 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0010 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,17
+__ENDSTEPPRAGMA
+(*Label :*)(*S00tanklowfloats*)
+__GL __LG0011 ;
+TANKLOW[1] := X1_DI_04 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0012 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,19
+__ENDSTEPPRAGMA
+(*Label :*)(*S00_19*)
+__GL __LG0013 ;
+TANKLOW[2] := X1_DI_05 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0014 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,21
+__ENDSTEPPRAGMA
+(*Label :*)(*S00diverterhomeswitches*)
+__GL __LG0015 ;
+REJECTHOME := X1_DI_08 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0016 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,23
+__ENDSTEPPRAGMA
+(*Label :*)(*S00_23*)
+__GL __LG0017 ;
+SORTHOME := X1_DI_09 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0018 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,25
+__ENDSTEPPRAGMA
+(*Label :*)(*S01EStopactiveeitherbuttonorthedigitalEStoplatch*)
+__GL __LG0019 ;
+__EDTB1 := ENTRYPRESSED ;
+__EDTB2 := EXITPRESSED ;
+__EDTB3 := DIGITALESTOP ;
+__EDTB4 := (__EDTB2 OR __EDTB3) ;
+ESTOPACTIVE := (__EDTB1 OR __EDTB4) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG001A ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,29
+__ENDSTEPPRAGMA
+(*Label :*)(*S01resetrequiredwhenthecircuitisopenandnobuttonisheld*)
+__GL __LG001B ;
+RESETREQUIRED := NOT(ESTOPACTIVE) AND NOT(SAFETYOK) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG001C ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,31
+__ENDSTEPPRAGMA
+(*Label :*)(*S02onescanwhentheLOCALkeychanges*)
+__GL __LG001D ;
+MODECHANGED := LOCALMODE AND NOT(PREVLOCALMODE) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG001E ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,33
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_33*)
+__GL __LG001F ;
+PREVLOCALMODE := LOCALMODE ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0020 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,35
+__ENDSTEPPRAGMA
+(*Label :*)(*S02localSTARTontheexpansionmoduleignoredunlessLOCALandalanehasroom*)
+__GL __LG0021 ;
+LOCALSTARTRISE := X1_DI_06 AND NOT(PREVLOCALSTART) AND LOCALMODE AND NOT(LANEAFULL) AND NOT(LANEBFULL) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0022 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,37
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_37*)
+__GL __LG0023 ;
+PREVLOCALSTART := X1_DI_06 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0024 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,39
+__ENDSTEPPRAGMA
+(*Label :*)(*S02remoteSTARTisMB_Cmd4ignoredinLOCAL*)
+__GL __LG0025 ;
+REMOTESTARTRISE := MB_CMD[4] AND NOT(PREVREMOTESTART) AND NOT(LOCALMODE) AND NOT(LANEAFULL) AND NOT(LANEBFULL) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0026 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,41
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_41*)
+__GL __LG0027 ;
+PREVREMOTESTART := MB_CMD[4] ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0028 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,43
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_43*)
+__GL __LG0029 ;
+__EDTB5 := LOCALSTARTRISE ;
+__EDTB6 := REMOTESTARTRISE ;
+STARTPULSE := (__EDTB5 OR __EDTB6) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG002A ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,46
+__ENDSTEPPRAGMA
+(*Label :*)(*S02releasethedigitalEStopMB_Cmd1*)
+__GL __LG002B ;
+RELEASEPULSE := MB_CMD[1] AND NOT(PREVRELEASE) AND DIGITALESTOP ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG002C ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,48
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_48*)
+__GL __LG002D ;
+PREVRELEASE := MB_CMD[1] ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG002E ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,50
+__ENDSTEPPRAGMA
+(*Label :*)(*S02localRESETRefusedwhileanEStopisstillin*)
+__GL __LG002F ;
+RESETPULSE := _IO_EM_DI_06 AND NOT(PREVRESET) AND NOT(ENTRYPRESSED) AND NOT(EXITPRESSED) AND NOT(DIGITALESTOP) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0030 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,52
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_52*)
+__GL __LG0031 ;
+PREVRESET := _IO_EM_DI_06 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0032 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,54
+__ENDSTEPPRAGMA
+(*Label :*)(*S01digitalEStoplatchMB_Cmd0setsitReleaseorfirstscanclearsit*)
+__GL __LG0033 ;
+__EDTB7 := MB_CMD[0] ;
+__EDTB8 := DIGITALESTOP AND NOT(RELEASEPULSE) AND NOT(__SYSVA_FIRST_SCAN) ;
+DIGITALESTOP := (__EDTB7 OR __EDTB8) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0034 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,57
+__ENDSTEPPRAGMA
+(*Label :*)(*S01RunCmdsealHardwiredSTOPisNConDI5so1meansnotpressedMB_Cmd5istheHMIstop*)
+__GL __LG0035 ;
+__EDTB9 := NOT(__SYSVA_FIRST_SCAN) AND NOT(DIGITALESTOP) AND NOT(ENTRYPRESSED) AND NOT(EXITPRESSED) AND _IO_EM_DI_05 AND NOT(MB_CMD[5]) AND SAFETYOK AND NOT(FAULTHOLD) AND NOT(MODECHANGED) ;
+__EDTB10 := __EDTB9 AND STARTPULSE ;
+__EDTB11 := __EDTB9 AND RUNCMD ;
+RUNCMD := (__EDTB10 OR __EDTB11) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0036 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,60
+__ENDSTEPPRAGMA
+(*Label :*)(*S01Running*)
+__GL __LG0037 ;
+RUNNING := RUNCMD AND SAFETYOK AND NOT(ESTOPACTIVE) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0038 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,62
+__ENDSTEPPRAGMA
+(*Label :*)(*S02faultlatchFaultSetissetbythestationlogicRESETorfirstscanclearsit*)
+__GL __LG0039 ;
+__EDTB12 := NOT(RESETPULSE) AND NOT(__SYSVA_FIRST_SCAN) ;
+__EDTB13 := __EDTB12 AND FAULTSET ;
+__EDTB14 := __EDTB12 AND FAULTHOLD ;
+FAULTHOLD := (__EDTB13 OR __EDTB14) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG003A ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,65
+__ENDSTEPPRAGMA
+(*Label :*)(*S02localJOGisholdtorunontheexpansionmoduleandonlywhilethelineisstopped*)
+__GL __LG003B ;
+JOGLOCAL := LOCALMODE AND X1_DI_07 AND NOT(ESTOPACTIVE) AND SAFETYOK AND NOT(RUNNING) AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG003C ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,67
+__ENDSTEPPRAGMA
+(*Label :*)(*S02remoteJOGisa05spulsefromMB_Cmd2*)
+__GL __LG003D ;
+JOGPULSE := MB_CMD[2] AND NOT(PREVJOG) AND NOT(LOCALMODE) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG003E ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,69
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_69*)
+__GL __LG003F ;
+PREVJOG := MB_CMD[2] ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0040 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,71
+__ENDSTEPPRAGMA
+(*Label :*)(*S02holdtheremotejoguntilthetimerfinishesorsafetydrops*)
+__GL __LG0041 ;
+__EDTB15 := NOT(JOGTIMER.Q) AND NOT(ESTOPACTIVE) AND SAFETYOK AND NOT(LOCALMODE) AND NOT(SIMINPUTS) ;
+__EDTB16 := __EDTB15 AND JOGPULSE ;
+__EDTB17 := __EDTB15 AND JOGHOLD ;
+JOGHOLD := (__EDTB16 OR __EDTB17) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0042 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,74
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_74*)
+__GL __LG0043 ;
+(* FB call: TON *)
+JogTimer(JOGHOLD, T#500MS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0044 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,77
+__ENDSTEPPRAGMA
+(*Label :*)(*S02beltjogrequest*)
+__GL __LG0045 ;
+__EDTB18 := JOGLOCAL ;
+__EDTB19 := JOGHOLD ;
+JOGBELT := (__EDTB18 OR __EDTB19) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0046 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,80
+__ENDSTEPPRAGMA
+(*Label :*)(*S06buzzerflashwhileanEStoporalatchedfaultispresent*)
+__GL __LG0047 ;
+__EDTB20 := ESTOPACTIVE ;
+__EDTB21 := FAULTHOLD ;
+(* FB call: TON *)
+TON_BuzzOn((__EDTB20 OR __EDTB21) AND NOT(FLASH), T#400MS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0048 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,83
+__ENDSTEPPRAGMA
+(*Label :*)(*S06_83*)
+__GL __LG0049 ;
+(* FB call: TON *)
+TON_BuzzOff(FLASH, T#400MS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG004A ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,86
+__ENDSTEPPRAGMA
+(*Label :*)(*S06_86*)
+__GL __LG004B ;
+__EDTB22 := ESTOPACTIVE ;
+__EDTB23 := FAULTHOLD ;
+__EDTB24 := (__EDTB22 OR __EDTB23) AND NOT(TON_BUZZOFF.Q) ;
+__EDTB25 := __EDTB24 AND TON_BUZZON.Q ;
+__EDTB26 := __EDTB24 AND FLASH ;
+FLASH := (__EDTB25 OR __EDTB26) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG004C ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,89
+__ENDSTEPPRAGMA
+(*Label :*)(*S06safetyrelayOffindigitalEStoponfirstscanandwhileSimInputsison*)
+__GL __LG004D ;
+_IO_EM_DO_00 := NOT(DIGITALESTOP) AND NOT(SIMINPUTS) AND NOT(__SYSVA_FIRST_SCAN) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG004E ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,91
+__ENDSTEPPRAGMA
+(*Label :*)(*S06beltRunswhilethelineisrunningorajogisheldSimInputskeepsitoff*)
+__GL __LG004F ;
+__EDTB27 := NOT(SIMINPUTS) ;
+__EDTB28 := __EDTB27 AND RUNNING ;
+__EDTB29 := __EDTB27 AND JOGBELT ;
+_IO_EM_DO_01 := (__EDTB28 OR __EDTB29) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0050 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,94
+__ENDSTEPPRAGMA
+(*Label :*)(*S06valvesanddivertersfollowthestationbitsandonlywhileRunning*)
+__GL __LG0051 ;
+_IO_EM_DO_02 := RUNNING AND VALVE1CMD AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0052 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,96
+__ENDSTEPPRAGMA
+(*Label :*)(*S06_96*)
+__GL __LG0053 ;
+_IO_EM_DO_03 := RUNNING AND VALVE2CMD AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0054 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,98
+__ENDSTEPPRAGMA
+(*Label :*)(*S06_98*)
+__GL __LG0055 ;
+_IO_EM_DO_04 := RUNNING AND QRREJECTCMD AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0056 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,100
+__ENDSTEPPRAGMA
+(*Label :*)(*S06_100*)
+__GL __LG0057 ;
+_IO_EM_DO_05 := RUNNING AND LIDPRESSCMD AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0058 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,102
+__ENDSTEPPRAGMA
+(*Label :*)(*S06_102*)
+__GL __LG0059 ;
+_IO_EM_DO_06 := RUNNING AND REJECTCMD AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG005A ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,104
+__ENDSTEPPRAGMA
+(*Label :*)(*S06lane2Offsendsthecantolane1*)
+__GL __LG005B ;
+_IO_EM_DO_07 := RUNNING AND SORTLANEBCMD AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG005C ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,106
+__ENDSTEPPRAGMA
+(*Label :*)(*S06stackgreen*)
+__GL __LG005D ;
+_IO_EM_DO_08 := RUNNING AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG005E ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,108
+__ENDSTEPPRAGMA
+(*Label :*)(*S06stackred*)
+__GL __LG005F ;
+__EDTB30 := NOT(SIMINPUTS) ;
+__EDTB31 := __EDTB30 AND ESTOPACTIVE ;
+__EDTB32 := __EDTB30 AND FAULTHOLD ;
+_IO_EM_DO_09 := (__EDTB31 OR __EDTB32) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0060 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,111
+__ENDSTEPPRAGMA
+(*Label :*)(*S06expansion2085OB16is_IO_X2_StopperonretractedOffholding*)
+__GL __LG0061 ;
+X2_DO_00 := RUNNING AND RELSCAN AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0062 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,113
+__ENDSTEPPRAGMA
+(*Label :*)(*S06_113*)
+__GL __LG0063 ;
+X2_DO_01 := RUNNING AND RELBAY1 AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0064 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,115
+__ENDSTEPPRAGMA
+(*Label :*)(*S06_115*)
+__GL __LG0065 ;
+X2_DO_02 := RUNNING AND RELBAY2 AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0066 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,117
+__ENDSTEPPRAGMA
+(*Label :*)(*S06_117*)
+__GL __LG0067 ;
+X2_DO_03 := RUNNING AND RELCAP AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0068 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,119
+__ENDSTEPPRAGMA
+(*Label :*)(*S06_119*)
+__GL __LG0069 ;
+X2_DO_04 := RUNNING AND RELPRESS AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG006A ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,121
+__ENDSTEPPRAGMA
+(*Label :*)(*S06_121*)
+__GL __LG006B ;
+X2_DO_05 := RUNNING AND RELQC AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG006C ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,123
+__ENDSTEPPRAGMA
+(*Label :*)(*S06_123*)
+__GL __LG006D ;
+X2_DO_06 := RUNNING AND RELGATE AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG006E ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,125
+__ENDSTEPPRAGMA
+(*Label :*)(*S06stackamberstoppedorwaitingforresetandnotinEStop*)
+__GL __LG006F ;
+__EDTB33 := NOT(SIMINPUTS) AND NOT(ESTOPACTIVE) ;
+__EDTB34 := __EDTB33 AND NOT(RUNNING) ;
+__EDTB35 := __EDTB33 AND RESETREQUIRED ;
+X2_DO_07 := (__EDTB34 OR __EDTB35) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0070 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,128
+__ENDSTEPPRAGMA
+(*Label :*)(*S06buzzerfollowstheflashbit*)
+__GL __LG0071 ;
+X2_DO_08 := FLASH AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0072 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,130
+__ENDSTEPPRAGMA
+(*Label :*)(*S06RESETlamp*)
+__GL __LG0073 ;
+X2_DO_09 := RESETREQUIRED AND NOT(SIMINPUTS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0074 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,132
+__ENDSTEPPRAGMA
+(*Label :*)(*S07railusedonlytoforcetheacknowledgerungsfalse*)
+__GL __LG0075 ;
+PUBLISHRAIL := TRUE ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0076 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,134
+__ENDSTEPPRAGMA
+(*Label :*)(*S02acknowledgecommandcoilsThebridgeandFUXAwrite1clearingitmakesthenextwritearisingedgeFirerejectandremoteRESETareclearedandnotactedon*)
+__GL __LG0077 ;
+MB_CMD[0] := NOT(PUBLISHRAIL) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0078 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,136
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_136*)
+__GL __LG0079 ;
+MB_CMD[1] := NOT(PUBLISHRAIL) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG007A ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,138
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_138*)
+__GL __LG007B ;
+MB_CMD[2] := NOT(PUBLISHRAIL) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG007C ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,140
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_140*)
+__GL __LG007D ;
+MB_CMD[3] := NOT(PUBLISHRAIL) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG007E ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,142
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_142*)
+__GL __LG007F ;
+MB_CMD[4] := NOT(PUBLISHRAIL) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0080 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,144
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_144*)
+__GL __LG0081 ;
+MB_CMD[5] := NOT(PUBLISHRAIL) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0082 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,146
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_146*)
+__GL __LG0083 ;
+MB_CMD[6] := NOT(PUBLISHRAIL) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0084 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,148
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_148*)
+__GL __LG0085 ;
+MB_CMD[8] := NOT(PUBLISHRAIL) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0086 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,150
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_150*)
+__GL __LG0087 ;
+MB_CMD[9] := NOT(PUBLISHRAIL) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0088 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,152
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_152*)
+__GL __LG0089 ;
+MB_CMD[10] := NOT(PUBLISHRAIL) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG008A ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,154
+__ENDSTEPPRAGMA
+(*Label :*)(*S02_154*)
+__GL __LG008B ;
+MB_CMD[11] := NOT(PUBLISHRAIL) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG008C ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,156
+__ENDSTEPPRAGMA
+(*Label :*)(*S07SysProtocolVersion4*)
+__GL __LG008D ;
+__EDTB36 := TRUE ;
+IF __EDTB36 THEN
+MB_SYS[0] := (4 + 0) ;
+END_IF ;
+__MO_PLUS_1 := __EDTB36 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG008E ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,160
+__ENDSTEPPRAGMA
+(*Label :*)(*S07heartbeattimer100ms*)
+__GL __LG008F ;
+(* FB call: TON *)
+TON_Publish(NOT(TON_PUBLISH.Q), T#100MS) ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0090 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,163
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_163*)
+__GL __LG0091 ;
+__EDTB38 := TON_PUBLISH.Q ;
+IF __EDTB38 THEN
+(* Operator output on : = with __EDTB37 *)
+__EDTB37 := (HB = 65535) ;
+ELSE
+__EDTB37 := FALSE ;
+END_IF ;
+__MO_EQUAL_1 := __EDTB37 ;
+HBATMAX := __EDTB37 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0092 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,167
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_167*)
+__GL __LG0093 ;
+__EDTB39 := TON_PUBLISH.Q AND NOT(HBATMAX) ;
+IF __EDTB39 THEN
+HBNEXT := (HB + 1) ;
+END_IF ;
+__MO_PLUS_2 := __EDTB39 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0094 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,171
+__ENDSTEPPRAGMA
+(*Label :*)(*S07wrap65535to0*)
+__GL __LG0095 ;
+__EDTB40 := TON_PUBLISH.Q AND HBATMAX ;
+IF __EDTB40 THEN
+HBNEXT := (ZEROU + 0) ;
+END_IF ;
+__MO_PLUS_3 := __EDTB40 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0096 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,175
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_175*)
+__GL __LG0097 ;
+__EDTB41 := TON_PUBLISH.Q ;
+IF __EDTB41 THEN
+HB := (HBNEXT + 0) ;
+END_IF ;
+__MO_PLUS_4 := __EDTB41 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG0098 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,179
+__ENDSTEPPRAGMA
+(*Label :*)(*S07SysPlcHeartbeat*)
+__GL __LG0099 ;
+__EDTB42 := TRUE ;
+IF __EDTB42 THEN
+MB_SYS[1] := (HB + 0) ;
+END_IF ;
+__MO_PLUS_5 := __EDTB42 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG009A ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,183
+__ENDSTEPPRAGMA
+(*Label :*)(*S07cleartheLineStateaccumulator*)
+__GL __LG009B ;
+__EDTB43 := TRUE ;
+IF __EDTB43 THEN
+LS := (ZEROU + 0) ;
+END_IF ;
+__MO_PLUS_6 := __EDTB43 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG009C ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,187
+__ENDSTEPPRAGMA
+(*Label :*)(*S07LineStatebit0Running*)
+__GL __LG009D ;
+__EDTB44 := RUNNING ;
+IF __EDTB44 THEN
+LSNEXT := (LS + 1) ;
+END_IF ;
+__MO_PLUS_7 := __EDTB44 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG009E ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,191
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_191*)
+__GL __LG009F ;
+__EDTB45 := NOT(RUNNING) ;
+IF __EDTB45 THEN
+LSNEXT := (LS + 0) ;
+END_IF ;
+__MO_PLUS_8 := __EDTB45 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00A0 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,195
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_195*)
+__GL __LG00A1 ;
+__EDTB46 := TRUE ;
+IF __EDTB46 THEN
+LS := (LSNEXT + 0) ;
+END_IF ;
+__MO_PLUS_9 := __EDTB46 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00A2 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,199
+__ENDSTEPPRAGMA
+(*Label :*)(*S07LineStatebit1EStopActive*)
+__GL __LG00A3 ;
+__EDTB47 := ESTOPACTIVE ;
+IF __EDTB47 THEN
+LSNEXT := (LS + 2) ;
+END_IF ;
+__MO_PLUS_10 := __EDTB47 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00A4 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,203
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_203*)
+__GL __LG00A5 ;
+__EDTB48 := NOT(ESTOPACTIVE) ;
+IF __EDTB48 THEN
+LSNEXT := (LS + 0) ;
+END_IF ;
+__MO_PLUS_11 := __EDTB48 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00A6 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,207
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_207*)
+__GL __LG00A7 ;
+__EDTB49 := TRUE ;
+IF __EDTB49 THEN
+LS := (LSNEXT + 0) ;
+END_IF ;
+__MO_PLUS_12 := __EDTB49 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00A8 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,211
+__ENDSTEPPRAGMA
+(*Label :*)(*S07LineStatebit2SafetyOK*)
+__GL __LG00A9 ;
+__EDTB50 := SAFETYOK ;
+IF __EDTB50 THEN
+LSNEXT := (LS + 4) ;
+END_IF ;
+__MO_PLUS_13 := __EDTB50 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00AA ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,215
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_215*)
+__GL __LG00AB ;
+__EDTB51 := NOT(SAFETYOK) ;
+IF __EDTB51 THEN
+LSNEXT := (LS + 0) ;
+END_IF ;
+__MO_PLUS_14 := __EDTB51 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00AC ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,219
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_219*)
+__GL __LG00AD ;
+__EDTB52 := TRUE ;
+IF __EDTB52 THEN
+LS := (LSNEXT + 0) ;
+END_IF ;
+__MO_PLUS_15 := __EDTB52 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00AE ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,223
+__ENDSTEPPRAGMA
+(*Label :*)(*S07LineStatebit3fault*)
+__GL __LG00AF ;
+__EDTB53 := FAULTHOLD ;
+IF __EDTB53 THEN
+LSNEXT := (LS + 8) ;
+END_IF ;
+__MO_PLUS_16 := __EDTB53 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00B0 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,227
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_227*)
+__GL __LG00B1 ;
+__EDTB54 := NOT(FAULTHOLD) ;
+IF __EDTB54 THEN
+LSNEXT := (LS + 0) ;
+END_IF ;
+__MO_PLUS_17 := __EDTB54 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00B2 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,231
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_231*)
+__GL __LG00B3 ;
+__EDTB55 := TRUE ;
+IF __EDTB55 THEN
+LS := (LSNEXT + 0) ;
+END_IF ;
+__MO_PLUS_18 := __EDTB55 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00B4 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,235
+__ENDSTEPPRAGMA
+(*Label :*)(*S07LineStatebit5DigitalEStop*)
+__GL __LG00B5 ;
+__EDTB56 := DIGITALESTOP ;
+IF __EDTB56 THEN
+LSNEXT := (LS + 32) ;
+END_IF ;
+__MO_PLUS_19 := __EDTB56 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00B6 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,239
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_239*)
+__GL __LG00B7 ;
+__EDTB57 := NOT(DIGITALESTOP) ;
+IF __EDTB57 THEN
+LSNEXT := (LS + 0) ;
+END_IF ;
+__MO_PLUS_20 := __EDTB57 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00B8 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,243
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_243*)
+__GL __LG00B9 ;
+__EDTB58 := TRUE ;
+IF __EDTB58 THEN
+LS := (LSNEXT + 0) ;
+END_IF ;
+__MO_PLUS_21 := __EDTB58 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00BA ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,247
+__ENDSTEPPRAGMA
+(*Label :*)(*S07LineStatebit7ResetRequired*)
+__GL __LG00BB ;
+__EDTB59 := RESETREQUIRED ;
+IF __EDTB59 THEN
+LSNEXT := (LS + 128) ;
+END_IF ;
+__MO_PLUS_22 := __EDTB59 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00BC ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,251
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_251*)
+__GL __LG00BD ;
+__EDTB60 := NOT(RESETREQUIRED) ;
+IF __EDTB60 THEN
+LSNEXT := (LS + 0) ;
+END_IF ;
+__MO_PLUS_23 := __EDTB60 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00BE ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,255
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_255*)
+__GL __LG00BF ;
+__EDTB61 := TRUE ;
+IF __EDTB61 THEN
+LS := (LSNEXT + 0) ;
+END_IF ;
+__MO_PLUS_24 := __EDTB61 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00C0 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,259
+__ENDSTEPPRAGMA
+(*Label :*)(*S07LineStatebit8LocalMode*)
+__GL __LG00C1 ;
+__EDTB62 := LOCALMODE ;
+IF __EDTB62 THEN
+LSNEXT := (LS + 256) ;
+END_IF ;
+__MO_PLUS_25 := __EDTB62 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00C2 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,263
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_263*)
+__GL __LG00C3 ;
+__EDTB63 := NOT(LOCALMODE) ;
+IF __EDTB63 THEN
+LSNEXT := (LS + 0) ;
+END_IF ;
+__MO_PLUS_26 := __EDTB63 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00C4 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,267
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_267*)
+__GL __LG00C5 ;
+__EDTB64 := TRUE ;
+IF __EDTB64 THEN
+LS := (LSNEXT + 0) ;
+END_IF ;
+__MO_PLUS_27 := __EDTB64 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00C6 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,271
+__ENDSTEPPRAGMA
+(*Label :*)(*S07LineStatebit10SimInputs*)
+__GL __LG00C7 ;
+__EDTB65 := SIMINPUTS ;
+IF __EDTB65 THEN
+LSNEXT := (LS + 1024) ;
+END_IF ;
+__MO_PLUS_28 := __EDTB65 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00C8 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,275
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_275*)
+__GL __LG00C9 ;
+__EDTB66 := NOT(SIMINPUTS) ;
+IF __EDTB66 THEN
+LSNEXT := (LS + 0) ;
+END_IF ;
+__MO_PLUS_29 := __EDTB66 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00CA ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,279
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_279*)
+__GL __LG00CB ;
+__EDTB67 := TRUE ;
+IF __EDTB67 THEN
+LS := (LSNEXT + 0) ;
+END_IF ;
+__MO_PLUS_30 := __EDTB67 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00CC ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,283
+__ENDSTEPPRAGMA
+(*Label :*)(*S07LineStatebit6aphysicalEStopispressed*)
+__GL __LG00CD ;
+__EDTB68 := ENTRYPRESSED ;
+__EDTB69 := EXITPRESSED ;
+__EDTB70 := (__EDTB68 OR __EDTB69) ;
+IF __EDTB70 THEN
+LSNEXT := (LS + 64) ;
+END_IF ;
+__MO_PLUS_31 := __EDTB70 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00CE ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,287
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_287*)
+__GL __LG00CF ;
+__EDTB71 := NOT(ENTRYPRESSED) AND NOT(EXITPRESSED) ;
+IF __EDTB71 THEN
+LSNEXT := (LS + 0) ;
+END_IF ;
+__MO_PLUS_32 := __EDTB71 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00D0 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,291
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_291*)
+__GL __LG00D1 ;
+__EDTB72 := TRUE ;
+IF __EDTB72 THEN
+LS := (LSNEXT + 0) ;
+END_IF ;
+__MO_PLUS_33 := __EDTB72 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00D2 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,295
+__ENDSTEPPRAGMA
+(*Label :*)(*S07SysLineState*)
+__GL __LG00D3 ;
+__EDTB73 := TRUE ;
+IF __EDTB73 THEN
+MB_SYS[2] := (LS + 0) ;
+END_IF ;
+__MO_PLUS_34 := __EDTB73 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00D4 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,299
+__ENDSTEPPRAGMA
+(*Label :*)(*S07cleartheEStopmaskaccumulator*)
+__GL __LG00D5 ;
+__EDTB74 := TRUE ;
+IF __EDTB74 THEN
+PM := (ZEROU + 0) ;
+END_IF ;
+__MO_PLUS_35 := __EDTB74 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00D6 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,303
+__ENDSTEPPRAGMA
+(*Label :*)(*S07SysPhysicalEStopMaskbit0linestart*)
+__GL __LG00D7 ;
+__EDTB75 := ENTRYPRESSED ;
+IF __EDTB75 THEN
+PMNEXT := (PM + 1) ;
+END_IF ;
+__MO_PLUS_36 := __EDTB75 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00D8 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,307
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_307*)
+__GL __LG00D9 ;
+__EDTB76 := NOT(ENTRYPRESSED) ;
+IF __EDTB76 THEN
+PMNEXT := (PM + 0) ;
+END_IF ;
+__MO_PLUS_37 := __EDTB76 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00DA ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,311
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_311*)
+__GL __LG00DB ;
+__EDTB77 := TRUE ;
+IF __EDTB77 THEN
+PM := (PMNEXT + 0) ;
+END_IF ;
+__MO_PLUS_38 := __EDTB77 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00DC ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,315
+__ENDSTEPPRAGMA
+(*Label :*)(*S07bit1lineend*)
+__GL __LG00DD ;
+__EDTB78 := EXITPRESSED ;
+IF __EDTB78 THEN
+PMNEXT := (PM + 2) ;
+END_IF ;
+__MO_PLUS_39 := __EDTB78 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00DE ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,319
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_319*)
+__GL __LG00DF ;
+__EDTB79 := NOT(EXITPRESSED) ;
+IF __EDTB79 THEN
+PMNEXT := (PM + 0) ;
+END_IF ;
+__MO_PLUS_40 := __EDTB79 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00E0 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,323
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_323*)
+__GL __LG00E1 ;
+__EDTB80 := TRUE ;
+IF __EDTB80 THEN
+PM := (PMNEXT + 0) ;
+END_IF ;
+__MO_PLUS_41 := __EDTB80 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00E2 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,327
+__ENDSTEPPRAGMA
+(*Label :*)(*S07SysPhysicalEStopMask*)
+__GL __LG00E3 ;
+__EDTB81 := TRUE ;
+IF __EDTB81 THEN
+MB_SYS[16] := (PM + 0) ;
+END_IF ;
+__MO_PLUS_42 := __EDTB81 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00E4 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,331
+__ENDSTEPPRAGMA
+(*Label :*)(*S07SysTankCount2*)
+__GL __LG00E5 ;
+__EDTB82 := TRUE ;
+IF __EDTB82 THEN
+MB_SYS[3] := (ZEROU + 2) ;
+END_IF ;
+__MO_PLUS_43 := __EDTB82 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00E6 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,335
+__ENDSTEPPRAGMA
+(*Label :*)(*S07keepatankenablemasktheHMIalreadywrote*)
+__GL __LG00E7 ;
+__EDTB84 := TRUE ;
+IF __EDTB84 THEN
+(* Operator output on : = with __EDTB83 *)
+__EDTB83 := (MB_SYS[4] = 0) ;
+ELSE
+__EDTB83 := FALSE ;
+END_IF ;
+__MO_EQUAL_2 := __EDTB83 ;
+MASKEMPTY := __EDTB83 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00E8 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,339
+__ENDSTEPPRAGMA
+(*Label :*)(*S07bothtanksenableduntiltheHMIwritesamask*)
+__GL __LG00E9 ;
+__EDTB85 := MASKEMPTY ;
+IF __EDTB85 THEN
+MB_SYS[4] := (ZEROU + 3) ;
+END_IF ;
+__MO_PLUS_44 := __EDTB85 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00EA ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,343
+__ENDSTEPPRAGMA
+(*Label :*)(*S07StationRunPermitfollowsRunningandstays0whileSimInputsison*)
+__GL __LG00EB ;
+__EDTB86 := RUNNING AND NOT(SIMINPUTS) ;
+IF __EDTB86 THEN
+MB_STATION[0] := (ZEROU + 1) ;
+END_IF ;
+__MO_PLUS_45 := __EDTB86 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00EC ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,347
+__ENDSTEPPRAGMA
+(*Label :*)(*S07_347*)
+__GL __LG00ED ;
+__EDTB87 := NOT(RUNNING) ;
+__EDTB88 := SIMINPUTS ;
+__EDTB89 := (__EDTB87 OR __EDTB88) ;
+IF __EDTB89 THEN
+MB_STATION[0] := (ZEROU + 0) ;
+END_IF ;
+__MO_PLUS_46 := __EDTB89 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00EE ;
+
+
+(*************** Code for the end of File **************)
+__GL __LG0000 ;
+
+
+
+(*************** Local Symbols table *******************)
+(* __EDTB1 *)
+(* __EDTB2 *)
+(* __EDTB3 *)
+(* __EDTB4 *)
+(* __EDTB5 *)
+(* __EDTB6 *)
+(* __EDTB7 *)
+(* __EDTB8 *)
+(* __EDTB9 *)
+(* __EDTB10 *)
+(* __EDTB11 *)
+(* __EDTB12 *)
+(* __EDTB13 *)
+(* __EDTB14 *)
+(* __EDTB15 *)
+(* __EDTB16 *)
+(* __EDTB17 *)
+(* __EDTB18 *)
+(* __EDTB19 *)
+(* __EDTB20 *)
+(* __EDTB21 *)
+(* __EDTB22 *)
+(* __EDTB23 *)
+(* __EDTB24 *)
+(* __EDTB25 *)
+(* __EDTB26 *)
+(* __EDTB27 *)
+(* __EDTB28 *)
+(* __EDTB29 *)
+(* __EDTB30 *)
+(* __EDTB31 *)
+(* __EDTB32 *)
+(* __EDTB33 *)
+(* __EDTB34 *)
+(* __EDTB35 *)
+(* __EDTB36 *)
+(* __EDTB37 *)
+(* __EDTB38 *)
+(* __EDTB39 *)
+(* __EDTB40 *)
+(* __EDTB41 *)
+(* __EDTB42 *)
+(* __EDTB43 *)
+(* __EDTB44 *)
+(* __EDTB45 *)
+(* __EDTB46 *)
+(* __EDTB47 *)
+(* __EDTB48 *)
+(* __EDTB49 *)
+(* __EDTB50 *)
+(* __EDTB51 *)
+(* __EDTB52 *)
+(* __EDTB53 *)
+(* __EDTB54 *)
+(* __EDTB55 *)
+(* __EDTB56 *)
+(* __EDTB57 *)
+(* __EDTB58 *)
+(* __EDTB59 *)
+(* __EDTB60 *)
+(* __EDTB61 *)
+(* __EDTB62 *)
+(* __EDTB63 *)
+(* __EDTB64 *)
+(* __EDTB65 *)
+(* __EDTB66 *)
+(* __EDTB67 *)
+(* __EDTB68 *)
+(* __EDTB69 *)
+(* __EDTB70 *)
+(* __EDTB71 *)
+(* __EDTB72 *)
+(* __EDTB73 *)
+(* __EDTB74 *)
+(* __EDTB75 *)
+(* __EDTB76 *)
+(* __EDTB77 *)
+(* __EDTB78 *)
+(* __EDTB79 *)
+(* __EDTB80 *)
+(* __EDTB81 *)
+(* __EDTB82 *)
+(* __EDTB83 *)
+(* __EDTB84 *)
+(* __EDTB85 *)
+(* __EDTB86 *)
+(* __EDTB87 *)
+(* __EDTB88 *)
+(* __EDTB89 *)
+

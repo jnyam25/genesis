@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { TwinProvider } from "@/lib/twin/twin-context";
 import { NavBar } from "@/components/dashboard/nav-bar";
+import { ActionBar } from "@/components/controls/action-bar";
 import { SafetyBanner } from "@/components/safety/safety-banner";
 
 const geistSans = Geist({
@@ -34,6 +35,7 @@ export default function RootLayout({
         <TwinProvider>
           <NavBar />
           <SafetyBanner />
+          <ActionBar />
           {children}
         </TwinProvider>
       </body>

@@ -88,8 +88,16 @@ if (firstRun || process.argv.includes("--load")) {
   }
 }
 
+const plcHost = process.env.PLC_HOST ?? "127.0.0.1";
+const plcPort = process.env.PLC_PORT ?? "5020";
+const virtualPlc = plcHost === "127.0.0.1" && plcPort === "5020";
+const peerHost = process.env.FUXA_PEER_HOST;
 console.log(
   `[fuxa] editor: ${URL}/editor   operator view: ${URL}/home\n` +
-    `       PLC: ${process.env.PLC_HOST ?? "127.0.0.1"}:${process.env.PLC_PORT ?? 5020} (start the virtual PLC with \`npm run virtual-plc\`)\n` +
-    "       Ctrl+C to stop.",
+    `       PLC: ${plcHost}:${plcPort}` +
+    (virtualPlc
+      ? " (virtual supervisor — `npm run virtual-plc`. The 2080-L50E-24QBB ladder does not run the stations)"
+      : " (2080-L50E-24QBB; expansion I/O is not in the register map)") +
+    (peerHost ? `\n       Virtual PLC: ${peerHost}:${process.env.FUXA_PEER_PORT ?? "5020"} (PLC link view)` : "") +
+    "\n       Ctrl+C to stop.",
 );

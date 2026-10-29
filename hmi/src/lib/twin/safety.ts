@@ -67,9 +67,8 @@ type Emit = (severity: TwinEvent["severity"], message: string) => void;
 
 /** Same as the twin's config.safety.eStopButtons, in PLC mask bit order. */
 const DEFAULT_BUTTONS = [
-  { id: "PANEL", name: "Local control panel" },
-  { id: "ENTRY", name: "Line entry" },
-  { id: "EXIT", name: "Line exit" },
+  { id: "ENTRY", name: "Line start" },
+  { id: "EXIT", name: "Line end" },
 ];
 
 /** Safety state machine for the mock engine (same rules as the twin). */

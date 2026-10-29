@@ -1,0 +1,26 @@
+# /etc/wireguard/wg0.conf on the Raspberry Pi.
+# Generate keys on each machine:  wg genkey | tee privatekey | wg pubkey > publickey
+# The Pi's second interface (operator Ethernet or Wi-Fi) must be reachable
+# from the SCADA PCs. eth0 stays on the control switch. Do not set
+# IPForwarding. AllowedIPs below are the SCADA tunnel addresses only, so a
+# peer cannot be routed onto 192.168.10.0/24.
+#
+#   sudo apt install -y wireguard
+#   sudo systemctl enable --now wg-quick@wg0
+
+[Interface]
+Address = 10.44.0.1/24
+ListenPort = 51820
+PrivateKey = <pi private key>
+
+# Wired SCADA PC, on a LAN that is not the control network.
+[Peer]
+PublicKey = <wired SCADA public key>
+AllowedIPs = 10.44.0.2/32
+
+# Wireless SCADA. Same tunnel whether that laptop is on the operator Wi-Fi
+# or on some other network. On the operator Wi-Fi it can also skip the tunnel
+# and use the Pi's operator address directly (communication.md §5).
+[Peer]
+PublicKey = <wireless SCADA public key>
+AllowedIPs = 10.44.0.3/32

@@ -1,0 +1,783 @@
+PROGRAM Prog1
+#info= QLD
+BOF
+
+
+(**)
+
+SOR  [0,1] (*S00embeddedinputsNCEStopmonitors0pressed*) (**)  XIO  [1,0] (*_IO_EM_DI_01*) (**)  OTE  [2,0] (*EntryPressed*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,3] (*S00_3*) (**)  XIO  [1,0] (*_IO_EM_DI_02*) (**)  OTE  [2,0] (*ExitPressed*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,5] (*S00safetyrelayaux*) (**)  XIC  [1,0] (*_IO_EM_DI_00*) (**)  OTE  [2,0] (*SafetyOK*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,7] (*S00LOCALkey*) (**)  XIC  [1,0] (*_IO_EM_DI_04*) (**)  OTE  [2,0] (*LocalMode*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,9] (*S00expansion2085IQ16is_IO_X1_Sortgatesensor*) (**)  XIC  [1,0] (*X1_DI_00*) (**)  OTE  [2,0] (*SortPresent*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,11] (*S00lane1full*) (**)  XIC  [1,0] (*X1_DI_01*) (**)  OTE  [2,0] (*LaneAFull*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,13] (*S00lane2full*) (**)  XIC  [1,0] (*X1_DI_02*) (**)  OTE  [2,0] (*LaneBFull*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,15] (*S00rejectlanefull*) (**)  XIC  [1,0] (*X1_DI_03*) (**)  OTE  [2,0] (*RejectFull*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,17] (*S00tanklowfloats*) (**)  XIC  [1,0] (*X1_DI_04*) (**)  OTE  [2,0] (*TankLow[1]*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,19] (*S00_19*) (**)  XIC  [1,0] (*X1_DI_05*) (**)  OTE  [2,0] (*TankLow[2]*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,21] (*S00diverterhomeswitches*) (**)  XIC  [1,0] (*X1_DI_08*) (**)  OTE  [2,0] (*RejectHome*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,23] (*S00_23*) (**)  XIC  [1,0] (*X1_DI_09*) (**)  OTE  [2,0] (*SortHome*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,25] (*S01EStopactiveeitherbuttonorthedigitalEStoplatch*) (**)  
+ BST  XIC  [1,0] (*EntryPressed*) (**)
+   NXB
+ BST  XIC  [1,1] (*ExitPressed*) (**)
+   NXB  XIC  [1,2] (*DigitalEStop*) (**)
+ BND
+ BND
+  OTE  [2,0] (*EStopActive*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,29] (*S01resetrequiredwhenthecircuitisopenandnobuttonisheld*) (**)  XIO  [1,0] (*EStopActive*) (**)  XIO  [2,0] (*SafetyOK*) (**)  OTE  [3,0] (*ResetRequired*) (**)
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,31] (*S02onescanwhentheLOCALkeychanges*) (**)  XIC  [1,0] (*LocalMode*) (**)  XIO  [2,0] (*PrevLocalMode*) (**)  OTE  [3,0] (*ModeChanged*) (**)
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,33] (*S02_33*) (**)  XIC  [1,0] (*LocalMode*) (**)  OTE  [2,0] (*PrevLocalMode*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,35] (*S02localSTARTontheexpansionmoduleignoredunlessLOCALandalanehasroom*) (**)  XIC  [1,0] (*X1_DI_06*) (**)  XIO  [2,0] (*PrevLocalStart*) (**)  XIC  [3,0] (*LocalMode*) (**)  XIO  [4,0] (*LaneAFull*) (**)  XIO  [5,0] (*LaneBFull*) (**)  OTE  [6,0] (*LocalStartRise*) (**)
+EOR [7,0]
+
+
+(**)
+
+SOR  [0,37] (*S02_37*) (**)  XIC  [1,0] (*X1_DI_06*) (**)  OTE  [2,0] (*PrevLocalStart*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,39] (*S02remoteSTARTisMB_Cmd4ignoredinLOCAL*) (**)  XIC  [1,0] (*MB_Cmd[4]*) (**)  XIO  [2,0] (*PrevRemoteStart*) (**)  XIO  [3,0] (*LocalMode*) (**)  XIO  [4,0] (*LaneAFull*) (**)  XIO  [5,0] (*LaneBFull*) (**)  OTE  [6,0] (*RemoteStartRise*) (**)
+EOR [7,0]
+
+
+(**)
+
+SOR  [0,41] (*S02_41*) (**)  XIC  [1,0] (*MB_Cmd[4]*) (**)  OTE  [2,0] (*PrevRemoteStart*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,43] (*S02_43*) (**)  
+ BST  XIC  [1,0] (*LocalStartRise*) (**)
+   NXB  XIC  [1,1] (*RemoteStartRise*) (**)
+ BND
+  OTE  [2,0] (*StartPulse*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,46] (*S02releasethedigitalEStopMB_Cmd1*) (**)  XIC  [1,0] (*MB_Cmd[1]*) (**)  XIO  [2,0] (*PrevRelease*) (**)  XIC  [3,0] (*DigitalEStop*) (**)  OTE  [4,0] (*ReleasePulse*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,48] (*S02_48*) (**)  XIC  [1,0] (*MB_Cmd[1]*) (**)  OTE  [2,0] (*PrevRelease*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,50] (*S02localRESETRefusedwhileanEStopisstillin*) (**)  XIC  [1,0] (*_IO_EM_DI_06*) (**)  XIO  [2,0] (*PrevReset*) (**)  XIO  [3,0] (*EntryPressed*) (**)  XIO  [4,0] (*ExitPressed*) (**)  XIO  [5,0] (*DigitalEStop*) (**)  OTE  [6,0] (*ResetPulse*) (**)
+EOR [7,0]
+
+
+(**)
+
+SOR  [0,52] (*S02_52*) (**)  XIC  [1,0] (*_IO_EM_DI_06*) (**)  OTE  [2,0] (*PrevReset*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,54] (*S01digitalEStoplatchMB_Cmd0setsitReleaseorfirstscanclearsit*) (**)  
+ BST  XIC  [1,0] (*MB_Cmd[0]*) (**)
+   NXB  XIC  [1,1] (*DigitalEStop*) (**)  XIO  [2,1] (*ReleasePulse*) (**)  XIO  [3,1] (*__SYSVA_FIRST_SCAN*) (**)
+ BND
+  OTE  [4,0] (*DigitalEStop*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,57] (*S01RunCmdsealHardwiredSTOPisNConDI5so1meansnotpressedMB_Cmd5istheHMIstop*) (**)  XIO  [1,0] (*__SYSVA_FIRST_SCAN*) (**)  XIO  [2,0] (*DigitalEStop*) (**)  XIO  [3,0] (*EntryPressed*) (**)  XIO  [4,0] (*ExitPressed*) (**)  XIC  [5,0] (*_IO_EM_DI_05*) (**)  XIO  [6,0] (*MB_Cmd[5]*) (**)  XIC  [7,0] (*SafetyOK*) (**)  XIO  [8,0] (*FaultHold*) (**)  XIO  [9,0] (*ModeChanged*) (**)  
+ BST  XIC  [10,0] (*StartPulse*) (**)
+   NXB  XIC  [10,1] (*RunCmd*) (**)
+ BND
+  OTE  [11,0] (*RunCmd*) (**)
+EOR [12,0]
+
+
+(**)
+
+SOR  [0,60] (*S01Running*) (**)  XIC  [1,0] (*RunCmd*) (**)  XIC  [2,0] (*SafetyOK*) (**)  XIO  [3,0] (*EStopActive*) (**)  OTE  [4,0] (*Running*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,62] (*S02faultlatchFaultSetissetbythestationlogicRESETorfirstscanclearsit*) (**)  XIO  [1,0] (*ResetPulse*) (**)  XIO  [2,0] (*__SYSVA_FIRST_SCAN*) (**)  
+ BST  XIC  [3,0] (*FaultSet*) (**)
+   NXB  XIC  [3,1] (*FaultHold*) (**)
+ BND
+  OTE  [4,0] (*FaultHold*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,65] (*S02localJOGisholdtorunontheexpansionmoduleandonlywhilethelineisstopped*) (**)  XIC  [1,0] (*LocalMode*) (**)  XIC  [2,0] (*X1_DI_07*) (**)  XIO  [3,0] (*EStopActive*) (**)  XIC  [4,0] (*SafetyOK*) (**)  XIO  [5,0] (*Running*) (**)  XIO  [6,0] (*SimInputs*) (**)  OTE  [7,0] (*JogLocal*) (**)
+EOR [8,0]
+
+
+(**)
+
+SOR  [0,67] (*S02remoteJOGisa05spulsefromMB_Cmd2*) (**)  XIC  [1,0] (*MB_Cmd[2]*) (**)  XIO  [2,0] (*PrevJog*) (**)  XIO  [3,0] (*LocalMode*) (**)  OTE  [4,0] (*JogPulse*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,69] (*S02_69*) (**)  XIC  [1,0] (*MB_Cmd[2]*) (**)  OTE  [2,0] (*PrevJog*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,71] (*S02holdtheremotejoguntilthetimerfinishesorsafetydrops*) (**)  XIO  [1,0] (*JogTimer.Q*) (**)  XIO  [2,0] (*EStopActive*) (**)  XIC  [3,0] (*SafetyOK*) (**)  XIO  [4,0] (*LocalMode*) (**)  XIO  [5,0] (*SimInputs*) (**)  
+ BST  XIC  [6,0] (*JogPulse*) (**)
+   NXB  XIC  [6,1] (*JogHold*) (**)
+ BND
+  OTE  [7,0] (*JogHold*) (**)
+EOR [8,0]
+
+
+(**)
+
+SOR  [0,74] (*S02_74*) (**)  XIC  [1,0] (*JogHold*) (**)  FB  [2,0] (*TON*) (*JogTimer*) ( (*IN:IN*)(**) (**)  , (*PT:PT*)(*T#500ms*) (**) ; (*Q:Q*)(**) (**)  , (*ET:ET*)(**) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,77] (*S02beltjogrequest*) (**)  
+ BST  XIC  [1,0] (*JogLocal*) (**)
+   NXB  XIC  [1,1] (*JogHold*) (**)
+ BND
+  OTE  [2,0] (*JogBelt*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,80] (*S06buzzerflashwhileanEStoporalatchedfaultispresent*) (**)  
+ BST  XIC  [1,0] (*EStopActive*) (**)
+   NXB  XIC  [1,1] (*FaultHold*) (**)
+ BND
+  XIO  [2,0] (*Flash*) (**)  FB  [3,0] (*TON*) (*TON_BuzzOn*) ( (*IN:IN*)(**) (**)  , (*PT:PT*)(*T#400ms*) (**) ; (*Q:Q*)(**) (**)  , (*ET:ET*)(**) (**) )
+EOR [6,0]
+
+
+(**)
+
+SOR  [0,83] (*S06_83*) (**)  XIC  [1,0] (*Flash*) (**)  FB  [2,0] (*TON*) (*TON_BuzzOff*) ( (*IN:IN*)(**) (**)  , (*PT:PT*)(*T#400ms*) (**) ; (*Q:Q*)(**) (**)  , (*ET:ET*)(**) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,86] (*S06_86*) (**)  
+ BST  XIC  [1,0] (*EStopActive*) (**)
+   NXB  XIC  [1,1] (*FaultHold*) (**)
+ BND
+  XIO  [2,0] (*TON_BuzzOff.Q*) (**)  
+ BST  XIC  [3,0] (*TON_BuzzOn.Q*) (**)
+   NXB  XIC  [3,1] (*Flash*) (**)
+ BND
+  OTE  [4,0] (*Flash*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,89] (*S06safetyrelayOffindigitalEStoponfirstscanandwhileSimInputsison*) (**)  XIO  [1,0] (*DigitalEStop*) (**)  XIO  [2,0] (*SimInputs*) (**)  XIO  [3,0] (*__SYSVA_FIRST_SCAN*) (**)  OTE  [4,0] (*_IO_EM_DO_00*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,91] (*S06beltRunswhilethelineisrunningorajogisheldSimInputskeepsitoff*) (**)  XIO  [1,0] (*SimInputs*) (**)  
+ BST  XIC  [2,0] (*Running*) (**)
+   NXB  XIC  [2,1] (*JogBelt*) (**)
+ BND
+  OTE  [3,0] (*_IO_EM_DO_01*) (**)
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,94] (*S06valvesanddivertersfollowthestationbitsandonlywhileRunning*) (**)  XIC  [1,0] (*Running*) (**)  XIC  [2,0] (*Valve1Cmd*) (**)  XIO  [3,0] (*SimInputs*) (**)  OTE  [4,0] (*_IO_EM_DO_02*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,96] (*S06_96*) (**)  XIC  [1,0] (*Running*) (**)  XIC  [2,0] (*Valve2Cmd*) (**)  XIO  [3,0] (*SimInputs*) (**)  OTE  [4,0] (*_IO_EM_DO_03*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,98] (*S06_98*) (**)  XIC  [1,0] (*Running*) (**)  XIC  [2,0] (*QrRejectCmd*) (**)  XIO  [3,0] (*SimInputs*) (**)  OTE  [4,0] (*_IO_EM_DO_04*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,100] (*S06_100*) (**)  XIC  [1,0] (*Running*) (**)  XIC  [2,0] (*LidPressCmd*) (**)  XIO  [3,0] (*SimInputs*) (**)  OTE  [4,0] (*_IO_EM_DO_05*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,102] (*S06_102*) (**)  XIC  [1,0] (*Running*) (**)  XIC  [2,0] (*RejectCmd*) (**)  XIO  [3,0] (*SimInputs*) (**)  OTE  [4,0] (*_IO_EM_DO_06*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,104] (*S06lane2Offsendsthecantolane1*) (**)  XIC  [1,0] (*Running*) (**)  XIC  [2,0] (*SortLaneBCmd*) (**)  XIO  [3,0] (*SimInputs*) (**)  OTE  [4,0] (*_IO_EM_DO_07*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,106] (*S06stackgreen*) (**)  XIC  [1,0] (*Running*) (**)  XIO  [2,0] (*SimInputs*) (**)  OTE  [3,0] (*_IO_EM_DO_08*) (**)
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,108] (*S06stackred*) (**)  XIO  [1,0] (*SimInputs*) (**)  
+ BST  XIC  [2,0] (*EStopActive*) (**)
+   NXB  XIC  [2,1] (*FaultHold*) (**)
+ BND
+  OTE  [3,0] (*_IO_EM_DO_09*) (**)
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,111] (*S06expansion2085OB16is_IO_X2_StopperonretractedOffholding*) (**)  XIC  [1,0] (*Running*) (**)  XIC  [2,0] (*RelScan*) (**)  XIO  [3,0] (*SimInputs*) (**)  OTE  [4,0] (*X2_DO_00*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,113] (*S06_113*) (**)  XIC  [1,0] (*Running*) (**)  XIC  [2,0] (*RelBay1*) (**)  XIO  [3,0] (*SimInputs*) (**)  OTE  [4,0] (*X2_DO_01*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,115] (*S06_115*) (**)  XIC  [1,0] (*Running*) (**)  XIC  [2,0] (*RelBay2*) (**)  XIO  [3,0] (*SimInputs*) (**)  OTE  [4,0] (*X2_DO_02*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,117] (*S06_117*) (**)  XIC  [1,0] (*Running*) (**)  XIC  [2,0] (*RelCap*) (**)  XIO  [3,0] (*SimInputs*) (**)  OTE  [4,0] (*X2_DO_03*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,119] (*S06_119*) (**)  XIC  [1,0] (*Running*) (**)  XIC  [2,0] (*RelPress*) (**)  XIO  [3,0] (*SimInputs*) (**)  OTE  [4,0] (*X2_DO_04*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,121] (*S06_121*) (**)  XIC  [1,0] (*Running*) (**)  XIC  [2,0] (*RelQC*) (**)  XIO  [3,0] (*SimInputs*) (**)  OTE  [4,0] (*X2_DO_05*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,123] (*S06_123*) (**)  XIC  [1,0] (*Running*) (**)  XIC  [2,0] (*RelGate*) (**)  XIO  [3,0] (*SimInputs*) (**)  OTE  [4,0] (*X2_DO_06*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,125] (*S06stackamberstoppedorwaitingforresetandnotinEStop*) (**)  XIO  [1,0] (*SimInputs*) (**)  XIO  [2,0] (*EStopActive*) (**)  
+ BST  XIO  [3,0] (*Running*) (**)
+   NXB  XIC  [3,1] (*ResetRequired*) (**)
+ BND
+  OTE  [4,0] (*X2_DO_07*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,128] (*S06buzzerfollowstheflashbit*) (**)  XIC  [1,0] (*Flash*) (**)  XIO  [2,0] (*SimInputs*) (**)  OTE  [3,0] (*X2_DO_08*) (**)
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,130] (*S06RESETlamp*) (**)  XIC  [1,0] (*ResetRequired*) (**)  XIO  [2,0] (*SimInputs*) (**)  OTE  [3,0] (*X2_DO_09*) (**)
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,132] (*S07railusedonlytoforcetheacknowledgerungsfalse*) (**)  OTE  [1,0] (*PublishRail*) (**)
+EOR [2,0]
+
+
+(**)
+
+SOR  [0,134] (*S02acknowledgecommandcoilsThebridgeandFUXAwrite1clearingitmakesthenextwritearisingedgeFirerejectandremoteRESETareclearedandnotactedon*) (**)  XIO  [1,0] (*PublishRail*) (**)  OTE  [2,0] (*MB_Cmd[0]*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,136] (*S02_136*) (**)  XIO  [1,0] (*PublishRail*) (**)  OTE  [2,0] (*MB_Cmd[1]*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,138] (*S02_138*) (**)  XIO  [1,0] (*PublishRail*) (**)  OTE  [2,0] (*MB_Cmd[2]*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,140] (*S02_140*) (**)  XIO  [1,0] (*PublishRail*) (**)  OTE  [2,0] (*MB_Cmd[3]*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,142] (*S02_142*) (**)  XIO  [1,0] (*PublishRail*) (**)  OTE  [2,0] (*MB_Cmd[4]*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,144] (*S02_144*) (**)  XIO  [1,0] (*PublishRail*) (**)  OTE  [2,0] (*MB_Cmd[5]*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,146] (*S02_146*) (**)  XIO  [1,0] (*PublishRail*) (**)  OTE  [2,0] (*MB_Cmd[6]*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,148] (*S02_148*) (**)  XIO  [1,0] (*PublishRail*) (**)  OTE  [2,0] (*MB_Cmd[8]*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,150] (*S02_150*) (**)  XIO  [1,0] (*PublishRail*) (**)  OTE  [2,0] (*MB_Cmd[9]*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,152] (*S02_152*) (**)  XIO  [1,0] (*PublishRail*) (**)  OTE  [2,0] (*MB_Cmd[10]*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,154] (*S02_154*) (**)  XIO  [1,0] (*PublishRail*) (**)  OTE  [2,0] (*MB_Cmd[11]*) (**)
+EOR [3,0]
+
+
+(**)
+
+SOR  [0,156] (*S07SysProtocolVersion4*) (**)  FB  [1,0] (*+*) (*30*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*4*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*MB_Sys[0]*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,160] (*S07heartbeattimer100ms*) (**)  XIO  [1,0] (*TON_Publish.Q*) (**)  FB  [2,0] (*TON*) (*TON_Publish*) ( (*IN:IN*)(**) (**)  , (*PT:PT*)(*T#100ms*) (**) ; (*Q:Q*)(**) (**)  , (*ET:ET*)(**) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,163] (*S07_163*) (**)  XIC  [1,0] (*TON_Publish.Q*) (**)  FB  [2,0] (*=*) (*31*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Hb*) (**)  , (*i2:i2*)(*65535*) (**) ; (*o1:o1*)(**) (**) )  OTE  [5,0] (*HbAtMax*) (**)
+EOR [6,0]
+
+
+(**)
+
+SOR  [0,167] (*S07_167*) (**)  XIC  [1,0] (*TON_Publish.Q*) (**)  XIO  [2,0] (*HbAtMax*) (**)  FB  [3,0] (*+*) (*32*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Hb*) (**)  , (*i2:i2*)(*1*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*HbNext*) (**) )
+EOR [6,0]
+
+
+(**)
+
+SOR  [0,171] (*S07wrap65535to0*) (**)  XIC  [1,0] (*TON_Publish.Q*) (**)  XIC  [2,0] (*HbAtMax*) (**)  FB  [3,0] (*+*) (*33*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*ZeroU*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*HbNext*) (**) )
+EOR [6,0]
+
+
+(**)
+
+SOR  [0,175] (*S07_175*) (**)  XIC  [1,0] (*TON_Publish.Q*) (**)  FB  [2,0] (*+*) (*34*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*HbNext*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*Hb*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,179] (*S07SysPlcHeartbeat*) (**)  FB  [1,0] (*+*) (*35*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Hb*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*MB_Sys[1]*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,183] (*S07cleartheLineStateaccumulator*) (**)  FB  [1,0] (*+*) (*36*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*ZeroU*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*Ls*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,187] (*S07LineStatebit0Running*) (**)  XIC  [1,0] (*Running*) (**)  FB  [2,0] (*+*) (*37*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*1*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,191] (*S07_191*) (**)  XIO  [1,0] (*Running*) (**)  FB  [2,0] (*+*) (*38*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,195] (*S07_195*) (**)  FB  [1,0] (*+*) (*39*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*LsNext*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*Ls*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,199] (*S07LineStatebit1EStopActive*) (**)  XIC  [1,0] (*EStopActive*) (**)  FB  [2,0] (*+*) (*40*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*2*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,203] (*S07_203*) (**)  XIO  [1,0] (*EStopActive*) (**)  FB  [2,0] (*+*) (*41*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,207] (*S07_207*) (**)  FB  [1,0] (*+*) (*42*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*LsNext*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*Ls*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,211] (*S07LineStatebit2SafetyOK*) (**)  XIC  [1,0] (*SafetyOK*) (**)  FB  [2,0] (*+*) (*43*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*4*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,215] (*S07_215*) (**)  XIO  [1,0] (*SafetyOK*) (**)  FB  [2,0] (*+*) (*44*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,219] (*S07_219*) (**)  FB  [1,0] (*+*) (*45*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*LsNext*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*Ls*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,223] (*S07LineStatebit3fault*) (**)  XIC  [1,0] (*FaultHold*) (**)  FB  [2,0] (*+*) (*46*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*8*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,227] (*S07_227*) (**)  XIO  [1,0] (*FaultHold*) (**)  FB  [2,0] (*+*) (*47*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,231] (*S07_231*) (**)  FB  [1,0] (*+*) (*48*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*LsNext*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*Ls*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,235] (*S07LineStatebit5DigitalEStop*) (**)  XIC  [1,0] (*DigitalEStop*) (**)  FB  [2,0] (*+*) (*49*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*32*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,239] (*S07_239*) (**)  XIO  [1,0] (*DigitalEStop*) (**)  FB  [2,0] (*+*) (*50*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,243] (*S07_243*) (**)  FB  [1,0] (*+*) (*51*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*LsNext*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*Ls*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,247] (*S07LineStatebit7ResetRequired*) (**)  XIC  [1,0] (*ResetRequired*) (**)  FB  [2,0] (*+*) (*52*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*128*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,251] (*S07_251*) (**)  XIO  [1,0] (*ResetRequired*) (**)  FB  [2,0] (*+*) (*53*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,255] (*S07_255*) (**)  FB  [1,0] (*+*) (*54*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*LsNext*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*Ls*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,259] (*S07LineStatebit8LocalMode*) (**)  XIC  [1,0] (*LocalMode*) (**)  FB  [2,0] (*+*) (*55*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*256*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,263] (*S07_263*) (**)  XIO  [1,0] (*LocalMode*) (**)  FB  [2,0] (*+*) (*56*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,267] (*S07_267*) (**)  FB  [1,0] (*+*) (*57*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*LsNext*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*Ls*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,271] (*S07LineStatebit10SimInputs*) (**)  XIC  [1,0] (*SimInputs*) (**)  FB  [2,0] (*+*) (*58*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*1024*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,275] (*S07_275*) (**)  XIO  [1,0] (*SimInputs*) (**)  FB  [2,0] (*+*) (*59*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,279] (*S07_279*) (**)  FB  [1,0] (*+*) (*60*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*LsNext*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*Ls*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,283] (*S07LineStatebit6aphysicalEStopispressed*) (**)  
+ BST  XIC  [1,0] (*EntryPressed*) (**)
+   NXB  XIC  [1,1] (*ExitPressed*) (**)
+ BND
+  FB  [2,0] (*+*) (*61*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*64*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,287] (*S07_287*) (**)  XIO  [1,0] (*EntryPressed*) (**)  XIO  [2,0] (*ExitPressed*) (**)  FB  [3,0] (*+*) (*62*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*LsNext*) (**) )
+EOR [6,0]
+
+
+(**)
+
+SOR  [0,291] (*S07_291*) (**)  FB  [1,0] (*+*) (*63*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*LsNext*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*Ls*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,295] (*S07SysLineState*) (**)  FB  [1,0] (*+*) (*64*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Ls*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*MB_Sys[2]*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,299] (*S07cleartheEStopmaskaccumulator*) (**)  FB  [1,0] (*+*) (*65*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*ZeroU*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*Pm*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,303] (*S07SysPhysicalEStopMaskbit0linestart*) (**)  XIC  [1,0] (*EntryPressed*) (**)  FB  [2,0] (*+*) (*66*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Pm*) (**)  , (*i2:i2*)(*1*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*PmNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,307] (*S07_307*) (**)  XIO  [1,0] (*EntryPressed*) (**)  FB  [2,0] (*+*) (*67*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Pm*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*PmNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,311] (*S07_311*) (**)  FB  [1,0] (*+*) (*68*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*PmNext*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*Pm*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,315] (*S07bit1lineend*) (**)  XIC  [1,0] (*ExitPressed*) (**)  FB  [2,0] (*+*) (*69*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Pm*) (**)  , (*i2:i2*)(*2*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*PmNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,319] (*S07_319*) (**)  XIO  [1,0] (*ExitPressed*) (**)  FB  [2,0] (*+*) (*70*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Pm*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*PmNext*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,323] (*S07_323*) (**)  FB  [1,0] (*+*) (*71*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*PmNext*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*Pm*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,327] (*S07SysPhysicalEStopMask*) (**)  FB  [1,0] (*+*) (*72*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*Pm*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*MB_Sys[16]*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,331] (*S07SysTankCount2*) (**)  FB  [1,0] (*+*) (*73*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*ZeroU*) (**)  , (*i2:i2*)(*2*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*MB_Sys[3]*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,335] (*S07keepatankenablemasktheHMIalreadywrote*) (**)  FB  [1,0] (*=*) (*74*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*MB_Sys[4]*) (**)  , (*i2:i2*)(*0*) (**) ; (*o1:o1*)(**) (**) )  OTE  [4,0] (*MaskEmpty*) (**)
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,339] (*S07bothtanksenableduntiltheHMIwritesamask*) (**)  XIC  [1,0] (*MaskEmpty*) (**)  FB  [2,0] (*+*) (*75*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*ZeroU*) (**)  , (*i2:i2*)(*3*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*MB_Sys[4]*) (**) )
+EOR [5,0]
+
+
+(**)
+
+SOR  [0,343] (*S07StationRunPermitfollowsRunningandstays0whileSimInputsison*) (**)  XIC  [1,0] (*Running*) (**)  XIO  [2,0] (*SimInputs*) (**)  FB  [3,0] (*+*) (*76*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*ZeroU*) (**)  , (*i2:i2*)(*1*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*MB_Station[0]*) (**) )
+EOR [6,0]
+
+
+(**)
+
+SOR  [0,347] (*S07_347*) (**)  
+ BST  XIO  [1,0] (*Running*) (**)
+   NXB  XIC  [1,1] (*SimInputs*) (**)
+ BND
+  FB  [2,0] (*+*) (*77*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*ZeroU*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*MB_Station[0]*) (**) )
+EOR [5,0]
+EOF
+#end_info
+END_PROGRAM

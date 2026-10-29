@@ -24,19 +24,20 @@ Live line state in the HMI's `TwinState` shape (mirrors `hmi/src/lib/twin/types.
 ```json
 {
   "tanks": [
-    { "id": "T1", "name": "Titanium White", "colorCode": "#F4F1EA", "levelMl": 4520.3, "capacityMl": 5000 }
+    { "id": "T1", "name": "Sky Blue", "colorCode": "#7EC8E3", "levelMl": 4520.3, "capacityMl": 5000 },
+    { "id": "T2", "name": "Amber", "colorCode": "#F4C430", "levelMl": 4800.0, "capacityMl": 5000 }
   ],
   "tankSlots": [
-    { "id": "T1", "name": "Titanium White", "colorCode": "#F4F1EA", "custom": false, "enabled": true },
-    { "id": "T4", "name": "Lemon", "colorCode": "#FFF44F", "custom": true, "enabled": false }
+    { "id": "T1", "name": "Sky Blue", "colorCode": "#7EC8E3", "custom": false, "enabled": true },
+    { "id": "T2", "name": "Amber", "colorCode": "#F4C430", "custom": false, "enabled": true }
   ],
   "containers": [
     { "id": "C-0012", "status": "fill-2", "fillMl": 60, "targetMl": 250, "lane": 0 }
   ],
   "counts": { "accepted": 9, "rejected": 3, "total": 12 },
   "sortLanes": [
-    { "id": "A", "name": "Lane A (small bottles)", "count": 6 },
-    { "id": "B", "name": "Lane B (large bottles)", "count": 3 }
+    { "id": "A", "name": "Lane 1", "count": 6 },
+    { "id": "B", "name": "Lane 2", "count": 3 }
   ],
   "throughputCpm": 6.5,
   "oee": { "availability": 0.94, "performance": 1, "quality": 0.75, "overall": 0.705 },
@@ -46,9 +47,8 @@ Live line state in the HMI's `TwinState` shape (mirrors `hmi/src/lib/twin/types.
     "eStopActive": false,
     "digitalEStop": false,
     "eStopButtons": [
-      { "id": "PANEL", "name": "Local control panel", "pressed": false },
-      { "id": "ENTRY", "name": "Line entry", "pressed": false },
-      { "id": "EXIT", "name": "Line exit", "pressed": false }
+      { "id": "ENTRY", "name": "Line start", "pressed": false },
+      { "id": "EXIT", "name": "Line end", "pressed": false }
     ],
     "safetyCircuitOk": true,
     "resetRequired": false,
@@ -66,9 +66,9 @@ Live line state in the HMI's `TwinState` shape (mirrors `hmi/src/lib/twin/types.
 | Field | Notes |
 | --- | --- |
 | `tanks[]` | Enabled tanks in slot order (`T1`, `T2`). `levelMl` 0.1 ml resolution. `name`/`colorCode` are the operator's current choice for that slot |
-| `tankSlots[]` | All eight slots, enabled or not, with their editable `name`/`colorCode`. `custom` = edited away from the default; `enabled` = on the line. Optional (the HMI hides the colour editor without it) |
+| `tankSlots[]` | Both slots (`T1`, `T2`), enabled or not, with their editable `name`/`colorCode`. `custom` = edited away from the default; `enabled` = on the line. Optional (the HMI hides the colour editor without it) |
 | `containers[].id` | `C-` + zero-padded id |
-| `containers[].status` | In belt order: `label`, `scan`, `fill-<bay>`, `mix` (only if a mixer is configured), `cap` (robotic capping arm), `qc` (sort sensor and reject diverter), `sort` (sort diverter), then `output` (accepted) or `rejected`. `scan-rejected` = bad barcode or no read, rejected at the reject diverter. Finished containers stay listed for about 1.5 s |
+| `containers[].status` | In belt order: `scan`, `fill-<bay>`, `cap` (robotic capping arm), `press` (lid press), `qc` (fill check), `sort` (sort diverter), then `output` (accepted) or `rejected` (fill reject). `scan-rejected` = bad barcode or no read, ejected at the scan gate. `label` and `mix` appear only when those stations are configured. Finished containers stay listed for about 1.5 s |
 | `containers[].lane` | Index into `sortLanes` the container is (or will be) sorted to. The simulated twin knows it from the recipe; from a PLC it appears once the container is sorted. Optional |
 | `sortLanes[]` | Output lanes after the sort diverter (`config.sort.lanes`) with accepted counts. Optional |
 | `throughputCpm` | Accepted containers per minute over a rolling 60 s window |
@@ -107,7 +107,7 @@ Body: `{ "command": <name>, ...args }`
 | --- | --- | --- |
 | `simControlMode` | `mode`: `"local"` \| `"remote"` | The LOCAL/REMOTE key switch |
 | `simLocalButton` | `button`: `"start"` \| `"stop"` \| `"reset"` \| `"jog"` | A local panel push-button |
-| `simPhysicalEStop` | `buttonId` (`"PANEL"`, `"ENTRY"` or `"EXIT"`), `pressed`: boolean | Pressing or releasing a physical E-Stop button |
+| `simPhysicalEStop` | `buttonId` (`"ENTRY"` or `"EXIT"`), `pressed`: boolean | Pressing or releasing a physical E-Stop button (Line start, Line end) |
 
 | Status | Body |
 | --- | --- |

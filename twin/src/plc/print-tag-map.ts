@@ -10,6 +10,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import { MAX_TANKS } from "../config";
 import { EVENT_SEVERITY, EventCode, FaultCode, RefusalReason, RejectReason, SafetyCommand, TankChangeRefusal } from "../events";
 import {
   ARM_CMD,
@@ -25,6 +26,7 @@ import {
   STATION,
   STATION_BLOCK,
   SYS,
+  TANK_BLOCK,
   coilTable,
   registerTable,
   type RegisterDef,
@@ -55,6 +57,7 @@ function enumTable<T extends Record<string, string | number>>(e: T, extra?: (v: 
 export function renderTagMap(): string {
   const regs = registerTable();
   const inRange = (lo: number, hi: number) => regs.filter((r) => r.address >= lo && r.address <= hi);
+  const tankHi = TANK_BLOCK.start + TANK_BLOCK.length - 1;
   return [
     BEGIN,
     `<!-- Generated from twin/src/plc/tag-map.ts (protocol v${PROTOCOL_VERSION}) by \`npm run tag-map -- --write\`. Do not edit by hand. -->`,
@@ -63,11 +66,11 @@ export function renderTagMap(): string {
     "",
     table(inRange(0, 19), 40001),
     "",
-    "### Holding registers — tank slots (20–67)",
+    `### Holding registers — tank slots (${TANK_BLOCK.start}–${tankHi})`,
     "",
-    "Six registers per slot k = 1..8, base `20 + 6·(k−1)`. Descriptions are given for slot 1 and apply to every slot.",
+    `Six registers per slot k = 1..${MAX_TANKS}, base \`20 + 6·(k−1)\`. Descriptions are given for slot 1 and apply to every slot.`,
     "",
-    table(inRange(20, 67), 40001),
+    table(inRange(TANK_BLOCK.start, tankHi), 40001),
     "",
     "### Holding registers — container tracking (100–139)",
     "",

@@ -1,0 +1,19 @@
+# /etc/wireguard/wg0.conf on the wired SCADA PC.
+# Endpoint is the Raspberry Pi's operator-network address (the second
+# interface), not the PLC and not 192.168.10.10.
+# AllowedIPs is the door only. Do not add 192.168.10.0/24.
+
+[Interface]
+Address = 10.44.0.2/32
+PrivateKey = <wired SCADA private key>
+
+[Peer]
+PublicKey = <pi public key>
+Endpoint = <pi operator ip>:51820
+AllowedIPs = 10.44.0.1/32
+PersistentKeepalive = 25
+
+# Then, on this PC:
+#   PLC_HOST=10.44.0.1 PLC_PORT=5502 FUXA_COMMANDS=1 npm run fuxa
+#   npm run fuxa:project
+# Open http://127.0.0.1:1881/home

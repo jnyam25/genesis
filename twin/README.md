@@ -52,7 +52,7 @@ To run the twin together with the operator HMI, use `npm run dev` at the repo ro
 ## What it does
 
 - Preprinted **custom barcodes** encode the dispense instructions directly (ml per tank). See `src/barcode.ts`.
-- Containers are labelled and scanned, stop at **one bay per tank, in belt order**, then pass the robotic capping arm (it places a lid from the lid magazine and presses it down), the sort sensor (QC), the reject diverter and the sort diverter. Several containers flow at once (**pipelining**), held at stations by stoppers.
+- Cans arrive with a preprinted QR. They stop at the scan gate, then at **one bay per tank, in belt order**, then pass the robotic capping arm (it places a lid from the lid magazine), the lid press, the fill check, the fill reject and the sort diverter (Lane 1 or Lane 2). Several containers flow at once (**pipelining**), held at stations by stoppers.
 - **The PLC makes every decision.** In the virtual PLC, LABEL, SCAN, CAP and QC finish only when the (simulated or real) ESP32 node reports back through the register map. The PLC validates the raw barcode text the scanner node forwards, sequences the robotic arm, and classifies the bottle height the station node measures; a type that doesn't match the recipe is rejected (`BOTTLE_TYPE_MISMATCH`). A node that doesn't report within `stationNodeTimeoutSec` jams its container.
 - **Station faults** (labeler, scanner, arm servo, no lid, lid lost, sort sensor, node offline) latch in the PLC: the line stops, START is refused, and RESET clears the fault once the cause is gone.
 - Tanks come from **two fixed slots** (`TANK_SLOTS`, `T1` and `T2`). Removing a tank is a config edit or a runtime command, not a code change.
@@ -73,7 +73,7 @@ See `docs/engine-design.md` for the full shape. The live snapshot is:
 
 ```json
 {
-  "tanks": [{ "id": "T1", "name": "Titanium White", "colorCode": "#F4F1EA", "levelMl": 4889.6, "capacityMl": 5000 }],
+  "tanks": [{ "id": "T1", "name": "Sky Blue", "colorCode": "#7EC8E3", "levelMl": 4889.6, "capacityMl": 5000 }],
   "containers": [{ "id": 1, "status": "ACCEPTED", "fillMl": 247.1, "targetMl": 250 }],
   "counts": { "accepted": 3, "rejected": 1, "total": 4 },
   "throughputCpm": 2.35,

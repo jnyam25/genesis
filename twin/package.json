@@ -14,7 +14,10 @@
     "virtual-plc": "tsc -p tsconfig.json && node dist/plc/virtual-plc.js",
     "tag-map": "tsc -p tsconfig.json && node dist/plc/print-tag-map.js",
     "fuxa-project": "tsc -p tsconfig.json && node dist/plc/fuxa-project.js",
-    "start:virtual-plc": "node dist/plc/virtual-plc.js"
+    "scada-gateway": "tsc -p tsconfig.json && node dist/plc/scada-gateway.js",
+    "plc-link": "tsc -p tsconfig.json && node dist/plc/plc-link.js",
+    "start:virtual-plc": "node dist/plc/virtual-plc.js",
+    "start:plc-link": "node dist/plc/plc-link.js"
   },
   "engines": {
     "node": ">=20.9.0"

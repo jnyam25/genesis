@@ -47,13 +47,13 @@ export function clockTime(at: number): string {
 
 /** OEE band color helper. */
 export function oeeColor(n: number): string {
-  if (n >= 0.85) return "text-emerald-400";
-  if (n >= 0.6) return "text-amber-400";
-  return "text-rose-400";
+  if (n >= 0.85) return "text-emerald-800";
+  if (n >= 0.6) return "text-amber-800";
+  return "text-rose-800";
 }
 
 export function oeeBg(n: number): string {
-  if (n >= 0.85) return "bg-emerald-500";
-  if (n >= 0.6) return "bg-amber-500";
-  return "bg-rose-500";
+  if (n >= 0.85) return "bg-emerald-700";
+  if (n >= 0.6) return "bg-amber-700";
+  return "bg-rose-700";
 }

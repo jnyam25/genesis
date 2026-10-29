@@ -17,7 +17,7 @@ There are two kinds of emergency stop, and **both shut the machine down**:
 
 | | Where | What happens |
 | --- | --- | --- |
-| **Physical E-Stop** | Red mushroom buttons on the machine: the local control panel, the **line entry** (labeling, where bottles are loaded) and the **line exit** (sort diverter and output lanes) | Power to all motion is cut in hardware immediately, including the robotic capping arm and the label applicator. The control system goes into E-Stop and the HMI shows **which button** was pressed |
+| **Physical E-Stop** | Red mushroom buttons on the machine: **Line start** (infeed, where cans are loaded) and **Line end** (sort diverter and output lanes) | Power to all motion is cut in hardware immediately, including the robotic capping arm and the lid press. The control system goes into E-Stop and the HMI shows **which button** was pressed |
 | **Digital E-Stop** | Red **E-STOP** button at the top of every HMI screen, and on the Controls screen | The PLC opens the same safety circuit, so the machine loses power to all motion. Works in any mode |
 
 > If someone is in danger, use the **nearest** E-Stop. On the machine that's a physical button; away from the machine, the HMI E-STOP. Don't press anything else first.
@@ -41,11 +41,11 @@ Releasing a button or resetting **never** restarts the line on its own.
 
 ## Station faults
 
-The PLC watches the stations the two ESP32 nodes run (label applicator, barcode scanner, robotic capping arm, sort sensor). When one fails, or a node stops answering, the PLC **stops the line and latches a station fault**. An **orange banner** then appears on every HMI screen: "Station fault — the PLC stopped the line", followed by the cause from the latest `FAULT` event (for example "robotic arm could not pick a lid — check the lid magazine at CAP"). A station fault is not an emergency stop: the safety circuit stays closed, but nothing moves and **START is refused** ("start refused: a station fault is latched — fix it, then press RESET").
+The PLC watches the stations the two ESP32 nodes run (barcode scanner, robotic capping arm, sort sensor). This conveyor has no label applicator. When one fails, or a node stops answering, the PLC **stops the line and latches a station fault**. An **orange banner** then appears on every HMI screen: "Station fault — the PLC stopped the line", followed by the cause from the latest `FAULT` event (for example "robotic arm could not pick a lid — check the lid magazine at CAP"). A station fault is not an emergency stop: the safety circuit stays closed, but nothing moves and **START is refused** ("start refused: a station fault is latched — fix it, then press RESET").
 
 | Cause shown in the banner | What to do |
 | --- | --- |
-| label applicator fault | Check the label applicator for a jam or an empty label roll. If the DM556Y Open Loop Stepper is showing a fault, reset the safety circuit so its supply is back, then check for a stalled motor |
+| label applicator fault | This conveyor has no applicator, so this fault means a labeler was enabled in the program. If one is fitted: check it for a jam or an empty roll, and check the DM556Y Open Loop Stepper after the safety circuit is reset |
 | barcode scanner not answering | Check the scanner module and its cable to the scanner node |
 | robotic arm servo fault | Check the arm for an obstruction or a loose servo cable, then let it re-home |
 | robotic arm could not pick a lid — check the lid magazine | Refill the lid magazine or straighten the lid stack (see below) |
@@ -63,7 +63,7 @@ The event log records the fault (`FAULT: …`) and the reset (`1 station fault(s
 
 ## Refilling the lid magazine
 
-The robotic arm lifts each lid from the **lid magazine**, places it on the bottle at the capping station and presses it down. Keep the magazine stocked. When it runs empty, the arm fails to pick a lid three times in a row and the PLC latches the fault "robotic arm could not pick a lid — check the lid magazine". To refill, press **STOP** (or wait for the fault), load lids into the magazine the right way up and square in the stack, then press **START**. If the fault had latched, press **RESET** before START.
+The robotic arm lifts each lid from the **lid magazine** and places it on the can. The lid-press cylinder seats it. Keep the magazine stocked. When it runs empty, the arm fails to pick a lid three times in a row and the PLC latches the fault "robotic arm could not pick a lid — check the lid magazine". To refill, press **STOP** (or wait for the fault), load lids into the magazine the right way up and square in the stack, then press **START**. If the fault had latched, press **RESET** before START.
 
 ## Local control panel (on the machine)
 
@@ -71,7 +71,7 @@ The panel combines a small **touch screen** wired to the PLC with a few **hardwi
 
 | Control | Where | Function |
 | --- | --- | --- |
-| **E-Stop** (red mushroom) | Hardwired | Physical emergency stop. There are two more at the line entry and the line exit |
+| **E-Stop** (red mushroom) | At the line start and the line end, not on this panel | Physical emergency stop. The HMI names the button "Line start" or "Line end" |
 | **LOCAL / REMOTE** key | Hardwired | Who's in control. Turning it **stops the line** |
 | **STOP** (red) | Hardwired | Controlled stop. Works in **any** mode |
 | **RESET** (blue, lights up) | Hardwired | Safety reset after an E-Stop; flashes when a reset is needed. Works in any mode |
@@ -108,7 +108,7 @@ For maintenance, switch to **LOCAL and remove the key** so nobody can start the 
 - **OEE cards.** Availability, Performance, Quality, and OEE = A × P × Q.
   - Colours: green ≥ 85%, amber ≥ 60%, red below.
   - Availability shows **0% while the line isn't running**.
-- **Counts.** Accepted, Rejected (includes bad barcodes and jams), Total, **Throughput** (accepted containers per minute over the last minute), and the accepted count for **Lane A** (small bottles) and **Lane B** (large bottles).
+- **Counts.** Accepted, Rejected (includes bad barcodes and jams), Total, **Throughput** (accepted containers per minute over the last minute), and the accepted count for **Lane 1** (at most 250 ml) and **Lane 2** (larger).
 - **Tabs:**
   - **Dashboard.** Line schematic, event log, tank levels.
   - **Schematic.** Full-width line diagram. Stations light up while a container is at them. Container colour: grey = empty; tank colour = filling; mixed colour once filled; dark red = rejected; orange = bad barcode. The sort diverter shows which lane the current bottle goes to.
@@ -119,12 +119,15 @@ For maintenance, switch to **LOCAL and remove the key** so nobody can start the 
 ### Container path
 
 ```
-Labeling ─▶ Scan ─▶ Bay 1 ─▶ Bay 2 ─▶ Bay 3 ─▶ Capping arm ─▶ Sort sensor ─▶ Reject diverter ─▶ Sort diverter ─▶ Lane A (small)
-                                                                              │                 └──▶ Lane B (large)
-                                                                              └──▶ Reject lane
+Scan gate ─▶ QR reject (bad or missing QR only)
+    │
+    ▼
+Fill bay 1 (Sky Blue) ─▶ Fill bay 2 (Amber) ─▶ Capping arm ─▶ Lid press ─▶ Fill check ─▶ Fill reject ─▶ Sort ─▶ Lane 1
+                                                                                        │                    └──▶ Lane 2
+                                                                                        └──▶ Fill reject slide
 ```
 
-The reject diverter rejects bottles that are out of fill tolerance, the wrong bottle type (the sort sensor measured a height that doesn't match the bottle the recipe calls for), manually rejected, failed at a station, or had an unreadable/invalid barcode. There's no separate scan-reject lane: a bottle with a bad barcode, or one the scanner couldn't read at all, isn't filled or capped, and rides through to the reject diverter.
+A bad or unreadable QR is ejected at the scan gate, before either valve opens. The fill reject takes cans that are out of fill tolerance, the wrong bottle type (the sort sensor measured a height that doesn't match the lane the recipe calls for), manually rejected, or failed at a later station.
 
 ## Controls screen
 
@@ -151,7 +154,7 @@ On a **simulated** line (training, testing), an extra dashed card, **"Local cont
 | Safety reset required | E-Stops released, not yet reset | RESET at the local control panel |
 | LOCAL control | Key switch on LOCAL | Information: HMI is view-only |
 | Twin feed stale | No data for 3 s | Check the line computer / network ([prototype/troubleshooting.md](prototype/troubleshooting.md)). The machine's own controls still work |
-| Tank *X* low / CRITICAL | Below 30% / 15% | Refill the tank by hand and press "Tank refilled" on the touch screen (the simulated line refills by itself) |
+| Tank *X* low | Under 800 ml (the PLC low flag) | Refill the tank by hand and press "Tank refilled" on the touch screen (the simulated line refills by itself) |
 
 Station faults show in the orange banner and in the alarm history rather than in this table ([Station faults](#station-faults)).
 
@@ -161,7 +164,7 @@ Station faults show in the orange banner and in the alarm history rather than in
 
 | Event | Meaning |
 | --- | --- |
-| `PHYSICAL E-STOP pressed at Line exit …` / `… released — safety reset required` | Physical E-Stop activity |
+| `PHYSICAL E-STOP pressed at Line end …` / `… released — safety reset required` | Physical E-Stop activity |
 | `DIGITAL E-STOP activated from the HMI …` / `Digital E-Stop released …` | Digital E-Stop activity |
 | `Safety circuit reset (local) — press START to run` | Reset done at the panel |
 | `Line started (remote)` / `Line stopped (local)` / `Line stopped by emergency stop` | Run state changes and who caused them |
@@ -169,14 +172,16 @@ Station faults show in the orange banner and in the alarm history rather than in
 | `start refused: …` | A command wasn't allowed, and why |
 | `C-0012 barcode read — 250 ml recipe` | The PLC read and validated the label at the scanner |
 | `C-0012 barcode rejected: TANK_COUNT_MISMATCH` | The barcode lists a different number of tanks than the line has |
-| `C-0012 barcode rejected: NO_READ` | The scanner couldn't read a label (missing, damaged or badly placed). The bottle rides through to the reject diverter |
+| `C-0012 barcode rejected: NO_READ` | The scanner couldn't read the QR (missing, damaged or badly placed). The can is ejected at the scan gate |
 | `C-0012 REJECTED — fill out of tolerance` | Dispensed volume outside tolerance: check the valve calibration, a low tank (gravity feed slows), drips |
 | `C-0012 REJECTED — bottle type does not match the recipe (sort sensor)` | The bottle's measured height doesn't match the lane its recipe calls for: the wrong bottle was loaded for that label |
 | `FAULT: robotic arm dropped the lid at CAP — line stopped` | A station fault stopped the line ([Station faults](#station-faults)) |
 | `1 station fault(s) cleared by RESET` | RESET cleared the fault; press START |
-| `C-0012 ACCEPTED (fill 251.2 ml)` | Accepted and sorted to its lane (the simulated line adds "→ Lane A/B" to the message; the lane counts on the dashboard work in both) |
+| `C-0012 ACCEPTED (fill 251.2 ml) → Lane 1` | Accepted and sorted. The simulated line names Lane 1 or Lane 2; the lane counts on the dashboard use the same names |
 | `C-0012 JAMMED at BAY-2` | A container didn't arrive at or leave a station in time. At a station an ESP32 node runs (LABEL, SCAN, CAP, QC), it means the node didn't report back in time |
 
 ## SCADA view (FUXA, optional)
 
-Besides the HMI, the line computer can run the **FUXA** SCADA, which reads the PLC directly for history, trends and alarms. It's optional: nothing on the line depends on it. Start it with `npm run fuxa` at the repo root, then open http://127.0.0.1:1881/home for the operator view ("Line overview": line state, production counts, the stations and the tanks). The editor is at `/editor`. By default the SCADA is view-only; operate the line from the HMI or the local panel. Setup and alarms: [prototype/scada.md](prototype/scada.md).
+Besides the HMI, a computer can run the **FUXA** SCADA, which reads the PLC for history, trends and alarms. It's optional: nothing on the line depends on it. On the line computer, start it with `npm run fuxa` and open http://127.0.0.1:1881/home ("Line overview"). The editor is at `/editor`. By default the SCADA is view-only; operate the line from the HMI or the local panel.
+
+A wired SCADA PC, or a wireless one on the operator Wi-Fi or on a completely different network, runs the same FUXA. It does not connect to the PLC. It connects to the Raspberry Pi, which passes live values back and command-button presses forward. The key switch at the machine still decides whether a remote Start is accepted. Setup: [prototype/communication.md §5](prototype/communication.md#5-scada-off-the-control-network) and [prototype/scada.md](prototype/scada.md).

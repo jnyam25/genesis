@@ -207,7 +207,7 @@ const ml=v=>scaled(v,1);
 const cpm=v=>scaled(v,2);
 const ratio=v=>scaled(v,3);
 const SEV={info:'#58a6ff',success:'#3fb950',warn:'#d29922',error:'#f85149'};
-const STATUS={idle:'Idle',label:'Label',scan:'Scan','scan-rejected':'Scan rejected',mix:'Mix',cap:'Arm (lid)',qc:'QC',sort:'Sort',output:'Accepted',rejected:'Rejected'};
+const STATUS={idle:'Idle',label:'Label',scan:'Scan','scan-rejected':'QR reject',mix:'Mix',cap:'Arm (lid)',press:'Lid press',qc:'Fill check',sort:'Sort',output:'Accepted',rejected:'Fill reject'};
 const statusText=s=>STATUS[s]||s.replace(/^fill-([0-9]+)$/,'Fill bay $1');
 const hms=ms=>new Date(ms).toLocaleTimeString([],{hour12:false});
 function ago(ms){const s=Math.max(0,Math.round((Date.now()-ms)/1000));return s<60?s+' s ago':Math.floor(s/60)+' min '+(s%60)+' s ago';}

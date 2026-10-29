@@ -1,0 +1,19 @@
+# /etc/wireguard/wg0.conf on the wireless SCADA PC.
+# Use this when the laptop is not on the Pi's operator Wi-Fi.
+# When it is on that Wi-Fi, skip WireGuard and set FUXA's PLC_HOST to the
+# Pi's operator address (for example 192.168.20.20) port 5502.
+
+[Interface]
+Address = 10.44.0.3/32
+PrivateKey = <wireless SCADA private key>
+
+[Peer]
+PublicKey = <pi public key>
+Endpoint = <pi operator ip>:51820
+AllowedIPs = 10.44.0.1/32
+PersistentKeepalive = 25
+
+# Then, on this PC:
+#   PLC_HOST=10.44.0.1 PLC_PORT=5502 FUXA_COMMANDS=1 npm run fuxa
+#   npm run fuxa:project
+# Open http://127.0.0.1:1881/home

@@ -27,10 +27,11 @@ import { MAX_TANKS } from "../config";
 /**
  * v2: E-Stop / safety circuit / local-remote control bits, start/stop/reset coils, simulation block.
  * v3: bottling line from the BOM — sort lane counters, valve opening per tank, label/cap/press/sort
- *     container statuses, microcontroller station handshake block, E-Stops PANEL/ENTRY/EXIT.
+ *     container statuses, microcontroller station handshake block, physical E-Stop mask.
  * v4: PLC supervises every decision — raw-text scan mailbox (the PLC validates the barcode),
- *     robotic arm command interface (the arm lifts and places the lid; lid press removed), raw
+ *     robotic arm command interface (the arm lifts and places the lid; the press cylinder seats it), raw
  *     sort-sensor height (the PLC classifies the bottle), Sys.FaultCode and the FAULT bit.
+ *     Physical E-Stops are ENTRY (line start, bit0) and EXIT (line end, bit1).
  */
 export const PROTOCOL_VERSION = 4;
 
@@ -145,7 +146,7 @@ export function containerRegister(index: number, field: number): number {
   return CONTAINER_BASE + index * CONTAINER_SIZE + field;
 }
 
-/** CONTAINER_FIELD.STATUS values. FILL = 10 + bay number (11..18). */
+/** CONTAINER_FIELD.STATUS values. FILL = 10 + bay number (11..12 on this line). */
 export const CONTAINER_STATUS = {
   NONE: 0,
   SCAN: 1,
@@ -247,11 +248,11 @@ export function unpackScanText(regs: ArrayLike<number>, length: number): string 
 // ---------------------------------------------------------------------------
 
 export const FIELD = {
-  /** Measured level per tank slot, 0.1 ml (400..407). */
+  /** Measured level per tank slot, 0.1 ml. This line uses 400 and 401; heartbeats stay at 410–412. */
   TANK_LEVEL_BASE: 400,
   /** Heartbeat of the tank-level node (increments ≥ 1 Hz). */
   TANK_NODE_HEARTBEAT: 410,
-  /** Heartbeat of the scanner node (ESP32 #1: labeling station + barcode scanner). */
+  /** Heartbeat of the scanner node (ESP32 #1: barcode scanner; no labeler on this conveyor). */
   SCANNER_NODE_HEARTBEAT: 411,
   /** Heartbeat of the station node (ESP32 #2: robotic arm + sort sensor). */
   STATION_NODE_HEARTBEAT: 412,
@@ -414,8 +415,8 @@ export function registerTable(): RegisterDef[] {
     { address: SYS.UPTIME_S, name: "Sys.UptimeS", access: "R", unit: "s (wraps)", description: "Seconds since PLC run start." },
     { address: SYS.ACTIVE_CONTAINERS, name: "Sys.ActiveContainers", access: "R", unit: "count", description: "Containers currently on the belt." },
     { address: SYS.PHYSICAL_ESTOP_MASK, name: "Sys.PhysicalEStopMask", access: "R", unit: "bits", description: "bit i = physical E-Stop button i pressed, from the safety relay's monitoring contacts (bit0 line start, bit1 line end — config.safety.eStopButtons)." },
-    { address: SYS.COUNT_LANE_A, name: "Counts.LaneA", access: "R", unit: "count", description: "Accepted containers sorted to lane A (config.sort.lanes[0]) (wraps)." },
-    { address: SYS.COUNT_LANE_B, name: "Counts.LaneB", access: "R", unit: "count", description: "Accepted containers sorted to lane B (config.sort.lanes[1]) (wraps)." },
+    { address: SYS.COUNT_LANE_A, name: "Counts.LaneA", access: "R", unit: "count", description: "Accepted containers sorted to Lane 1 (config.sort.lanes[0], tag Counts.LaneA) (wraps)." },
+    { address: SYS.COUNT_LANE_B, name: "Counts.LaneB", access: "R", unit: "count", description: "Accepted containers sorted to Lane 2 (config.sort.lanes[1], tag Counts.LaneB) (wraps)." },
     { address: SYS.FAULT_CODE, name: "Sys.FaultCode", access: "R", unit: "code", description: "First latched station fault, 0 = none: 1 labeler, 2 scanner, 3 arm servo, 4 arm could not pick a lid, 5 arm dropped the lid, 6 sort sensor, 7 scanner node offline, 8 station node offline. Cleared by RESET once the cause is gone." },
   ];
 
@@ -435,7 +436,7 @@ export function registerTable(): RegisterDef[] {
 
   const containerFields: Array<[number, string, string, string]> = [
     [CONTAINER_FIELD.ID, "Id", "—", "Container id, 0 = empty slot."],
-    [CONTAINER_FIELD.STATUS, "Status", "code", "0 none, 1 scan, 2 scan-rejected, 3 label, 11..18 fill at bay n (10+n), 20 mix, 21 sort sensor / reject diverter, 22 accepted to lane A, 23 rejected, 24 capping arm, 26 sort diverter, 27 accepted to lane B (25 reserved)."],
+    [CONTAINER_FIELD.STATUS, "Status", "code", `0 none, 1 scan, 2 scan-rejected (QR reject at the scan gate), 3 label (only when a LABEL station is configured), 11..${10 + MAX_TANKS} fill at bay n (10+n), 20 mix, 21 fill check and fill reject, 22 accepted to Lane 1, 23 rejected at the fill reject, 24 capping arm, 25 lid press, 26 sort diverter, 27 accepted to Lane 2.`],
     [CONTAINER_FIELD.FILL_ML_X10, "FillMl", "ml × 10", "Dispensed so far."],
     [CONTAINER_FIELD.TARGET_ML_X10, "TargetMl", "ml × 10", "Recipe total."],
   ];
@@ -464,7 +465,7 @@ export function registerTable(): RegisterDef[] {
     rows.push({ address: SCAN.TEXT_BASE + i, name: `Scan.Text${i + 1}`, access: "RW", unit: "2 × ASCII", description: i === 0 ? "Raw barcode text exactly as read, 2 characters per register, first character in the high byte, unused bytes 0. The node does not interpret it." : "" });
   }
   rows.push(
-    { address: SCAN.PARSE_RESULT, name: "Scan.ParseResult", access: "R", unit: "code", description: "PLC's validation of the text: 0 OK, 1 BAD_HEADER, 2 BAD_TOTAL, 3 TANK_COUNT_MISMATCH, 4 NEGATIVE_VOLUME, 5 VOLUME_SUM_MISMATCH, 6 MALFORMED, 7 NO_READ. Non-zero → the container rides through unfilled and the reject diverter rejects it." },
+    { address: SCAN.PARSE_RESULT, name: "Scan.ParseResult", access: "R", unit: "code", description: "PLC's validation of the text: 0 OK, 1 BAD_HEADER, 2 BAD_TOTAL, 3 TANK_COUNT_MISMATCH, 4 NEGATIVE_VOLUME, 5 VOLUME_SUM_MISMATCH, 6 MALFORMED, 7 NO_READ. Non-zero → the PLC ejects the container at the scan gate (QR reject) before either valve opens." },
     { address: SCAN.RESULT_ID, name: "Scan.ResultId", access: "R", unit: "id", description: "Container id that Scan.ParseResult and Scan.TotalMl belong to." },
     { address: SCAN.TOTAL_ML, name: "Scan.TotalMl", access: "R", unit: "ml", description: "Recipe total the PLC decoded (0 when rejected)." },
   );
@@ -474,7 +475,7 @@ export function registerTable(): RegisterDef[] {
   }
   rows.push(
     { address: FIELD.TANK_NODE_HEARTBEAT, name: "Field.TankNodeHeartbeat", access: "RW", unit: "count", description: "ESP32 tank node increments ≥ 1 Hz." },
-    { address: FIELD.SCANNER_NODE_HEARTBEAT, name: "Field.ScannerNodeHeartbeat", access: "RW", unit: "count", description: "ESP32 scanner node (labeling + barcode scanner) increments ≥ 1 Hz." },
+    { address: FIELD.SCANNER_NODE_HEARTBEAT, name: "Field.ScannerNodeHeartbeat", access: "RW", unit: "count", description: "ESP32 scanner node (barcode scanner; no labeler on this conveyor) increments ≥ 1 Hz." },
     { address: FIELD.STATION_NODE_HEARTBEAT, name: "Field.StationNodeHeartbeat", access: "RW", unit: "count", description: "ESP32 station node (robotic arm + sort sensor) increments ≥ 1 Hz." },
     { address: STATION.RUN_PERMIT, name: "Station.RunPermit", access: "R", unit: "0/1", description: "1 = line running with the safety circuit closed. ESP32 nodes must stop their actuators when 0 or when Sys.PlcHeartbeat stops changing for 1 s. Not a safety function: actuator power still goes through the safety relay." },
     { address: STATION.LABEL_REQUEST, name: "Station.LabelRequest", access: "R", unit: "id", description: "Container id held at LABEL waiting for its label, 0 = none." },
