@@ -38,14 +38,14 @@ From the Micro800 selection guide (2080-SG001) and the Micro800 technical data (
 | PTO/PWM | 2 channels on the embedded outputs (the installation instructions name the outputs) |
 | High-speed counters | 4, on the embedded inputs |
 | Embedded analog | **None**: analog outputs come from plug-ins |
-| Plug-in slots | **5** (2080-… plug-ins, e.g. analog output 2080-OF2, IO 2080-IQ4OB4) |
-| Expansion | Up to 4 **2085-…** modules on the right side, finished with a 2085-ECR end cap |
+| Plug-in slots | **3**. Plug-in modules are **2080-series** only (2080-IF2, 2080-OF2, 2080-IQ4OB4). A 2085 module does not fit a plug-in slot |
+| Expansion | Up to 4 **2085-series** modules on the right side, finished with a 2085-ECR end cap |
 | Ports | USB (programming only); one 10/100 **Ethernet** port (EtherNet/IP, Modbus TCP client and server, CCW); one non-isolated **RS-232/RS-485 serial** port (Modbus RTU master or slave, CIP serial, ASCII) |
 | Power | 24 V DC from a 24 V supply (or the optional 2080-PS120-240VAC) |
 
 There's **no Wi-Fi**. The ESP32 nodes reach the PLC through an access point wired to the control switch ([communication.md §1](communication.md#1-network)).
 
-Before designing the panel, list any plug-in or expansion modules already fitted to the team's controller or in the lab's parts bin.
+The controller on the bench already has its plug-ins fitted, nearest the controller first: **2080-IF2**, **2080-OF2**, **2080-IF2**. No 2085 expansion module is identified on it.
 
 ### IO against the requirement
 

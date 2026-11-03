@@ -1,0 +1,493 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Genesis line wiring</title>
+<style>
+  :root {
+    --foreground: #141414;
+    --muted-foreground: #5c5c66;
+    --card: #ffffff;
+    --blue: #1d6fad;
+    --orange: #c05621;
+    --cyan: #0e7c86;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --foreground: #f2f2f2;
+      --muted-foreground: #a3a3ad;
+      --card: #1c1c1f;
+      --blue: #79b4e0;
+      --orange: #f0a060;
+      --cyan: #7dccc4;
+    }
+    body { background: #111113; }
+  }
+  body {
+    margin: 0 auto;
+    max-width: 960px;
+    padding: 32px 20px 64px;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    line-height: 1.4;
+    background: #fafafa;
+    color: var(--foreground);
+  }
+  h1 { font-size: 1.5rem; font-weight: 600; margin: 0 0 8px; }
+  .lede { margin: 0 0 28px; color: var(--muted-foreground); }
+  .vis-section-stack { display: flex; flex-direction: column; gap: 28px; }
+  .vis-column { display: flex; flex-direction: column; gap: 8px; }
+  .vis-chart-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; align-items: end; }
+  h3 { font-size: 1.05rem; font-weight: 600; margin: 0; }
+  .vis-chart-meta-copy span { display: block; color: var(--muted-foreground); font-size: 0.9rem; }
+  .vis-legend { display: flex; flex-wrap: wrap; gap: 12px; }
+  .vis-legend-item { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; }
+  .vis-swatch { width: 18px; height: 4px; display: inline-block; }
+  .vis-blue { background: var(--blue); }
+  .vis-orange { background: var(--orange); }
+  .vis-cyan { background: var(--cyan); }
+  .vis-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+  }
+  svg text { font-family: "Segoe UI", system-ui, sans-serif; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>Genesis line wiring</h1>
+<p class="lede">Two-tank conveyor on the 2080-L50E-24QBB. Point names match the PLC field I/O. X1 and X2 are specified and are not fitted on the bench controller. Confirm screw terminals on the 24-point installation sheet.</p><div id="genesis-wire" class="vis-section-stack">
+  <p class="vis-sr-only">Wiring diagram of the Genesis two-tank line: belt stations, the dual-channel E-stop, PLC outputs, and the control network.</p>
+
+  <div class="vis-column">
+    <div class="vis-chart-meta">
+      <div class="vis-chart-meta-copy">
+        <h3>Belt order</h3>
+        <span>Load end to the lanes</span>
+      </div>
+    </div>
+    <div data-diagram="belt"></div>
+  </div>
+
+  <div class="vis-column">
+    <div class="vis-chart-meta">
+      <div class="vis-chart-meta-copy">
+        <h3>E-stop chain</h3>
+        <span>Both channels into the relay</span>
+      </div>
+    </div>
+    <div data-diagram="safety"></div>
+  </div>
+
+  <div class="vis-column">
+    <div class="vis-chart-meta">
+      <div class="vis-chart-meta-copy">
+        <h3>Power rails</h3>
+        <span>Control rail and actuator rail</span>
+      </div>
+      <div class="vis-legend">
+        <span class="vis-legend-item"><span class="vis-swatch vis-blue"></span>Control 24 V</span>
+        <span class="vis-legend-item"><span class="vis-swatch vis-orange"></span>Actuator 24 V</span>
+      </div>
+    </div>
+    <div data-diagram="power"></div>
+  </div>
+
+  <div class="vis-column">
+    <div class="vis-chart-meta">
+      <div class="vis-chart-meta-copy">
+        <h3>PLC outputs</h3>
+        <span>Sourcing coils and valve angle</span>
+      </div>
+      <div class="vis-legend">
+        <span class="vis-legend-item"><span class="vis-swatch vis-blue"></span>Control 24 V</span>
+        <span class="vis-legend-item"><span class="vis-swatch vis-orange"></span>Actuator 24 V</span>
+        <span class="vis-legend-item"><span class="vis-swatch vis-cyan"></span>0–10 V signal</span>
+      </div>
+    </div>
+    <div data-diagram="outputs"></div>
+  </div>
+
+  <div class="vis-column">
+    <div class="vis-chart-meta">
+      <div class="vis-chart-meta-copy">
+        <h3>Station nodes</h3>
+        <span>Logic supply and control LAN</span>
+      </div>
+    </div>
+    <div data-diagram="nodes"></div>
+  </div>
+</div>
+<script>
+(function () {
+  var root = document.getElementById("genesis-wire");
+  var NS = "http://www.w3.org/2000/svg";
+  var NODE_H = 56;
+  var PAD = 4;
+
+  function el(name, attrs) {
+    var node = document.createElementNS(NS, name);
+    Object.keys(attrs).forEach(function (key) {
+      node.setAttribute(key, attrs[key]);
+    });
+    return node;
+  }
+
+  function text(x, y, value, muted) {
+    var node = el("text", { x: x, y: y, class: "vis-chart-text" });
+    if (muted) node.setAttribute("fill", "var(--muted-foreground)");
+    node.textContent = value;
+    return node;
+  }
+
+  function box(g, x, y, w, item) {
+    g.appendChild(el("rect", {
+      x: x,
+      y: y,
+      width: w,
+      height: NODE_H,
+      rx: 4,
+      fill: "var(--card)",
+      stroke: "var(--foreground)",
+      "stroke-width": 1.5,
+      "vector-effect": "non-scaling-stroke"
+    }));
+    if (item.tone) {
+      g.appendChild(el("rect", {
+        x: x,
+        y: y,
+        width: 4,
+        height: NODE_H,
+        fill: "var(--" + item.tone + ")"
+      }));
+    }
+    g.appendChild(text(x + (item.tone ? 14 : 10), y + 22, item.title, false));
+    g.appendChild(text(x + (item.tone ? 14 : 10), y + 40, item.sub, true));
+  }
+
+  function wire(g, d, tone) {
+    g.appendChild(el("path", {
+      d: d,
+      fill: "none",
+      stroke: tone ? "var(--" + tone + ")" : "var(--foreground)",
+      "stroke-width": 1.5,
+      "vector-effect": "non-scaling-stroke"
+    }));
+  }
+
+  function arrow(g, x, y, dir, tone) {
+    var d;
+    if (dir === "right") d = "M " + (x - 7) + " " + (y - 4) + " L " + x + " " + y + " L " + (x - 7) + " " + (y + 4);
+    else if (dir === "left") d = "M " + (x + 7) + " " + (y - 4) + " L " + x + " " + y + " L " + (x + 7) + " " + (y + 4);
+    else if (dir === "up") d = "M " + (x - 4) + " " + (y + 7) + " L " + x + " " + y + " L " + (x + 4) + " " + (y + 7);
+    else d = "M " + (x - 4) + " " + (y - 7) + " L " + x + " " + y + " L " + (x + 4) + " " + (y - 7);
+    g.appendChild(el("path", {
+      d: d,
+      fill: "none",
+      stroke: tone ? "var(--" + tone + ")" : "var(--foreground)",
+      "stroke-width": 1.5,
+      "vector-effect": "non-scaling-stroke"
+    }));
+  }
+
+  function columnsFor(width) {
+    if (width < 420) return 1;
+    if (width < 640) return 2;
+    return 4;
+  }
+
+  function place(width, count) {
+    var cols = Math.min(columnsFor(width), count);
+    var gapX = 32;
+    var nodeW = Math.floor((width - PAD * 2 - gapX * (cols - 1)) / cols);
+    var slots = [];
+    for (var i = 0; i < count; i++) {
+      var col = i % cols;
+      var row = Math.floor(i / cols);
+      slots.push({
+        x: PAD + col * (nodeW + gapX),
+        row: row,
+        col: col
+      });
+    }
+    return { cols: cols, nodeW: nodeW, slots: slots };
+  }
+
+  function chain(g, y, width, items) {
+    var laid = place(width, items.length);
+    var rowGap = 36;
+    var positions = laid.slots.map(function (slot) {
+      return {
+        x: slot.x,
+        y: y + slot.row * (NODE_H + rowGap),
+        row: slot.row
+      };
+    });
+    for (var i = 0; i < items.length - 1; i++) {
+      var a = positions[i];
+      var b = positions[i + 1];
+      var tone = items[i + 1].wire || null;
+      if (a.row === b.row) {
+        var yMid = a.y + NODE_H / 2;
+        wire(g, "M " + (a.x + laid.nodeW) + " " + yMid + " H " + (b.x - 8), tone);
+        arrow(g, b.x, yMid, "right", tone);
+      } else if (laid.cols === 1) {
+        wire(g, "M " + (a.x + laid.nodeW / 2) + " " + (a.y + NODE_H) + " V " + (b.y - 8), tone);
+        arrow(g, b.x + laid.nodeW / 2, b.y, "down", tone);
+      } else {
+        var gutter = width - 2;
+        var above = b.y - 14;
+        wire(g, "M " + (a.x + laid.nodeW) + " " + (a.y + NODE_H / 2) + " H " + gutter + " V " + above + " H " + (b.x + laid.nodeW / 2) + " V " + (b.y - 8), tone);
+        arrow(g, b.x + laid.nodeW / 2, b.y, "down", tone);
+      }
+    }
+    items.forEach(function (item, index) {
+      box(g, positions[index].x, positions[index].y, laid.nodeW, item);
+    });
+    var rows = Math.ceil(items.length / laid.cols);
+    return y + rows * NODE_H + (rows - 1) * rowGap;
+  }
+
+  function linkRow(g, y, width, items, links) {
+    var laid = place(width, items.length);
+    var rowGap = 36;
+    var positions = laid.slots.map(function (slot) {
+      return { x: slot.x, y: y + slot.row * (NODE_H + rowGap), row: slot.row };
+    });
+    links.forEach(function (link) {
+      var a = positions[link[0]];
+      var b = positions[link[1]];
+      var tone = link[2];
+      var ay = a.y + NODE_H / 2;
+      var by = b.y + NODE_H / 2;
+      if (a.row === b.row && b.x > a.x) {
+        wire(g, "M " + (a.x + laid.nodeW) + " " + ay + " H " + (b.x - 8), tone);
+        arrow(g, b.x, by, "right", tone);
+      } else if (a.row === b.row) {
+        wire(g, "M " + a.x + " " + (ay + 8) + " H " + (b.x + laid.nodeW + 8), tone);
+        arrow(g, b.x + laid.nodeW, by + 8, "left", tone);
+      } else if (b.row > a.row && laid.cols === 1) {
+        wire(g, "M " + (a.x + laid.nodeW / 2) + " " + (a.y + NODE_H) + " V " + (b.y - 8), tone);
+        arrow(g, b.x + laid.nodeW / 2, b.y, "down", tone);
+      } else if (b.row < a.row && laid.cols === 1) {
+        wire(g, "M " + (a.x + laid.nodeW / 2) + " " + a.y + " V " + (b.y + NODE_H + 8), tone);
+        arrow(g, b.x + laid.nodeW / 2, b.y + NODE_H, "up", tone);
+      } else if (b.row > a.row) {
+        var gutter = width - 2;
+        var above = b.y - 14;
+        wire(g, "M " + (a.x + laid.nodeW) + " " + ay + " H " + gutter + " V " + above + " H " + (b.x + laid.nodeW / 2) + " V " + (b.y - 8), tone);
+        arrow(g, b.x + laid.nodeW / 2, b.y, "down", tone);
+      }
+    });
+    items.forEach(function (item, index) {
+      box(g, positions[index].x, positions[index].y, laid.nodeW, item);
+    });
+  }
+
+  function mount(host, height, draw) {
+    host.textContent = "";
+    var svg = el("svg", {
+      viewBox: "0 0 " + host.clientWidth + " " + height,
+      role: "img",
+      "aria-label": host.getAttribute("data-label")
+    });
+    svg.style.width = "100%";
+    svg.style.height = "auto";
+    svg.style.display = "block";
+    var g = el("g", {});
+    draw(g, host.clientWidth);
+    svg.appendChild(g);
+    host.appendChild(svg);
+  }
+
+  function drawBelt(g, width) {
+    chain(g, 4, width, [
+      { title: "Line start", sub: "DI 1 NC" },
+      { title: "SCAN", sub: "DI 7 · DO 4" },
+      { title: "BAY 1", sub: "DI 8 · DO 2" },
+      { title: "BAY 2", sub: "DI 9 · DO 3" },
+      { title: "CAP", sub: "DI 10 · arm 5 V" },
+      { title: "PRESS", sub: "DI 11 · DO 5" },
+      { title: "QC", sub: "DI 12 · I2C" },
+      { title: "GATE", sub: "DI 13 · DO 6" },
+      { title: "SORT", sub: "X1 DI 0 · DO 7" },
+      { title: "Lanes", sub: "X1 DI 1–3" }
+    ]);
+  }
+
+  function beltHeight(width) {
+    var cols = Math.min(columnsFor(width), 10);
+    var rows = Math.ceil(10 / cols);
+    return 8 + rows * NODE_H + (rows - 1) * 36;
+  }
+
+  function drawSafety(g, width) {
+    var y = 4;
+    g.appendChild(text(PAD, y + 14, "Channel 1", true));
+    y = chain(g, y + 20, width, [
+      { title: "E-stop start", sub: "NC contact" },
+      { title: "E-stop end", sub: "NC contact" },
+      { title: "K_REMOTE", sub: "NO channel 1" },
+      { title: "Safety relay", sub: "Input S12" }
+    ]) + 28;
+    g.appendChild(text(PAD, y + 14, "Channel 2", true));
+    y = chain(g, y + 20, width, [
+      { title: "E-stop start", sub: "NC contact" },
+      { title: "E-stop end", sub: "NC contact" },
+      { title: "K_REMOTE", sub: "NO channel 2" },
+      { title: "Safety relay", sub: "Input S22" }
+    ]) + 28;
+    g.appendChild(text(PAD, y + 14, "Monitors", true));
+    chain(g, y + 20, width, [
+      { title: "RESET", sub: "DI 6 · S33" },
+      { title: "K_REMOTE NC", sub: "DI 3 coil off" },
+      { title: "Relay aux", sub: "DI 0 closed" },
+      { title: "DO 0", sub: "K_REMOTE coil", tone: "blue", wire: "blue" }
+    ]);
+  }
+
+  function safetyHeight(width) {
+    function block(count) {
+      var cols = Math.min(columnsFor(width), count);
+      var rows = Math.ceil(count / cols);
+      return 20 + rows * NODE_H + (rows - 1) * 36;
+    }
+    return 8 + block(4) + 28 + block(4) + 28 + block(4);
+  }
+
+  function drawPower(g, width) {
+    chain(g, 4, width, [
+      { title: "Mains", sub: "Isolator and RCD" },
+      { title: "+24 V control", sub: "PLC, sensors, DO 0", tone: "blue", wire: "blue" },
+      { title: "+24 V actuator", sub: "SR 13/14 then 23/24", tone: "orange", wire: "orange" }
+    ]);
+  }
+
+  function powerHeight(width) {
+    var cols = Math.min(columnsFor(width), 3);
+    var rows = Math.ceil(3 / cols);
+    return 8 + rows * NODE_H + (rows - 1) * 36;
+  }
+
+  function drawOutputs(g, width) {
+    var y = chain(g, 4, width, [
+      { title: "Output +V", sub: "Unswitched 24 V", tone: "blue", wire: "blue" },
+      { title: "PLC output", sub: "Sources +24 V", tone: "blue", wire: "blue" },
+      { title: "Coil or lamp", sub: "Solenoid or tower", tone: "orange", wire: "orange" },
+      { title: "Return", sub: "Actuator via SR NO" }
+    ]);
+    y += 28;
+    g.appendChild(text(PAD, y + 14, "Each tank", true));
+    linkRow(g, y + 20, width, [
+      { title: "Tank outlet", sub: "Gravity feed" },
+      { title: "NC shutoff", sub: "DO 2 or DO 3", tone: "orange" },
+      { title: "Servo valve", sub: "Holds last angle", tone: "orange" },
+      { title: "2080-OF2", sub: "Ch 0 and ch 1", tone: "cyan" }
+    ], [[0, 1, "orange"], [1, 2, "orange"], [3, 2, "cyan"]]);
+  }
+
+  function outputsHeight(width) {
+    function block(count) {
+      var cols = Math.min(columnsFor(width), count);
+      var rows = Math.ceil(count / cols);
+      return rows * NODE_H + (rows - 1) * 36;
+    }
+    return 12 + block(4) + 28 + 20 + block(4);
+  }
+
+  function drawNodes(g, width) {
+    var cols = width < 520 ? 1 : 3;
+    var gapX = 36;
+    var nodeW = Math.floor((width - PAD * 2 - gapX * (cols - 1)) / cols);
+    var y0 = 4;
+    var y1 = y0 + NODE_H + 40;
+    var xs = [];
+    for (var c = 0; c < cols; c++) xs.push(PAD + c * (nodeW + gapX));
+
+    var top = [
+      { title: "PC .20", sub: "Modbus client" },
+      { title: "Switch", sub: "192.168.10.0/24" },
+      { title: "PLC .10", sub: "Port 502" }
+    ];
+    var bottom = [
+      { title: "ESP #1 .31", sub: "UART GPIO 16" },
+      { title: "AP .2", sub: "To the switch" },
+      { title: "ESP #2 .33", sub: "SDA 21 · SCL 22" }
+    ];
+
+    if (cols === 1) {
+      var yStack = 4;
+      g.appendChild(text(PAD, yStack + 14, "Ethernet", true));
+      yStack = chain(g, yStack + 20, width, top) + 28;
+      g.appendChild(text(PAD, yStack + 14, "Wi-Fi", true));
+      chain(g, yStack + 20, width, bottom);
+      return;
+    }
+
+    function link(x1, x2, y, tone) {
+      wire(g, "M " + x1 + " " + y + " H " + (x2 - 8), tone);
+      arrow(g, x2, y, "right", tone);
+    }
+
+    link(xs[0] + nodeW, xs[1], y0 + NODE_H / 2, null);
+    link(xs[1] + nodeW, xs[2], y0 + NODE_H / 2, null);
+    link(xs[0] + nodeW, xs[1], y1 + NODE_H / 2, null);
+    var apRight = xs[1] + nodeW;
+    var espLeft = xs[2];
+    var yWifi = y1 + NODE_H / 2 + 8;
+    wire(g, "M " + espLeft + " " + yWifi + " H " + (apRight + 8), null);
+    arrow(g, apRight, yWifi, "left", null);
+
+    var apCx = xs[1] + nodeW / 2;
+    wire(g, "M " + apCx + " " + y1 + " V " + (y0 + NODE_H + 8), null);
+    arrow(g, apCx, y0 + NODE_H, "up", null);
+
+    top.forEach(function (item, i) { box(g, xs[i], y0, nodeW, item); });
+    bottom.forEach(function (item, i) { box(g, xs[i], y1, nodeW, item); });
+  }
+
+  function nodesHeight(width) {
+    if (width < 520) return 4 + 20 + 3 * NODE_H + 2 * 36 + 28 + 20 + 3 * NODE_H + 2 * 36 + 8;
+    return 4 + NODE_H + 40 + NODE_H + 4;
+  }
+
+  var kinds = {
+    belt: { draw: drawBelt, height: beltHeight, label: "Belt stations from the load end to the output lanes" },
+    safety: { draw: drawSafety, height: safetyHeight, label: "Dual-channel E-stop wiring into the safety relay" },
+    power: { draw: drawPower, height: powerHeight, label: "Mains, unswitched 24 V control, and the actuator rail" },
+    outputs: { draw: drawOutputs, height: outputsHeight, label: "Sourcing PLC output and the tank valve analog" },
+    nodes: { draw: drawNodes, height: nodesHeight, label: "ESP32 nodes, access point, switch, and Micro850" }
+  };
+
+  function paint(host) {
+    var spec = kinds[host.getAttribute("data-diagram")];
+    var width = host.clientWidth;
+    if (!spec || width < 40) return;
+    host.setAttribute("data-label", spec.label);
+    mount(host, spec.height(width), function (g) {
+      spec.draw(g, width);
+    });
+  }
+
+  function paintAll() {
+    root.querySelectorAll("[data-diagram]").forEach(paint);
+  }
+
+  paintAll();
+  if (typeof ResizeObserver === "function") {
+    var observer = new ResizeObserver(paintAll);
+    root.querySelectorAll("[data-diagram]").forEach(function (host) {
+      observer.observe(host);
+    });
+  }
+})();
+</script>
+
+</body>
+</html>

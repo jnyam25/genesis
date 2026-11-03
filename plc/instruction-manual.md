@@ -20,7 +20,7 @@ Read [docs/prototype/safety.md](../docs/prototype/safety.md) before downloading 
 | Item | Requirement |
 | --- | --- |
 | CCW Standard | **20.01 or later.** An L50E will not take an older project. Free from Rockwell's Product Compatibility and Download Center; a free Rockwell account, no activation. Do not buy CCW Developer Edition. |
-| Controller | 2080-L50E-24QBB, already owned: 14 DC inputs, 10 sourcing DC outputs. In CCW, keep that catalog and set the major revision to the firmware CCW shows when you connect. Update firmware from CCW only when the project needs a newer revision. |
+| Controller | 2080-L50E-24QBB, already owned: 14 DC inputs, 10 sourcing DC outputs, **3 plug-in slots** (2080-series only), 4 expansion slots (2085-series only). Fitted plug-ins, nearest the controller first: **2080-IF2**, **2080-OF2**, **2080-IF2**. In CCW, keep that catalog and set the major revision to the firmware CCW shows when you connect. Update firmware from CCW only when the project needs a newer revision. |
 | This repo | The specification, the register map, and this folder. |
 | Engineering PC | Static address `192.168.10.50` on the control network ([communication.md](../docs/prototype/communication.md)). USB is enough for the first download. |
 
@@ -43,20 +43,31 @@ plc/
 3. Open `plc/genesis.ccwsln`. The `Controller` folder has to sit next to that file. CCW refuses a solution file that was copied without it.
 4. The project opens as catalog **2080-L50E-24QBB**, firmware **22.100**. Leave that catalog. If the connected controller reports a different firmware revision, set the project revision to match before you download.
 5. Open `Prog1`. It is the Genesis ladder: S00 inputs, S01 safety and run, S02 commands and jog, S06 field outputs. Leave those rungs. Station machines, the barcode parser, the arm sequencer, and publish are still the programs in §6. If the editor shows three rungs (AND, OR, XOR on `_IO_EM_DI_00` and `_IO_EM_DI_01`), the project database still has the lab copy. Close without saving, so that save does not write the lab rungs back over `Prog1.stf`.
-6. On the controller graphic, add a **2085-IQ16** as expansion module 1 and a **2085-OB16** as expansion module 2 before you build. One 2085 module is inputs or outputs, so both are required. The ladder addresses the first as `_IO_X1_` and the second as `_IO_X2_`. After CCW creates them, confirm those names. If the prefix is different, change the contacts to match. The two valve angles need one **2080-OF2** in a plug-in slot. That analog is not in this ladder. Belt speed stays one of the two PWM outputs or the drive's own knob unless you add a second analog channel.
+6. Plug-in slots on this controller take **2080-series** modules only. Expansion slots take **2085-series** modules only. This 24-point controller has three plug-in slots and four expansion slots.
+
+   The controller graphic already has the three fitted plug-ins, nearest the controller first: slot 1 **2080-IF2**, slot 2 **2080-OF2**, slot 3 **2080-IF2**. Leave that order. `Prog1` writes 0 to both OF2 channels every scan. Neither IF2 is read.
+
+   Extra digital points use expansion modules. Add a **2085-IQ16** as expansion module 1 and a **2085-OB16** as expansion module 2 when those modules are on the controller. One 2085 module is inputs or outputs, so both are required. The ladder addresses the first as `_IO_X1_` and the second as `_IO_X2_`. After CCW creates them, confirm those names. If the prefix is different, change the contacts to match. Those two catalogs are not readable on the controller in front of you, so leave the expansion slots empty until they are. Belt speed stays one of the two PWM outputs or the drive's own knob unless you add a second analog channel.
 
 To move the project to another PC, copy `genesis.ccwsln` and the whole `Controller` folder, or use **File → Export** to produce a `.ccwarc` and **File → Import Project** on the other machine.
 
 ## 4. Controller settings
 
-In the Project Organizer, open the controller:
+In the Project Organizer, open the controller. These pages match the open project. Change only the rows marked **Set before download**.
 
-| Setting | Value |
-| --- | --- |
-| Ethernet → Internet Protocol | Static `192.168.10.10`, mask `255.255.255.0`. Change the mask only if the control network is not a /24. |
-| Ethernet → Modbus TCP | **Enabled.** Port 502. |
-| Controller password | Set one, so a download or upload needs it. |
-| Serial port | Leave unused unless a Modbus RTU panel is fitted. If it is, set **Modbus RTU slave** and match baud, parity, and node address to the panel. |
+| Page | As opened | What to do |
+| --- | --- | --- |
+| Serial Port | Driver **CIP Serial**, 38400 baud, parity **None**, station address **1**. DF1 full duplex, media **RS232**, no handshake, CRC, embedded responses after one received, duplicate packet detection on. ACK timeout 50 × 20 ms, ENQ retries 3, NAK retries 3 | Leave it. No Modbus RTU panel is fitted. |
+| Ethernet | Port **Enabled**, auto-negotiate on. **DHCP** is selected, so the address boxes are blank. Duplicate-IP detection is on. EtherNet/IP inactivity timeout is **120** s. Modbus TCP server is **Disabled** | **Set before download.** Choose **Configure IP address and settings**: `192.168.10.10`, mask `255.255.255.0`. Change the mask only if the control network is not a /24. Set Modbus TCP server to **Enabled** (port 502). Leave auto-negotiate, duplicate-IP detection, and the 120 s inactivity timeout as they are. |
+| Interrupts | No interrupts configured | Leave empty. |
+| Modbus Mapping | No mappings. CCW warns that the Modbus TCP server is disabled | **Set before download,** after the server is enabled. Map the `MB_*` arrays in §5. One array is one mapping entry. |
+| Embedded I/O | Every input filter is **Default**. No input latch is enabled. EII edge stays **Falling** and stays gray while the latch is off | Leave it. |
+| Data Log | No data sets | Leave empty. |
+| Recipe | No recipes | Leave empty. |
+| Plug-in Modules | Slot 1 **2080-IF2**, slot 2 **2080-OF2**, slot 3 **2080-IF2** | Leave that order. Plug-in slots take 2080-series modules only. |
+| Expansion Modules | All four slots available | Leave empty until a 2085-IQ16 and a 2085-OB16 are on the controller. |
+
+Controller password: set one, so a download or upload needs it.
 
 `REMOTE_RESET_ALLOWED` stays FALSE. Do not turn it on unless the risk assessment in safety.md says so.
 
@@ -66,7 +77,7 @@ Global variables in the next section are **not retained**. In the variable grid,
 
 Right-click the controller and open **Global Variables**. CCW does not convert types for you: a `UINT` compared with an `INT` needs `ANY_TO_*`.
 
-The eight `MB_` arrays are already in Global Variables. Do not add them again. One array is one mapping entry, which is what keeps the map under CCW's 200-entry limit.
+The nine `MB_` arrays are already in Global Variables. Do not add them again. One array is one mapping entry, which is what keeps the map under CCW's 200-entry limit.
 
 | Name | Data type | Initial | Comment |
 | --- | --- | --- | --- |
@@ -218,7 +229,7 @@ CCW evaluates both sides of `AND` and `OR`. The barcode parser's extra array ele
 
 ## 7. Modbus mapping
 
-**Controller → Modbus Mapping.** Map each array at the start address. CCW addresses are 6-digit: coil 0 is `000001`, holding register 0 is `400001`.
+**Controller → Modbus Mapping.** The page is empty, and CCW warns that the Modbus TCP server is disabled. Enable the server in §4 first, then map each array at the start address. CCW addresses are 6-digit: coil 0 is `000001`, holding register 0 is `400001`.
 
 | Variable | CCW address | What a client sees |
 | --- | --- | --- |
@@ -251,9 +262,11 @@ Coils the bridge and the simulator use:
 
 `MB_Sys[1]` is the heartbeat. `MB_Sys[4]` is the tank-enable mask the HMI writes. `MB_Sys[19]` is `FaultCode`. `MB_Scan[4]` is the first barcode word. `MB_Station[3]` is `ArmCmd`. `MB_Cmd[5]` is Stop.
 
-## 8. Embedded I/O
+## 8. Field I/O
 
-Open **Embedded I/O** and assign each point to the global in the table. The base unit has **DI 0–13** and **DO 0–9**. **Change the point numbers to the panel drawing**, and check the terminal number against the 24-point installation instructions, before wiring. PNP sensors need the input commons wired for sourcing sensors. Outputs are 24 V sourcing; the load returns to 0 V.
+**Controller → Embedded I/O** sets filters and latches. It does not assign variables. Leave every input filter at **Default** and leave every latch off. EII edge stays **Falling** and stays gray while the latch is off.
+
+The ladder already uses the base-unit points: inputs `_IO_EM_DI_00` through `_IO_EM_DI_13`, outputs `_IO_EM_DO_00` through `_IO_EM_DO_09`. The tables name what those points mean. The base unit has **DI 0–13** and **DO 0–9**. **Change the point numbers to the panel drawing**, and check the terminal number against the 24-point installation instructions, before wiring. PNP sensors need the input commons wired for sourcing sensors. Outputs are 24 V sourcing; the load returns to 0 V.
 
 Embedded inputs:
 
@@ -319,7 +332,25 @@ Expansion outputs, **2085-OB16**, module 2. Until that module is on the controll
 | DO 8 | `O_Buzzer` | Flashes while an E-Stop or `FaultHold` is present. |
 | DO 9 | `O_Panel_Lamp_Reset` | `ResetRequired`. |
 
-Analog. Add the 2080-OF2, then use the output names CCW creates for that slot. Do not invent a raw count: the plug-in manual gives the counts for 0–10 V or 0–20 mA. Scale `TankValveOpeningPct` (0–100) onto that range in `S06`. 0 % must be the valve's closed signal. Name the channels `AO_Valve_T1_Angle` and `AO_Valve_T2_Angle`.
+Analog. CCW creates the plug-in points. Do not add user variables with those names. CCW rejects a user variable whose name starts with `_IO_`.
+
+| Slot | Module | Points | Program |
+| --- | --- | --- | --- |
+| 1 | 2080-IF2 | `_IO_P1_AI_00`, `_IO_P1_AI_01` | Not read. Leave them until a transmitter is wired. |
+| 2 | 2080-OF2 | `_IO_P2_AO_00`, `_IO_P2_AO_01` | `Prog1` writes **0** to both channels every scan. 0 is the closed signal. |
+| 3 | 2080-IF2 | `_IO_P3_AI_00`, `_IO_P3_AI_01` | Not read. Leave them until a transmitter is wired. |
+
+The two digital shutoffs stay on `_IO_EM_DO_02` and `_IO_EM_DO_03`. The expansion stand-ins `X1_DI_00` through `X1_DI_09` and `X2_DO_00` through `X2_DO_09` stay too. Those points are the 2085 modules, which are not on this controller.
+
+When the OF2 **Configuration** page shows the count for 100%, add these globals, all **Retained** clear:
+
+| Name | Type | Initial | Meaning |
+| --- | --- | --- | --- |
+| `AoFullScale` | `INT` | the 100% count from that page | 0 keeps both angles at 0. Do not guess this count. |
+| `AO_Valve_T1_Angle` | `INT` | 0 | `_IO_P2_AO_00`. `TankValveOpeningPct` × `AoFullScale` / 100 while T1 is dispensing, otherwise 0. |
+| `AO_Valve_T2_Angle` | `INT` | 0 | `_IO_P2_AO_01`, same rule for T2. |
+
+Replace the two rungs that write 0 once those variables exist. `SimInputs` and a stopped line still force both angles to 0.
 
 Hardwired START and JOG, if you are not using a touch panel, need two inputs on the 2085-IQ16. The base unit has no spare inputs. LOCAL START and JOG are ignored in REMOTE. Remote jog runs the belt for 0.5 s; local jog runs it only while the button is held.
 
@@ -398,6 +429,8 @@ That is commissioning stages 4 through 6, not this download.
 
 - [ ] Solution saved under `plc/` and it opens from `genesis.ccwsln` on a second try.
 - [ ] Controller catalog 2080-L50E-24QBB, revision matched to the connected firmware.
+- [ ] Plug-in slots, nearest the controller first: **2080-IF2**, **2080-OF2**, **2080-IF2**. No 2085 module in a plug-in slot. Expansion slots still empty.
+- [ ] Serial, interrupts, embedded input filters, data log, and recipe left as in §4.
 - [ ] IP `192.168.10.10`, Modbus TCP enabled, controller password set.
 - [ ] Nine `MB_*` arrays mapped at the addresses in §7, and no other variables mapped.
 - [ ] Programs `S00` through `S07` in that order, build clean.

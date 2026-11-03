@@ -778,6 +778,18 @@ SOR  [0,347] (*S07_347*) (**)
  BND
   FB  [2,0] (*+*) (*77*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*ZeroU*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*MB_Station[0]*) (**) )
 EOR [5,0]
+
+
+(**)
+
+SOR  [0,351] (*S06slot2OF2channel0stays0TheclosedsignaluntilAoFullScaleisknown*) (**)  FB  [1,0] (*+*) (*78*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*0*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*_IO_P2_AO_00*) (**) )
+EOR [4,0]
+
+
+(**)
+
+SOR  [0,355] (*S06slot2OF2channel1stays0TheclosedsignaluntilAoFullScaleisknown*) (**)  FB  [1,0] (*+*) (*79*) ( (*EN:EN*)(**) (**)  , (*i1:i1*)(*0*) (**)  , (*i2:i2*)(*0*) (**) ; (*ENO:ENO*)(**) (**)  , (*o1:o1*)(*_IO_P2_AO_01*) (**) )
+EOR [4,0]
 EOF
 #end_info
 END_PROGRAM

@@ -21,6 +21,7 @@ Station order on the conveyor: scan gate (bad QR ejected here, before either val
 | [bom.md](bom.md) | Buying parts: the BOM mapped to the software, the gaps, the budget, and open decisions |
 | [safety.md](safety.md) | Before designing the panel and before first power-up |
 | [io-map.md](io-map.md) | Wiring field devices, writing the PLC program, and writing ESP32 firmware. Contains the full **register map** |
+| [wiring-diagram.html](wiring-diagram.html) | Opening the line wiring diagram in a browser: belt order, E-stop, power rails, PLC outputs, and the control network |
 | [communication.md](communication.md) | Setting up the network (wired + Wi-Fi), Modbus TCP, OPC UA, and a SCADA PC that is not on the control network |
 | [micro850-plc.md](micro850-plc.md) | The 2080-L50E-24QBB's IO, mapping the register map in CCW, and writing the PLC program. The CCW project goes in [`plc/`](../../plc/README.md) |
 | [plc/instruction-manual.md](../../plc/instruction-manual.md) | Creating that project in CCW, building it, and downloading it |

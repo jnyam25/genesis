@@ -1792,6 +1792,40 @@ __MO_PLUS_46 := __EDTB89 ;
 __GL __LG00EE ;
 
 
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,351
+__ENDSTEPPRAGMA
+(*Label :*)(*S06slot2OF2channel0stays0TheclosedsignaluntilAoFullScaleisknown*)
+__GL __LG00EF ;
+__EDTB90 := TRUE ;
+IF __EDTB90 THEN
+_IO_P2_AO_00 := (0 + 0) ;
+END_IF ;
+__MO_PLUS_47 := __EDTB90 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00F0 ;
+
+
+(*************** Rung **********************************)
+(**)
+__STEPPRAGMA
+0,355
+__ENDSTEPPRAGMA
+(*Label :*)(*S06slot2OF2channel1stays0TheclosedsignaluntilAoFullScaleisknown*)
+__GL __LG00F1 ;
+__EDTB91 := TRUE ;
+IF __EDTB91 THEN
+_IO_P2_AO_01 := (0 + 0) ;
+END_IF ;
+__MO_PLUS_48 := __EDTB91 ;
+
+(*************** Code for the end of Rung **************)
+__GL __LG00F2 ;
+
+
 (*************** Code for the end of File **************)
 __GL __LG0000 ;
 
@@ -1887,4 +1921,6 @@ __GL __LG0000 ;
 (* __EDTB87 *)
 (* __EDTB88 *)
 (* __EDTB89 *)
+(* __EDTB90 *)
+(* __EDTB91 *)
 
