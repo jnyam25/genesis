@@ -84,11 +84,11 @@ MDF = 1\1, 0, 0, 1, -1, _IO_P2_AO_01
 RIdx = 0, 2, 5
 Nb = 0
 RIdx = 0, 3, 6
-Nb = 0
-RIdx = 0, 3, 7
 Nb = 2
-MDF = 1\1, 0, 0, 0, -1, _IO_P3_AI_00
-MDF = 1\1, 0, 0, 1, -1, _IO_P3_AI_01
+MDF = 1\1, 0, 0, 0, -1, _IO_P3_AO_00
+MDF = 1\1, 0, 0, 1, -1, _IO_P3_AO_01
+RIdx = 0, 3, 7
+Nb = 0
 
 
 [__READONLY_VALUES]

@@ -1,0 +1,69 @@
+<modbusServer Version="2.0">
+  <modbusRegister name="COILS">
+    <mapping variable="MB_Cmd" parent="Micro850" dataType="AnyArray" address="000001" va="0x5cc">
+      <MBVarInfo ElemType="AnyArray" SubElemType="Bool" DataTypeSize="16">
+        <MBArrayInfo ArrayDimension="1">
+          <MBArrayDimensionInfo Index="0" Upper="15" Lower="0" />
+        </MBArrayInfo>
+      </MBVarInfo>
+    </mapping>
+  </modbusRegister>
+  <modbusRegister name="HOLDING_REGISTERS">
+    <mapping variable="MB_Sys" parent="Micro850" dataType="AnyArray" address="400001" va="0x5dc">
+      <MBVarInfo ElemType="AnyArray" SubElemType="UInt" DataTypeSize="40">
+        <MBArrayInfo ArrayDimension="1">
+          <MBArrayDimensionInfo Index="0" Upper="19" Lower="0" />
+        </MBArrayInfo>
+      </MBVarInfo>
+    </mapping>
+    <mapping variable="MB_Tank" parent="Micro850" dataType="AnyArray" address="400021" va="0x624">
+      <MBVarInfo ElemType="AnyArray" SubElemType="UInt" DataTypeSize="24">
+        <MBArrayInfo ArrayDimension="1">
+          <MBArrayDimensionInfo Index="0" Upper="11" Lower="0" />
+        </MBArrayInfo>
+      </MBVarInfo>
+    </mapping>
+    <mapping variable="MB_Cont" parent="Micro850" dataType="AnyArray" address="400101" va="0x63c">
+      <MBVarInfo ElemType="AnyArray" SubElemType="UInt" DataTypeSize="80">
+        <MBArrayInfo ArrayDimension="1">
+          <MBArrayDimensionInfo Index="0" Upper="39" Lower="0" />
+        </MBArrayInfo>
+      </MBVarInfo>
+    </mapping>
+    <mapping variable="MB_Event" parent="Micro850" dataType="AnyArray" address="400201" va="0x68c">
+      <MBVarInfo ElemType="AnyArray" SubElemType="UInt" DataTypeSize="66">
+        <MBArrayInfo ArrayDimension="1">
+          <MBArrayDimensionInfo Index="0" Upper="32" Lower="0" />
+        </MBArrayInfo>
+      </MBVarInfo>
+    </mapping>
+    <mapping variable="MB_Scan" parent="Micro850" dataType="AnyArray" address="400301" va="0x6d0">
+      <MBVarInfo ElemType="AnyArray" SubElemType="UInt" DataTypeSize="78">
+        <MBArrayInfo ArrayDimension="1">
+          <MBArrayDimensionInfo Index="0" Upper="38" Lower="0" />
+        </MBArrayInfo>
+      </MBVarInfo>
+    </mapping>
+    <mapping variable="MB_Field" parent="Micro850" dataType="AnyArray" address="400401" va="0x720">
+      <MBVarInfo ElemType="AnyArray" SubElemType="UInt" DataTypeSize="40">
+        <MBArrayInfo ArrayDimension="1">
+          <MBArrayDimensionInfo Index="0" Upper="19" Lower="0" />
+        </MBArrayInfo>
+      </MBVarInfo>
+    </mapping>
+    <mapping variable="MB_Station" parent="Micro850" dataType="AnyArray" address="400421" va="0x604">
+      <MBVarInfo ElemType="AnyArray" SubElemType="UInt" DataTypeSize="26">
+        <MBArrayInfo ArrayDimension="1">
+          <MBArrayDimensionInfo Index="0" Upper="12" Lower="0" />
+        </MBArrayInfo>
+      </MBVarInfo>
+    </mapping>
+    <mapping variable="MB_Sim" parent="Micro850" dataType="AnyArray" address="400451" va="0x748">
+      <MBVarInfo ElemType="AnyArray" SubElemType="UInt" DataTypeSize="4">
+        <MBArrayInfo ArrayDimension="1">
+          <MBArrayDimensionInfo Index="0" Upper="1" Lower="0" />
+        </MBArrayInfo>
+      </MBVarInfo>
+    </mapping>
+  </modbusRegister>
+</modbusServer>

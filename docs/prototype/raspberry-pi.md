@@ -116,14 +116,51 @@ Keep the twin service bound to `127.0.0.1` (the default `GENESIS_HOST`). The HMI
 
 ## 6. Optional: kiosk screen
 
-On Raspberry Pi OS Desktop (64-bit), autostart a full-screen browser for the local operator panel:
+On Raspberry Pi OS Desktop (64-bit), the local touchscreen can show only the operator HMI. The template [`deploy/raspberry-pi/genesis-kiosk.desktop`](../../deploy/raspberry-pi/genesis-kiosk.desktop) waits until `http://localhost:43123` answers, then opens Chromium full screen. The twin and the HMI keep running as services. Closing the browser does not stop them.
+
+Run the copy as the user who logs into the desktop, not as the `genesis` service account. That account has no login shell.
+
+### Turn kiosk mode on
 
 ```bash
 mkdir -p ~/.config/autostart
 cp /opt/genesis/deploy/raspberry-pi/genesis-kiosk.desktop ~/.config/autostart/
 ```
 
-The template launches Chromium in kiosk mode on `http://localhost:43123` and retries until the HMI is up. Disable screen blanking in the Raspberry Pi configuration tool.
+Log out and back in, or reboot. The browser opens on the next desktop login and comes back after every reboot. On an older image, if the screen stays on the desktop, edit the copied file and change `chromium` to `chromium-browser`.
+
+To open it once, without autostart, from a terminal on the desktop:
+
+```bash
+chromium --kiosk --noerrdialogs --disable-infobars --incognito http://localhost:43123
+```
+
+Disable screen blanking in the Raspberry Pi configuration tool so the panel does not go dark during a run.
+
+### Leave the full-screen browser
+
+The HMI stays up. These only dismiss Chromium:
+
+| What you want | What to do |
+| --- | --- |
+| Back to the desktop, this session | **Alt+F4**. Autostart opens the browser again at the next login. |
+| A text login on this Pi | **Ctrl+Alt+F2**, then log in. **Ctrl+Alt+F1** returns to the desktop. On an older image the desktop is **Ctrl+Alt+F7**. |
+| Stop it opening at login | From a normal login or over SSH: `rm ~/.config/autostart/genesis-kiosk.desktop`, then **Alt+F4** or `pkill -f "chromium.*--kiosk"`. |
+
+### Run commands while the screen stays on the HMI
+
+Use SSH from the engineering laptop. The firewall in §5 already allows port 22 from the control network (`eth0`). The operator screen is untouched.
+
+```bash
+ssh <desktop-user>@<pi-ip>
+systemctl status genesis-twin genesis-hmi
+curl -s http://127.0.0.1:43124/health
+journalctl -u genesis-twin -u genesis-hmi -f
+```
+
+Service restarts from that session use the same commands as §7. A restart of `genesis-hmi` reloads the page the kiosk is already showing. You do not leave kiosk mode to do it.
+
+From the Pi's own keyboard, **Ctrl+Alt+F2** is the other way in. Log in, run the command, then **Ctrl+Alt+F1** to return to the HMI. The browser is still full screen when you come back.
 
 ## 7. Operations
 

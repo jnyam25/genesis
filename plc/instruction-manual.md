@@ -58,9 +58,9 @@ In the Project Organizer, open the controller. These pages match the open projec
 | Page | As opened | What to do |
 | --- | --- | --- |
 | Serial Port | Driver **CIP Serial**, 38400 baud, parity **None**, station address **1**. DF1 full duplex, media **RS232**, no handshake, CRC, embedded responses after one received, duplicate packet detection on. ACK timeout 50 × 20 ms, ENQ retries 3, NAK retries 3 | Leave it. No Modbus RTU panel is fitted. |
-| Ethernet | Port **Enabled**, auto-negotiate on. **DHCP** is selected, so the address boxes are blank. Duplicate-IP detection is on. EtherNet/IP inactivity timeout is **120** s. Modbus TCP server is **Disabled** | **Set before download.** Choose **Configure IP address and settings**: `192.168.10.10`, mask `255.255.255.0`. Change the mask only if the control network is not a /24. Set Modbus TCP server to **Enabled** (port 502). Leave auto-negotiate, duplicate-IP detection, and the 120 s inactivity timeout as they are. |
+| Ethernet | Port **Enabled**, auto-negotiate on. **Configure IP address and settings**: `192.168.10.10`, mask `255.255.255.0`, gateway blank. Duplicate-IP detection is on. EtherNet/IP inactivity timeout is **120** s | Leave that address. Change the mask only if the control network is not a /24. Modbus TCP stays **Enabled** (port 502). Leave auto-negotiate, duplicate-IP detection, and the 120 s inactivity timeout as they are. |
 | Interrupts | No interrupts configured | Leave empty. |
-| Modbus Mapping | No mappings. CCW warns that the Modbus TCP server is disabled | **Set before download,** after the server is enabled. Map the `MB_*` arrays in §5. One array is one mapping entry. |
+| Modbus Mapping | Nine `MB_*` arrays in `MbSrvConf.xml`, one entry each, at the addresses in §7 | Leave those nine rows. Do not map any other variable. |
 | Embedded I/O | Every input filter is **Default**. No input latch is enabled. EII edge stays **Falling** and stays gray while the latch is off | Leave it. |
 | Data Log | No data sets | Leave empty. |
 | Recipe | No recipes | Leave empty. |
@@ -229,7 +229,7 @@ CCW evaluates both sides of `AND` and `OR`. The barcode parser's extra array ele
 
 ## 7. Modbus mapping
 
-**Controller → Modbus Mapping.** The page is empty, and CCW warns that the Modbus TCP server is disabled. Enable the server in §4 first, then map each array at the start address. CCW addresses are 6-digit: coil 0 is `000001`, holding register 0 is `400001`.
+**Controller → Modbus Mapping.** The nine rows are already in `Controller/MbSrvConf.xml`. Reopen the project if the page was open before that file was written. CCW addresses are 6-digit: coil 0 is `000001`, holding register 0 is `400001`. The server still has to be enabled in §4 before a client can read them.
 
 | Variable | CCW address | What a client sees |
 | --- | --- | --- |

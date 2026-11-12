@@ -134,7 +134,7 @@ For N tanks:
 | Digital outputs, indicators (ONN-M4W + RESET lamp) | 5 (tower red / yellow / green, buzzer, RESET lamp) | 5 |
 | Analog outputs | N valve angles (+1 belt speed) | 2–3 |
 
-Size the Micro850's plug-in and expansion modules for the 2-tank line, plus about 20% spare ([micro850-plc.md §1](micro850-plc.md#io-against-the-requirement)). With stoppers fitted, the line needs roughly 23 DI, 20 DO and 3 AO. The 2080-L50E-24QBB has 14 DI and 10 DO embedded. The checked-in ladder uses a **2085-IQ16** as expansion module 1 (`_IO_X1_`) and a **2085-OB16** as expansion module 2 (`_IO_X2_`). Embedded DI 0–13 and DO 0–9, and the expansion points, are listed in [plc/instruction-manual.md](../../plc/instruction-manual.md). The valve angles are one **2080-OF2** and are not in that ladder yet.
+Size the Micro850's plug-in and expansion modules for the 2-tank line, plus about 20% spare ([micro850-plc.md §1](micro850-plc.md#io-against-the-requirement)). With stoppers fitted, the line needs roughly 23 DI, 20 DO and 3 AO. The 2080-L50E-24QBB has 14 DI and 10 DO embedded and three 2080-series plug-in slots. The bench controller and the CCW graphic are slot 1 **2080-IF2**, slot 2 **2080-OF2**, slot 3 **2080-IF2**. Neither IF2 is read. `Prog1` writes 0 to both OF2 channels every scan, the closed valve signal, until `AoFullScale` is taken from that module's configuration page. Expansion slots are empty. The ladder reads and writes stand-ins `X1_DI_00`–`09` and `X2_DO_00`–`09` until a **2085-IQ16** and a **2085-OB16** are fitted; those contacts then become `_IO_X1_` and `_IO_X2_`. The point list is in [plc/instruction-manual.md](../../plc/instruction-manual.md).
 
 ### Calibration values per tank
 

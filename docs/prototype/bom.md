@@ -34,7 +34,7 @@ As submitted by the team, plus a **Software mapping** column. Rows marked **(add
 | Station / subsystem | Component | Qty | Unit | Total | Status | Software mapping | Owner |
 | --- | --- | ---: | ---: | ---: | --- | --- | --- |
 | Supervisor (PLC) | **Allen-Bradley Micro850 2080-L50E-24QBB**, team-owned: 14 DC inputs, 10 sourcing DC outputs, 3 plug-in slots (2080-series only). Ethernet: Modbus TCP server, 16 connections | 1 | $0.00 | $0.00 | Owned | Implements the register map ([io-map.md §4](io-map.md#4-register-map-modbus-tcp)) and the program in [micro850-plc.md](micro850-plc.md). Embedded IO covers the required outputs and 14 inputs; stoppers, the rest of the tower and the extra inputs need a 2085-IQ16 and a 2085-OB16 ([micro850-plc.md §1](micro850-plc.md#io-against-the-requirement)) | Ashley |
-| Supervisor (PLC) | Analog output plug-in **2080-OF2** (2 channels, 0–10 V / 0–20 mA each): one module for the two valve angles. Belt speed can use a PWM output instead of a second module | 1 | ~$140.00 | ~$140.00 | Distributor, Sep 2026 ($120–160 each). Check the lab first | `AO_Valve_T<k>_Angle` ← `Tank<k>.ValveOpeningPct`; `AO_Belt_SpeedRef` (or a PWM output) | Ashley |
+| Supervisor (PLC) | Analog output plug-in **2080-OF2** (2 channels, 0–10 V / 0–20 mA each): one module for the two valve angles. Belt speed uses the drive's knob or a PWM output | 1 | $0.00 | $0.00 | Fitted, slot 2, nearest the controller after the first 2080-IF2 | `Prog1` holds `_IO_P2_AO_00` and `_IO_P2_AO_01` at 0 until `AoFullScale` is known. Then `AO_Valve_T<k>_Angle` follows `Tank<k>.ValveOpeningPct` | Ashley |
 | HMI | ALT: C-more Micro 3 in touch panel (EA3-S3ML) | 1 | $342.00 | $342.00 | Catalog, Sep 2026 (BOM had the 2018 price, $198) | Local operator panel: START/STOP, recipe select, status. Talks generic Modbus TCP/RTU to the Micro850's panel area; not part of the register map. Free programming software | Ashley |
 | HMI | AMSAMOTION 4.3 in touch panel (budget) | 1 | $60.00 | $60.00 | Confirmed | Same role. **Pick one HMI**, not both, or neither (hardwired START/JOG + web HMI). Check its configuration software is free | Ashley |
 | Local controller (MCU) | ESP32 DevKit board | 2 | $8.00 | $16.00 | Estimate | ESP32 #1 scanner node (preprinted QR), ESP32 #2 station node (robotic arm + sort sensor; can run on the xArm's own ESP32 controller instead). Firmware in [`firmware/`](../../firmware) ([esp32.md](esp32.md)) | Ashley |
@@ -59,7 +59,7 @@ As submitted by the team, plus a **Software mapping** column. Rows marked **(add
 | Misc | Wiring, connectors, relays, power supply, enclosure hardware | 1 | $75.00 | $75.00 | Estimate | — | Ashley |
 | Conveyor design | Schematics, 2D/3D model, BOM (design only) | 1 | $0.00 | $0.00 | Confirmed | `config.ts` stations and spacing; the twin, virtual PLC and HMI views ([commissioning.md §1–§2](commissioning.md)) | Ashley |
 
-**Totals.** The original BOM summed to **$1,300.00** with *both* HMI options and a CLICK PLUS PLC ($330 for CPU and modules). Using the team's 2080-L50E-24QBB removes the CPU and the CLICK modules. Its 14 inputs and 10 outputs do not cover stoppers, the full tower and the extra sensors, so price a 2085-IQ16 and a 2085-OB16 as well. The conveyor has two tanks, so the valves and tank bodies are two each, and one 2080-OF2 covers both valve angles (about $140; a second module only if belt speed is analog). The arm places the lid and the press cylinder seats it. Re-check prices before ordering. The C-more Micro adds $282.
+**Totals.** The original BOM summed to **$1,300.00** with *both* HMI options and a CLICK PLUS PLC ($330 for CPU and modules). Using the team's 2080-L50E-24QBB removes the CPU and the CLICK modules. Its 14 inputs and 10 outputs do not cover stoppers, the full tower and the extra sensors, so price a 2085-IQ16 and a 2085-OB16 as well. The conveyor has two tanks, so the valves and tank bodies are two each. The 2080-OF2 already on slot 2 covers both valve angles, so it is not a new purchase. Belt speed stays on the drive's knob or a PWM output. The arm places the lid and the press cylinder seats it. Re-check prices before ordering. The C-more Micro adds $282.
 
 ### 2a. Software (no subscriptions)
 
@@ -116,7 +116,7 @@ The department budget mentioned so far is about **$500**. The reconciled line is
 
 | Scenario | Estimate |
 | --- | ---: |
-| BOM with the team's 2080-L50E-24QBB, one 2080-OF2 for the two valves, one budget HMI, lid magazine, lid press, VL53L1X, speed controller, touch sensors, ONN-M4W | re-check; two tanks and one analog module, not three tanks and two modules |
+| BOM with the team's 2080-L50E-24QBB and the fitted 2080-OF2, one budget HMI, lid magazine, lid press, VL53L1X, speed controller, touch sensors, ONN-M4W | re-check; two tanks, and the analog module is already on the controller |
 | + required gaps G1, G2, G5, G8 (G3 is in the BOM; one-bottle mode, no stoppers, digital E-Stop as PLC-level stop) | ~$1,250–1,280 |
 | + stoppers (G4b), interposing relay (G6), AP/switch (G9) | ~$1,330–1,440 |
 | With the C-more Micro instead of the budget panel | add ~$282 |
@@ -124,7 +124,7 @@ The department budget mentioned so far is about **$500**. The reconciled line is
 
 Levers to discuss, largest first:
 
-1. **Analog output plug-in (~$140).** One 2080-OF2 covers both valve angles. Look in the lab before buying. Driving belt speed from a PWM output avoids a second module.
+1. **Analog output plug-in.** The 2080-OF2 is already in slot 2 and covers both valve angles. `Prog1` holds both channels at 0 until `AoFullScale` is known. Belt speed stays off that module.
 2. **Capping arm ($130).** Borrow a Hiwonder xArm from the lab, or run the line without capping (lids fitted by hand after the line): drop `CAP` from `config.stations`, and the PLC no longer sequences the arm.
 3. **HMI ($0–342).** Use the budget panel, or rely on the web HMI on the laptop plus hardwired START/JOG/STOP/RESET for local control.
 4. **Proportional valves ($70 for two).** `valveOpeningPct: 100` is on/off if a tank uses a plain solenoid. One 2080-OF2 already covers both valves.
@@ -164,7 +164,7 @@ Levers to discuss, largest first:
 
 ### Decided
 
-- **D7: PLC model.** The team's controller is the **2080-L50E-24QBB** (14 DI / 10 DO). It needs CCW Standard 20.01 or later. Budget a 2085-IQ16 and a 2085-OB16 for the inputs and outputs past the embedded points, and a 2080-OF2 for the valve angles ([micro850-plc.md §1](micro850-plc.md#the-controller-2080-l50e-24qbb)). Still list any plug-in or expansion modules already fitted or in the lab.
+- **D7: PLC model.** The team's controller is the **2080-L50E-24QBB** (14 DI / 10 DO, 3 plug-in slots). It needs CCW Standard 20.01 or later. The bench unit and the CCW graphic already have slot 1 **2080-IF2**, slot 2 **2080-OF2**, slot 3 **2080-IF2**. Budget a 2085-IQ16 and a 2085-OB16 for the inputs and outputs past the embedded points. Those expansion slots stay empty until the modules are fitted ([micro850-plc.md §1](micro850-plc.md#the-controller-2080-l50e-24qbb)).
 - **D8: ProtoTwin.** Dropped (subscription product). The Node twin and the virtual PLC (development stages 1–2) need no licence.
 - **D9: SCADA.** [FUXA](https://github.com/frangoteam/FUXA) over Modbus TCP, installed natively with `npm run fuxa`. It is read-only by default; built with `FUXA_COMMANDS=1` it can also pulse the command coils, and the PLC applies the same authority rules as for the web HMI ([scada.md](scada.md)).
 - **D10: Lid press.** On the conveyor. The arm places the lid at CAP; the cylinder at PRESS seats it.

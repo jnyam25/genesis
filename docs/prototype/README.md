@@ -102,7 +102,7 @@ You can bring the prototype up in four stages. Each stage keeps the HMI and API 
 | --- | --- |
 | Twin engine (scan gate, two tanks, lid press, two E-Stops, Lane 1 / Lane 2, station faults), HMI, Modbus client/server, virtual PLC ↔ bridge round trip with simulated ESP32 nodes | Automated tests |
 | ESP32 firmware (`firmware/scanner-node`, `firmware/station-node`, `firmware/lib/genesis_node`) | Written against the register map ([esp32.md](esp32.md)); **not yet proven on the hardware** |
-| Micro850 program ([`plc/`](../../plc/README.md)) | **Partial.** `Prog1` is in the CCW project (I/O, safety, commands, and the registers the bridge reads). Station logic and the rest of the publish are not in the ladder, and nothing has been downloaded |
+| Micro850 program ([`plc/`](../../plc/README.md)) | **Partial.** `Prog1` is in the CCW project (I/O, safety, commands, the registers the bridge reads, and both OF2 channels held at 0). Station logic and the rest of the publish are not in the ladder. Plug-ins match the bench (IF2, OF2, IF2); expansion slots are empty. Modbus TCP is still disabled in the open project, and nothing has been downloaded |
 | Wiring | Specified in [commissioning.md](commissioning.md). Not built |
 | 2080-L50E-24QBB facts (Modbus mapping, IO, connection limits, CCW 20.01+) | From Rockwell's published material; **verify** against the team's controller and its firmware ([micro850-plc.md](micro850-plc.md)) |
 | FUXA | Installed natively with `npm run fuxa`; the project is generated from the register map and runs against the virtual PLC ([scada.md](scada.md)). **Not tested against the Micro850 yet** (commissioning §3) |
