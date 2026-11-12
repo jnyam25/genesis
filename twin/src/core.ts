@@ -188,6 +188,14 @@ export class TwinCore {
   driver: StationDriver | null = null;
   /** Operator-editable tank names and colors, per slot. */
   readonly palette: TankPalette;
+  /**
+   * Presence sensors from an external plant (ProtoTwin). Returns null for a
+   * station the plant does not model: that station keeps the travel timer.
+   * With a sensor, a container arrives on the sensor's rising edge instead.
+   */
+  presenceSensor: ((stationId: string) => boolean | null) | null = null;
+  /** Per station: the sensor has read 0 since the last arrival it was used for. */
+  private sensorArmed = new Map<string, boolean>();
 
   /**
    * @param palette saved tank names/colors; when given, it overrides the names
@@ -276,6 +284,12 @@ export class TwinCore {
     ) {
       this.spawnContainer(this.barcodeQueue.shift()!);
       this.spawnTimerSec = 0.4;
+    }
+
+    if (this.presenceSensor) {
+      for (const st of this.config.stations) {
+        if (this.presenceSensor(st.id) === false) this.sensorArmed.set(st.id, true);
+      }
     }
 
     let lineWasBlocked = false;
@@ -416,19 +430,39 @@ export class TwinCore {
     return bay ? bay.id : "QC";
   }
 
+  private hasSensor(stationId: string): boolean {
+    return this.presenceSensor?.(stationId) != null;
+  }
+
+  /** "none": no sensor, use the timer. "here": rising edge seen, consumed. "wait": not yet. */
+  private sensorGate(stationId: string): "none" | "here" | "wait" {
+    const v = this.presenceSensor?.(stationId);
+    if (v == null) return "none";
+    if (v && (this.sensorArmed.get(stationId) ?? true)) {
+      this.sensorArmed.set(stationId, false);
+      return "here";
+    }
+    return "wait";
+  }
+
   private progressContainer(c: Container, dt: number): void {
     if (c.opIndex >= c.ops.length) return;
     const op = c.ops[c.opIndex];
 
     if (c.state === "ENTERING") {
       if (this.occupancy.has(op.stationId)) this.block(c);
-      else this.serve(c, op.stationId);
+      else if (this.sensorGate(op.stationId) !== "wait") this.serve(c, op.stationId);
       return;
     }
 
     if (c.state === "MOVING") {
       c.transitTimerSec -= dt;
-      if (c.transitTimerSec <= 0) {
+      const gate = this.sensorGate(op.stationId);
+      if (gate === "wait" && c.transitTimerSec <= -2 * this.config.sensorWaitTimeoutSec) {
+        this.forceReject(c, `jam before ${op.stationId} (sensor never saw the container)`, op.stationId);
+        return;
+      }
+      if (gate === "here" || (gate === "none" && c.transitTimerSec <= 0)) {
         if (op.stationId === "GATE") this.finalizeAtGate(c);
         else if (this.occupancy.has(op.stationId)) this.block(c);
         else this.serve(c, op.stationId);
@@ -486,7 +520,7 @@ export class TwinCore {
       this.finalizeAtGate(c);
       return;
     }
-    if (next.stationId === "QC") {
+    if (next.stationId === "QC" && !this.hasSensor("QC")) {
       if (this.occupancy.has("QC")) this.block(c);
       else this.serve(c, "QC");
       return;

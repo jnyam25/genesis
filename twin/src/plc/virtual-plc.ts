@@ -30,6 +30,7 @@
  *
  * Env: VPLC_PORT (5020), VPLC_HOST (0.0.0.0), VPLC_UNIT_ID (1),
  *      VPLC_FEED=0   no bottle arrivals (tests drive the core directly),
+ *      VPLC_PLANT=1  ProtoTwin owns the presence sensors (Plant.* registers 460-499),
  *      VPLC_NODES=scanner | station | scanner,station | all
  *                    real ESP32 nodes instead of the simulated ones. With a real
  *                    scanner node, bottles arrive without a known label and the
@@ -57,6 +58,9 @@ import {
   EVENT_SLOTS,
   FIELD,
   LINE_STATE_BITS,
+  PLANT,
+  PLANT_SENSOR_STATIONS,
+  PLANT_STOPPER_STATIONS,
   PROTOCOL_VERSION,
   SCAN,
   SCAN_STATUS,
@@ -176,6 +180,17 @@ export class VirtualPlc implements StationDriver {
   private readonly watches: NodeWatch[] = [];
   /** Latched faults, oldest first (Sys.FaultCode shows the first). */
   private faults: FaultCode[] = [];
+  private debugTimer?: number;
+  /** External plant (ProtoTwin): previous SCAN sensor, for the load edge. */
+  private plantScanPrev = false;
+  private plantScanStuckSec = 0;
+  /** Seconds left on each one-shot output (QR ejector, fill-reject pusher). */
+  private pulse = { qrReject: 0, rejectDiverter: 0 };
+  /** Containers already seen finished, so each reject fires its pusher once. */
+  private finishedSeen = new Set<number>();
+  /** Per stopper station: id held last scan, and seconds left on its release. */
+  private stopperHeld = new Map<string, number>();
+  private stopperRelease = new Map<string, number>();
 
   constructor(options: VirtualPlcOptions = {}) {
     this.feed = options.feed ?? true;
@@ -197,6 +212,7 @@ export class VirtualPlc implements StationDriver {
       this.watches.push({ heartbeat: FIELD.STATION_NODE_HEARTBEAT, fault: FaultCode.STATION_NODE_OFFLINE, stationId: "CAP", last: -1, changedAt: 0 });
     }
     this.core.driver = this;
+    this.core.presenceSensor = (stationId) => this.plantSensor(stationId);
     // Simulated key switch starts where the configured line starts.
     this.server.registers[SIM.LOCAL_MODE] = this.core.safety.controlMode === "local" ? 1 : 0;
     this.publish();
@@ -232,7 +248,25 @@ export class VirtualPlc implements StationDriver {
     if (armFault) this.latchFault(armFault, "CAP");
     this.core.tick(dt);
 
-    if (this.feed) {
+    const plant = this.plantMode;
+    if (this.feed && plant) {
+      // The plant loads the cans: one bottle per rising edge at SCAN.
+      const scanNow = this.server.registers[PLANT.INPUT_BASE] === 1;
+      // A can parked on the SCAN eye that the PLC is not tracking (e.g. after a
+      // restart or a missed edge) would never produce a new rising edge, so also
+      // admit it once the eye has been steadily blocked with nothing tracked there.
+      const trackedAtScan = this.core.containers.some(
+        (c) => c.completedAtSec === null && (c.occupyingStationId === "SCAN" || c.state === "ENTERING"),
+      );
+      this.plantScanStuckSec = scanNow && !trackedAtScan ? this.plantScanStuckSec + dt : 0;
+      const stuck = this.plantScanStuckSec >= 1.5;
+      if (stuck) this.plantScanStuckSec = 0;
+      if (scanNow && (!this.plantScanPrev || stuck) && this.core.queuedBarcodes === 0) {
+        if (this.external.scanner) this.core.enqueueBottle();
+        else this.core.enqueueBarcode(nextBarcode(this.barcodeIdx++, this.core.tanks.length));
+      }
+      this.plantScanPrev = scanNow;
+    } else if (this.feed) {
       this.feedTimer += dt;
       if (this.feedTimer >= DEFAULT_CONFIG.mockSensorPeriodSec && this.core.queuedBarcodes < DEFAULT_CONFIG.maxConcurrentContainers) {
         this.feedTimer = 0;
@@ -248,6 +282,96 @@ export class VirtualPlc implements StationDriver {
     }
     this.heartbeat = u16(this.heartbeat + 1);
     this.publish();
+    this.publishPlant(dt);
+    if (process.env.VPLC_DEBUG === "1") {
+      this.debugTimer = (this.debugTimer ?? 0) + dt;
+      if (this.debugTimer >= 2) {
+        this.debugTimer = 0;
+        const r = this.server.registers;
+        const s = this.core.safety.state() as unknown as Record<string, unknown>;
+        const st = Object.entries(s).filter(([, v]) => typeof v !== "object").map(([k, v]) => `${k}=${v}`).join(" ");
+        const cs = this.core.containers.filter((c) => c.completedAtSec === null).map((c) => `${c.id}:${c.state}@${c.occupyingStationId ?? "-"}`).join(" ");
+        console.log(`[dbg] t=${this.core.simTimeSec.toFixed(1)} permit=${r[STATION.RUN_PERMIT]} arm cmd=${r[STATION.ARM_CMD]} seq=${r[STATION.ARM_CMD_SEQ]} done=${r[STATION.ARM_DONE_SEQ]} res=${r[STATION.ARM_RESULT]} faults=[${this.faults.join(",")}]`);
+        console.log(`[dbg]   in=${Array.from({ length: 11 }, (_, i) => r[PLANT.INPUT_BASE - 1 + i]).join(",")} out=${Array.from({ length: 19 }, (_, i) => r[480 + i]).join(",")}`);
+        console.log(`[dbg]   safety: ${st}`);
+        console.log(`[dbg]   cans: ${cs || "none"}`);
+      }
+    }
+  }
+
+  get plantMode(): boolean {
+    return this.server.registers[PLANT.MODE] === 1;
+  }
+
+  /** Presence sensor from the plant, or null when the plant is off or does not model it. */
+  private plantSensor(stationId: string): boolean | null {
+    if (!this.plantMode) return null;
+    const i = (PLANT_SENSOR_STATIONS as readonly string[]).indexOf(stationId);
+    if (i < 0) return null;
+    const mask = this.server.registers[PLANT.SENSOR_MASK] || 0xff;
+    if (((mask >> i) & 1) === 0) return null;
+    return this.server.registers[PLANT.INPUT_BASE + i] === 1;
+  }
+
+  /**
+   * Field outputs for the plant, as the Micro850 drives them from its ladder
+   * (plc/instruction-manual.md §8). Written every scan, plant mode or not.
+   */
+  private publishPlant(dt: number): void {
+    const r = this.server.registers;
+    const live = this.core.containers.filter((c) => c.completedAtSec === null);
+    const serving = (st: string) => live.find((c) => c.state === "SERVING" && c.occupyingStationId === st);
+    const running = this.core.safety.lineEnabled;
+    const s = this.core.safety.state();
+
+    // One-shot pushers: a container just rejected at SCAN fires the QR ejector,
+    // one rejected anywhere later fires the fill-reject pusher.
+    for (const c of this.core.containers) {
+      if (c.state !== "REJECTED" || this.finishedSeen.has(c.id)) continue;
+      this.finishedSeen.add(c.id);
+      if (c.ops[c.opIndex]?.stationId === "SCAN") this.pulse.qrReject = 1;
+      else this.pulse.rejectDiverter = 1;
+    }
+    if (this.finishedSeen.size > 200) this.finishedSeen = new Set([...this.finishedSeen].slice(-100));
+    this.pulse.qrReject = Math.max(0, this.pulse.qrReject - dt);
+    this.pulse.rejectDiverter = Math.max(0, this.pulse.rejectDiverter - dt);
+
+    const valve = (slot: number) => {
+      const c = serving(`BAY-${slot}`);
+      return c?.ops[c.opIndex]?.tankId === `T${slot}` && running ? 1 : 0;
+    };
+    const toSort = live.find((c) => ["QC", "GATE", "SORT"].includes(c.ops[c.opIndex]?.stationId ?? ""));
+    r[PLANT.BELT_RUN] = running ? 1 : 0;
+    r[PLANT.VALVE_T1_OPEN] = valve(1);
+    r[PLANT.VALVE_T2_OPEN] = valve(2);
+    r[PLANT.QR_REJECT_EXTEND] = this.pulse.qrReject > 0 ? 1 : 0;
+    r[PLANT.LID_PRESS_EXTEND] = running && serving("PRESS") ? 1 : 0;
+    r[PLANT.REJECT_DIVERTER_EXTEND] = this.pulse.rejectDiverter > 0 ? 1 : 0;
+    r[PLANT.SORT_DIVERTER_LANE_B] = toSort?.lane === 1 ? 1 : 0;
+    r[PLANT.STACK_GREEN] = running ? 1 : 0;
+    r[PLANT.STACK_RED] = s.eStopActive || s.faultActive ? 1 : 0;
+    r[PLANT.STACK_AMBER] = !running && !r[PLANT.STACK_RED] ? 1 : 0;
+
+    // Stoppers: hold a can while its station works on it; after it finishes,
+    // retract until the sensor clears (2 s at most). A station with a can on
+    // its way stays extended to catch it; other stations let cans pass.
+    // SCAN always catches: every can stops to be read.
+    PLANT_STOPPER_STATIONS.forEach((st, i) => {
+      const held = serving(st)?.id ?? 0;
+      const prev = this.stopperHeld.get(st) ?? 0;
+      let release = this.stopperRelease.get(st) ?? 0;
+      if (prev !== 0 && held !== prev) release = 2;
+      if (release > 0 && this.plantSensor(st) === false) release = 0;
+      release = Math.max(0, release - dt);
+      this.stopperHeld.set(st, held);
+      this.stopperRelease.set(st, release);
+      const awaited = st === "SCAN" || live.some((c) => c.state !== "SERVING" && c.ops[c.opIndex]?.stationId === st);
+      r[PLANT.STOPPER_BASE + i] = release > 0 || (!held && !awaited) ? 1 : 0;
+    });
+
+    const armBusy = r[STATION.ARM_CMD_SEQ] !== r[STATION.ARM_DONE_SEQ];
+    r[PLANT.ARM_MOTION] = armBusy ? r[STATION.ARM_CMD] : 0;
+    r[PLANT.SCAN_CONTAINER_ID] = u16(serving("SCAN")?.id ?? 0);
   }
 
   /** Command coils are pulses: act on 1, then reset to 0 (acknowledge). */
@@ -522,6 +646,8 @@ if (require.main === module) {
   const externalNodes = parseExternalNodes(process.env.VPLC_NODES);
   const follow = process.env.VPLC_FOLLOW === "1";
   const plc = new VirtualPlc({ feed: process.env.VPLC_FEED !== "0" && !follow, externalNodes, unitId, follow });
+  // VPLC_PLANT=1: start with an external plant (ProtoTwin) owning the sensors.
+  if (process.env.VPLC_PLANT === "1") plc.server.registers[PLANT.MODE] = 1;
   const node = (real: boolean | undefined) => (real ? "REAL ESP32 (heartbeat watched)" : "simulated");
   plc
     .start(port, host)

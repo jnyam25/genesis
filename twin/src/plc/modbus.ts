@@ -65,6 +65,8 @@ export class FrameReader {
   }
 }
 
+let traceCount = 0;
+
 export function frame(transactionId: number, unitId: number, pdu: Buffer): Buffer {
   const header = Buffer.alloc(MBAP_LEN);
   header.writeUInt16BE(transactionId, 0);
@@ -329,11 +331,16 @@ export class ModbusTcpServer extends EventEmitter {
   }
 
   private onConnection(socket: net.Socket): void {
+    if (process.env.VPLC_TRACE === "1") console.log(`[trace] client connected from ${socket.remoteAddress}:${socket.remotePort}`);
     this.sockets.add(socket);
     const reader = new FrameReader();
     socket.on("data", (chunk) =>
       reader.push(chunk, (f) => {
         const response = this.handle(f);
+        if (process.env.VPLC_TRACE === "1" && traceCount < 120) {
+          traceCount++;
+          console.log(`[trace] ${socket.remotePort} req ${f.toString("hex")} -> ${response ? response.toString("hex") : "(none)"}`);
+        }
         if (response) socket.write(response);
       }),
     );

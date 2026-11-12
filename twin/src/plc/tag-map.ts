@@ -511,3 +511,72 @@ export function coilTable(): RegisterDef[] {
     { address: COIL.SIM_LOCAL_JOG, name: "Sim.LocalJog", access: "RW", unit: "pulse", description: "SIMULATION ONLY: local panel JOG push-button." },
   ];
 }
+
+// ---------------------------------------------------------------------------
+// Holding registers — external plant field I/O (460..499). VIRTUAL PLC ONLY.
+// A 3D plant simulator (ProtoTwin) owns the presence sensors and reads the
+// field outputs, one register per point (0/1), so a Modbus client can map each
+// point to one signal. Not part of the Micro850 map: the real PLC reads these
+// points from wiring (docs/prototype/prototwin.md).
+// ---------------------------------------------------------------------------
+
+/** Stations with a presence sensor, in belt order. Index i ↔ PLANT.INPUT_BASE + i. */
+export const PLANT_SENSOR_STATIONS = ["SCAN", "BAY-1", "BAY-2", "CAP", "PRESS", "QC", "GATE", "SORT"] as const;
+/** Stations with a stopper, in belt order. Index i ↔ PLANT.STOPPER_BASE + i. */
+export const PLANT_STOPPER_STATIONS = ["SCAN", "BAY-1", "BAY-2", "CAP", "PRESS", "QC", "GATE"] as const;
+
+export const PLANT = {
+  /** RW. 1 = the external plant owns the presence sensors (and loads the cans). */
+  MODE: 460,
+  /** RW. Presence sensors, one register each: SCAN, BAY-1, BAY-2, CAP, PRESS, QC, GATE, SORT (461..468). */
+  INPUT_BASE: 461,
+  /** RW. bit i = the plant provides sensor PLANT_SENSOR_STATIONS[i]. 0 is read as "all" (0xFF). */
+  SENSOR_MASK: 470,
+  /** R. Field outputs, one register each (480..489). */
+  BELT_RUN: 480,
+  VALVE_T1_OPEN: 481,
+  VALVE_T2_OPEN: 482,
+  QR_REJECT_EXTEND: 483,
+  LID_PRESS_EXTEND: 484,
+  REJECT_DIVERTER_EXTEND: 485,
+  SORT_DIVERTER_LANE_B: 486,
+  STACK_GREEN: 487,
+  STACK_AMBER: 488,
+  STACK_RED: 489,
+  /** R. Stoppers, one register each, 1 = retracted (release): SCAN, BAY-1, BAY-2, CAP, PRESS, QC, GATE (490..496). */
+  STOPPER_BASE: 490,
+  /** R. Robotic arm motion for animation: 0 idle, 1 HOME, 2 PICK_LID, 3 PLACE_LID. */
+  ARM_MOTION: 497,
+  /** R. Can id the line is holding at SCAN, 0 = none (so the plant can label its cans). */
+  SCAN_CONTAINER_ID: 498,
+} as const;
+export const PLANT_BLOCK = { start: 460, length: 40 };
+
+export function plantTable(): RegisterDef[] {
+  const rows: RegisterDef[] = [
+    { address: PLANT.MODE, name: "Plant.Mode", access: "RW", unit: "0/1", description: "1 = the external plant (ProtoTwin) owns the presence sensors and loads the cans; the virtual PLC stops its own feed timer and waits for each sensor." },
+  ];
+  PLANT_SENSOR_STATIONS.forEach((id, i) =>
+    rows.push({ address: PLANT.INPUT_BASE + i, name: `Plant.${id.replace("-", "")}_Present`, access: "RW", unit: "0/1", description: `Presence sensor at ${id} (I_${id.replace("-", "")}_Present on the Micro850). Written by the plant.` }),
+  );
+  rows.push({ address: PLANT.SENSOR_MASK, name: "Plant.SensorMask", access: "RW", unit: "bits", description: "bit i = the plant models sensor i (order as above). Stations whose bit is 0 keep the twin's travel timer. 0 = all sensors." });
+  const outs: Array<[number, string, string]> = [
+    [PLANT.BELT_RUN, "O_Belt_Run", "Conveyor running."],
+    [PLANT.VALVE_T1_OPEN, "O_Valve_T1_Open", "Tank T1 valve open (dispensing at BAY-1)."],
+    [PLANT.VALVE_T2_OPEN, "O_Valve_T2_Open", "Tank T2 valve open (dispensing at BAY-2)."],
+    [PLANT.QR_REJECT_EXTEND, "O_QrReject_Extend", "Scan-gate ejector out (bad QR), held 1 s."],
+    [PLANT.LID_PRESS_EXTEND, "O_LidPress_Extend", "Lid-press cylinder down."],
+    [PLANT.REJECT_DIVERTER_EXTEND, "O_RejectDiverter_Extend", "Fill-reject pusher out, held 1 s."],
+    [PLANT.SORT_DIVERTER_LANE_B, "O_SortDiverter_LaneB", "Sort gate set to Lane 2 for the next can."],
+    [PLANT.STACK_GREEN, "O_Stack_Green", "Running."],
+    [PLANT.STACK_AMBER, "O_Stack_Amber", "Stopped or reset required."],
+    [PLANT.STACK_RED, "O_Stack_Red", "E-Stop or latched fault."],
+  ];
+  for (const [address, tag, d] of outs) rows.push({ address, name: `Plant.${tag}`, access: "R", unit: "0/1", description: d });
+  PLANT_STOPPER_STATIONS.forEach((id, i) =>
+    rows.push({ address: PLANT.STOPPER_BASE + i, name: `Plant.O_${id.replace("-", "")}_Stopper`, access: "R", unit: "0/1", description: `Stopper at ${id}: 1 = retracted (can passes), 0 = extended (can held).` }),
+  );
+  rows.push({ address: PLANT.ARM_MOTION, name: "Plant.ArmMotion", access: "R", unit: "code", description: "Arm move in progress: 0 idle, 1 HOME, 2 PICK_LID, 3 PLACE_LID." });
+  rows.push({ address: PLANT.SCAN_CONTAINER_ID, name: "Plant.ScanContainerId", access: "R", unit: "id", description: "Container id held at SCAN, 0 = none." });
+  return rows;
+}
