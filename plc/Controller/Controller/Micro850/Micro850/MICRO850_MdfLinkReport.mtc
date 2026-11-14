@@ -5,12 +5,19 @@ ON_LINE=N
 TBL_CONF=Y
 CRC_ORG=0x0
 CRC_OLD=
-CRC_NEW=0x221D1C8D
+CRC_NEW=0x525EDD8A
 DAT_ORG=0
 DAT_OLD=0
+<<<<<<< Updated upstream:plc/Controller/Controller/Micro850/Micro850/MICRO850_MdfLinkReport.mtc
 DAT_NEW=1794613827
 VER_ORG=0
 VER_OLD=0
 VER_NEW=13
+=======
+DAT_NEW=1794531965
+VER_ORG=0
+VER_OLD=0
+VER_NEW=15
+>>>>>>> Stashed changes:plc/Controller/Controller/Micro850/Micro850/MICRO850_MdfLinkReport.s.mtc
 CRC_ALL_OLD=
-CRC_ALL_NEW=0xDA9A48DE
+CRC_ALL_NEW=0x3CAFED19
