@@ -85,7 +85,7 @@ function checkBench() {
   cont("TankEnabled")[1] = true;
   p.scan(50);
   if (p.g("_IO_P2_AO_00") !== 800 || p.g("_IO_P2_AO_01") !== 0) fail(`slot 2 angles ${_IO(p)} with AoFullScale 1000`);
-  if (p.g("_IO_P3_AO_00") !== 0 || p.g("_IO_P3_AO_01") !== 0) fail("slot 3 was not held at 0");
+  if (p.g("_IO_P3_AI_00") !== 0 || p.g("_IO_P3_AI_01") !== 0) fail("slot 3 inputs were written");
   p.s("AoFullScale", 0);
   p.scan(60);
   if (p.g("_IO_P2_AO_00") !== 0) fail("AoFullScale 0 did not close the valve");

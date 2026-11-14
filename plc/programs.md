@@ -72,7 +72,7 @@ Two of them are best guesses until Prog1 records its own events:
 ## Still not done
 
 - **Presence eyes in test mode.** `S00_Inputs` drives the safety, key-switch and panel points from `MB_Sim` and coils 8–11 while `SimInputs` is on, so the line can run with the safety relay open. The eyes are still the wired inputs. A bench with no sensors needs those eyes synthesized (spec §9, 0.5 s after a station is waiting), and a stand-in scanner and station node when `ScannerNodeFitted` or `StationNodeFitted` is FALSE.
-- **`AoFullScale`.** `S05_Stations` already scales the slot-2 valve channels. The count stays 0, and both channels stay 0, until it is read from the slot-2 OF2 configuration page. Do not guess it. Slot 3 is a second 2080-OF2; `S05_Stations` writes 0 to both of its channels.
+- **`AoFullScale`.** `S05_Stations` already scales the slot-2 valve channels. The count stays 0, and both channels stay 0, until it is read from the slot-2 OF2 configuration page. Do not guess it. Slot 3 is a 2080-IF2 (`_IO_P3_AI_00`, `_IO_P3_AI_01`) and is not read.
 
 ## Tests
 

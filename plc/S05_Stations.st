@@ -326,7 +326,7 @@ RelPress := StopRel[5]; RelQC := StopRel[6]; RelGate := StopRel[7];
 (* Slot 2 is the valve 2080-OF2. Prog1 writes 0 to both channels earlier in
    the scan; this write is the one that stays. AoFullScale is the raw count
    at 100% from that module's configuration page. Leave it 0 until then.
-   Slot 3 is a second 2080-OF2 with nothing assigned, so both channels stay 0.
+   Slot 3 is a 2080-IF2. Its points are inputs, so this program does not write them.
    SimInputs forces the angles to 0. A stopped line already clears Valve*Cmd. *)
 AoOut := 0;
 IF AoFullScale > 0 AND NOT SimInputs THEN
@@ -334,5 +334,3 @@ IF AoFullScale > 0 AND NOT SimInputs THEN
 END_IF;
 IF Valve1Cmd THEN _IO_P2_AO_00 := AoOut; ELSE _IO_P2_AO_00 := 0; END_IF;
 IF Valve2Cmd THEN _IO_P2_AO_01 := AoOut; ELSE _IO_P2_AO_01 := 0; END_IF;
-_IO_P3_AO_00 := 0;
-_IO_P3_AO_01 := 0;

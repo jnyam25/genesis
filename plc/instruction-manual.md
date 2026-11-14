@@ -20,7 +20,7 @@ Read [docs/prototype/safety.md](../docs/prototype/safety.md) before downloading 
 | Item | Requirement |
 | --- | --- |
 | CCW Standard | **20.01 or later.** An L50E will not take an older project. Free from Rockwell's Product Compatibility and Download Center; a free Rockwell account, no activation. Do not buy CCW Developer Edition. |
-| Controller | 2080-L50E-24QBB, already owned: 14 DC inputs, 10 sourcing DC outputs, **3 plug-in slots** (2080-series only), 4 expansion slots (2085-series only). Fitted plug-ins, nearest the controller first: **2080-IF2**, **2080-OF2**, **2080-OF2**. In CCW, keep that catalog and set the major revision to the firmware CCW shows when you connect. Update firmware from CCW only when the project needs a newer revision. |
+| Controller | 2080-L50E-24QBB, already owned: 14 DC inputs, 10 sourcing DC outputs, **3 plug-in slots** (2080-series only), 4 expansion slots (2085-series only). Fitted plug-ins, nearest the controller first: **2080-IF2**, **2080-OF2**, **2080-IF2**. In CCW, keep that catalog and set the major revision to the firmware CCW shows when you connect. Update firmware from CCW only when the project needs a newer revision. |
 | This repo | The specification, the register map, and this folder. |
 | Engineering PC | Static address `192.168.10.50` on the control network ([communication.md](../docs/prototype/communication.md)). USB is enough for the first download. |
 
@@ -45,7 +45,7 @@ plc/
 5. Open `Prog1`. It is the Genesis ladder: S00 inputs, S01 safety and run, S02 commands and jog, S06 field outputs. Leave those rungs. Station machines, the barcode parser, the arm sequencer, and publish are the structured-text programs in §6. If the editor shows three rungs (AND, OR, XOR on `_IO_EM_DI_00` and `_IO_EM_DI_01`), the project database still has the lab copy. Close without saving, so that save does not write the lab rungs back over `Prog1.stf`.
 6. Plug-in slots on this controller take **2080-series** modules only. Expansion slots take **2085-series** modules only. This 24-point controller has three plug-in slots and four expansion slots.
 
-   The controller graphic already has the three fitted plug-ins, nearest the controller first: slot 1 **2080-IF2**, slot 2 **2080-OF2**, slot 3 **2080-OF2**. Leave that order. Slot 2 is the valve module. Slot 3 is a second output module; `S05_Stations` holds both of its channels at 0. The IF2 is not read.
+   The controller graphic already has the three fitted plug-ins, nearest the controller first: slot 1 **2080-IF2**, slot 2 **2080-OF2**, slot 3 **2080-IF2**. Leave that order. Slot 2 is the valve module. Slot 3 is a second input module; nothing reads `_IO_P3_AI_00` or `_IO_P3_AI_01`. Neither IF2 is read.
 
    Extra digital points use expansion modules. Add a **2085-IQ16** as expansion module 1 and a **2085-OB16** as expansion module 2 when those modules are on the controller. One 2085 module is inputs or outputs, so both are required. The ladder addresses the first as `_IO_X1_` and the second as `_IO_X2_`. After CCW creates them, confirm those names. If the prefix is different, change the contacts to match. Those two catalogs are not readable on the controller in front of you, so leave the expansion slots empty until they are. Belt speed stays one of the two PWM outputs or the drive's own knob unless you add a second analog channel.
 
@@ -64,7 +64,7 @@ In the Project Organizer, open the controller. These pages match the open projec
 | Embedded I/O | Every input filter is **Default**. No input latch is enabled. EII edge stays **Falling** and stays gray while the latch is off | Leave it. |
 | Data Log | No data sets | Leave empty. |
 | Recipe | No recipes | Leave empty. |
-| Plug-in Modules | Slot 1 **2080-IF2**, slot 2 **2080-OF2**, slot 3 **2080-OF2** | Leave that order. Plug-in slots take 2080-series modules only. |
+| Plug-in Modules | Slot 1 **2080-IF2**, slot 2 **2080-OF2**, slot 3 **2080-IF2** | Leave that order. Plug-in slots take 2080-series modules only. |
 | Expansion Modules | All four slots available | Leave empty until a 2085-IQ16 and a 2085-OB16 are on the controller. |
 
 Controller password: set one, so a download or upload needs it.
@@ -253,7 +253,7 @@ Analog. CCW creates the plug-in points. Do not add user variables with those nam
 | --- | --- | --- | --- |
 | 1 | 2080-IF2 | `_IO_P1_AI_00`, `_IO_P1_AI_01` | Not read. Leave them until a transmitter is wired. |
 | 2 | 2080-OF2 | `_IO_P2_AO_00`, `_IO_P2_AO_01` | Valve angles. `S05_Stations` writes `TankValveOpeningPct` × `AoFullScale` / 100 while that tank is dispensing, otherwise 0. |
-| 3 | 2080-OF2 | `_IO_P3_AO_00`, `_IO_P3_AO_01` | Nothing assigned. `S05_Stations` writes **0** to both channels every scan. |
+| 3 | 2080-IF2 | `_IO_P3_AI_00`, `_IO_P3_AI_01` | Not read. Leave them until a transmitter is wired. |
 
 The two digital shutoffs stay on `_IO_EM_DO_02` and `_IO_EM_DO_03`. The expansion stand-ins `X1_DI_00` through `X1_DI_09` and `X2_DO_00` through `X2_DO_09` stay too. Those points are the 2085 modules, which are not on this controller.
 
@@ -335,7 +335,7 @@ That is commissioning stages 4 through 6, not this download.
 
 - [ ] Solution saved under `plc/` and it opens from `genesis.ccwsln` on a second try.
 - [ ] Controller catalog 2080-L50E-24QBB, revision matched to the connected firmware.
-- [ ] Plug-in slots, nearest the controller first: **2080-IF2**, **2080-OF2**, **2080-OF2**. No 2085 module in a plug-in slot. Expansion slots still empty.
+- [ ] Plug-in slots, nearest the controller first: **2080-IF2**, **2080-OF2**, **2080-IF2**. No 2085 module in a plug-in slot. Expansion slots still empty.
 - [ ] Serial, interrupts, embedded input filters, data log, and recipe left as in §4.
 - [ ] IP `192.168.10.10`, Modbus TCP enabled, controller password set.
 - [ ] Nine `MB_*` arrays mapped at the addresses in §7, and no other variables mapped.

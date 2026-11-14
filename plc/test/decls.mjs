@@ -162,8 +162,8 @@ export function prog1Vars(prog1Text) {
   out.push(["MB_CMD", "ARRAY[0..15] OF BOOL", false]);
   // embedded presence inputs and the 2085 stand-ins Prog1 does not read
   for (let i = 7; i <= 13; i++) out.push([`_IO_EM_DI_${String(i).padStart(2, "0")}`, "BOOL", false]);
-  // slot 3 is a second 2080-OF2; Prog1 does not write it
-  out.push(["_IO_P3_AO_00", "INT", 0]);
-  out.push(["_IO_P3_AO_01", "INT", 0]);
+  // slot 3 is a 2080-IF2; the programs do not read it
+  out.push(["_IO_P3_AI_00", "INT", 0]);
+  out.push(["_IO_P3_AI_01", "INT", 0]);
   return out;
 }
