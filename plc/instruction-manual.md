@@ -20,7 +20,7 @@ Read [docs/prototype/safety.md](../docs/prototype/safety.md) before downloading 
 | Item | Requirement |
 | --- | --- |
 | CCW Standard | **20.01 or later.** An L50E will not take an older project. Free from Rockwell's Product Compatibility and Download Center; a free Rockwell account, no activation. Do not buy CCW Developer Edition. |
-| Controller | 2080-L50E-24QBB, already owned: 14 DC inputs, 10 sourcing DC outputs, **3 plug-in slots** (2080-series only), 4 expansion slots (2085-series only). Fitted plug-ins, nearest the controller first: **2080-IF2**, **2080-OF2**, **2080-IF2**. In CCW, keep that catalog and set the major revision to the firmware CCW shows when you connect. Update firmware from CCW only when the project needs a newer revision. |
+| Controller | 2080-L50E-24QBB, already owned: 14 DC inputs, 10 sourcing DC outputs, **3 plug-in slots** (2080-series only), 4 expansion slots (2085-series only). Fitted plug-ins, nearest the controller first: **2080-IF2**, **2080-OF2**, **2080-OF2**. In CCW, keep that catalog and set the major revision to the firmware CCW shows when you connect. Update firmware from CCW only when the project needs a newer revision. |
 | This repo | The specification, the register map, and this folder. |
 | Engineering PC | Static address `192.168.10.50` on the control network ([communication.md](../docs/prototype/communication.md)). USB is enough for the first download. |
 
@@ -42,10 +42,10 @@ plc/
 2. On the start page, choose **Open Existing**.
 3. Open `plc/genesis.ccwsln`. The `Controller` folder has to sit next to that file. CCW refuses a solution file that was copied without it.
 4. The project opens as catalog **2080-L50E-24QBB**, firmware **22.100**. Leave that catalog. If the connected controller reports a different firmware revision, set the project revision to match before you download.
-5. Open `Prog1`. It is the Genesis ladder: S00 inputs, S01 safety and run, S02 commands and jog, S06 field outputs. Leave those rungs. Station machines, the barcode parser, the arm sequencer, and publish are still the programs in §6. If the editor shows three rungs (AND, OR, XOR on `_IO_EM_DI_00` and `_IO_EM_DI_01`), the project database still has the lab copy. Close without saving, so that save does not write the lab rungs back over `Prog1.stf`.
+5. Open `Prog1`. It is the Genesis ladder: S00 inputs, S01 safety and run, S02 commands and jog, S06 field outputs. Leave those rungs. Station machines, the barcode parser, the arm sequencer, and publish are the structured-text programs in §6. If the editor shows three rungs (AND, OR, XOR on `_IO_EM_DI_00` and `_IO_EM_DI_01`), the project database still has the lab copy. Close without saving, so that save does not write the lab rungs back over `Prog1.stf`.
 6. Plug-in slots on this controller take **2080-series** modules only. Expansion slots take **2085-series** modules only. This 24-point controller has three plug-in slots and four expansion slots.
 
-   The controller graphic already has the three fitted plug-ins, nearest the controller first: slot 1 **2080-IF2**, slot 2 **2080-OF2**, slot 3 **2080-IF2**. Leave that order. `Prog1` writes 0 to both OF2 channels every scan. Neither IF2 is read.
+   The controller graphic already has the three fitted plug-ins, nearest the controller first: slot 1 **2080-IF2**, slot 2 **2080-OF2**, slot 3 **2080-OF2**. Leave that order. Slot 2 is the valve module. Slot 3 is a second output module; `S05_Stations` holds both of its channels at 0. The IF2 is not read.
 
    Extra digital points use expansion modules. Add a **2085-IQ16** as expansion module 1 and a **2085-OB16** as expansion module 2 when those modules are on the controller. One 2085 module is inputs or outputs, so both are required. The ladder addresses the first as `_IO_X1_` and the second as `_IO_X2_`. After CCW creates them, confirm those names. If the prefix is different, change the contacts to match. Those two catalogs are not readable on the controller in front of you, so leave the expansion slots empty until they are. Belt speed stays one of the two PWM outputs or the drive's own knob unless you add a second analog channel.
 
@@ -64,7 +64,7 @@ In the Project Organizer, open the controller. These pages match the open projec
 | Embedded I/O | Every input filter is **Default**. No input latch is enabled. EII edge stays **Falling** and stays gray while the latch is off | Leave it. |
 | Data Log | No data sets | Leave empty. |
 | Recipe | No recipes | Leave empty. |
-| Plug-in Modules | Slot 1 **2080-IF2**, slot 2 **2080-OF2**, slot 3 **2080-IF2** | Leave that order. Plug-in slots take 2080-series modules only. |
+| Plug-in Modules | Slot 1 **2080-IF2**, slot 2 **2080-OF2**, slot 3 **2080-OF2** | Leave that order. Plug-in slots take 2080-series modules only. |
 | Expansion Modules | All four slots available | Leave empty until a 2085-IQ16 and a 2085-OB16 are on the controller. |
 
 Controller password: set one, so a download or upload needs it.
@@ -93,101 +93,15 @@ The nine `MB_` arrays are already in Global Variables. Do not add them again. On
 
 Only these arrays are mapped. Everything else stays a named variable.
 
-Constants, from `twin/src/config.ts`. Change them in the PLC and in `config.ts` together.
-
-| Name | Type | Value |
-| --- | --- | --- |
-| `ProtocolVersion` | `UINT` | 4 |
-| `MaxConcurrent` | `UINT` | 4 |
-| `SensorWaitTimeout` | `TIME` | `T#6s` |
-| `StationNodeTimeout` | `TIME` | `T#15s` |
-| `DispenseVariance` | `REAL` | 0.02 |
-| `SmallBottleMaxMl` | `UINT` | 250 |
-| `HeightLaneAMm` | `UINT` | 120 |
-| `HeightLaneBMm` | `UINT` | 180 |
-| `HeightToleranceMm` | `UINT` | 15 |
-| `BeltSpeedMPerSec` | `REAL` | 0.20 |
-| `RemoteResetAllowed` | `BOOL` | FALSE |
-| `ScannerNodeFitted` | `BOOL` | TRUE when ESP32 #1 is on the line, else FALSE |
-| `StationNodeFitted` | `BOOL` | TRUE when ESP32 #2 is on the line, else FALSE |
-| `TankCapacityMl` | `UINT` | 5000, both tanks, until you measure them |
-| `TankRefillThresholdMl` | `UINT` | 800 |
-| `TankRateMlPerS_x10` | `UINT` | 250 (25.0 ml/s) |
-| `TankValveOpeningPct` | `UINT` | 80 |
-
-State. Initial values are the power-up state; `S00` also clears them on `_SYSVA_FIRST_SCAN`.
-
-| Name | Type | Initial | Meaning |
-| --- | --- | --- | --- |
-| `RunCmd` | `BOOL` | FALSE | Latched run request. `Running` is this plus safety. |
-| `DigitalEStop` | `BOOL` | FALSE | HMI E-Stop latch. |
-| `PhysicalMask` | `UINT` | 0 | bit0 line start, bit1 line end. 1 = pressed. |
-| `EStopActive` | `BOOL` | FALSE | Digital or any physical E-Stop. |
-| `SafetyOK` | `BOOL` | FALSE | `I_Safety_OK`, or the simulated equivalent. |
-| `LocalMode` | `BOOL` | FALSE | 1 = LOCAL. |
-| `ResetRequired` | `BOOL` | FALSE | Not in E-Stop, and the safety relay is open. |
-| `Running` | `BOOL` | FALSE | `RunCmd AND SafetyOK AND NOT EStopActive`. |
-| `SimInputs` | `BOOL` | FALSE | Test mode. Off after every power-up. |
-| `HmiLinkOk` | `BOOL` | FALSE | `MB_Sys[13]` changed within 3 s. Alarm only. |
-| `ActiveContainers` | `UINT` | 0 | Containers on the belt. |
-| `NextContId` | `UINT` | 1 | Next container id. Skip 0. |
-
-Per container, index `0..7`:
-
-| Name | Type |
-| --- | --- |
-| `ContId` | `ARRAY[0..7] OF UINT` |
-| `ContStatus` | `ARRAY[0..7] OF UINT` |
-| `ContStation` | `ARRAY[0..7] OF UINT` |
-| `ContLane` | `ARRAY[0..7] OF UINT` |
-| `ContParseResult` | `ARRAY[0..7] OF UINT` |
-| `ContRejectReason` | `ARRAY[0..7] OF UINT` |
-| `ContManualReject` | `ARRAY[0..7] OF BOOL` |
-| `ContFillMl_x10` | `ARRAY[0..7] OF UINT` |
-| `ContTargetMl_x10` | `ARRAY[0..7] OF UINT` |
-| `ContVolumeMl` | `ARRAY[0..7, 1..2] OF UINT` |
-| `ContStepTimer` | `ARRAY[0..7] OF RTO` |
-
-Per tank, index `1..2` (registers 20–31). Container tracking still has eight slots:
-
-| Name | Type | Initial |
-| --- | --- | --- |
-| `TankEnabled` | `ARRAY[1..2] OF BOOL` | TRUE |
-| `TankLow` | `ARRAY[1..2] OF BOOL` | FALSE |
-| `TankLevelMl_x10` | `ARRAY[1..2] OF UDINT` | capacity × 10 on first scan |
-| `TankEnableMaskCopy` | `UINT` | 3 (both tanks) |
-
-Arm and faults:
-
-| Name | Type | Initial |
-| --- | --- | --- |
-| `ArmSeq` | `UINT` | 0. Not retained. |
-| `ArmPending` | `BOOL` | FALSE |
-| `ArmPendingCmd` | `UINT` | 0 |
-| `ArmPendingTarget` | `UINT` | 0 |
-| `ArmNeedHome` | `BOOL` | TRUE |
-| `ArmPickFailures` | `UINT` | 0 |
-| `CapOutcomeId` | `UINT` | 0 |
-| `CapOutcome` | `UINT` | 0 (1 capped, 2 failed) |
-| `FaultCode` | `UINT` | 0 |
-| `FaultLatched` | `ARRAY[1..8] OF BOOL` | FALSE |
-| `FaultSet` | `BOOL` | FALSE | One scan. S04 sets it when any `FaultLatched` bit is true. |
-| `FaultHold` | `BOOL` | FALSE | Sealed in `Prog1`. RESET or first scan clears it. |
-| `NodeHbLast` | `ARRAY[1..2] OF UINT` | 0 |
-| `NodeHbTimer` | `ARRAY[1..2] OF TON` | |
-| `PublishTimer` | `TON` | 100 ms publish tick |
-| `HmiHbTimer` | `TON` | 3 s HMI link |
-| `JogTimer` | `TON` | remote jog, 0.5 s. `Prog1` uses this instance. |
-| `TON_BuzzOn` | `TON` | buzzer on half, 400 ms |
-| `TON_BuzzOff` | `TON` | buzzer off half, 400 ms |
+The variables `Prog1` uses are already in this project's global variable table (the list below). The station programs need 212 more: constants, the container slots, the tank, arm and fault state, and their timers. Add them from [`variables.csv`](variables.csv); [programs.md](programs.md#global-variables) lists the same rows with notes. The constants in it come from `twin/src/config.ts`; change them in the PLC and in `config.ts` together. Leave **Retained** clear on every one. On first scan each program sets its own state back to power-up values, and `ArmNeedHome` starts TRUE.
 
 Field inputs and outputs are `BOOL` globals. Create one per row in §8. Do not give them Modbus addresses.
 
 Rising-edge memory is `BOOL`, initial FALSE. `Prog1` uses `PrevLocalMode`, `PrevLocalStart`, `PrevRemoteStart`, `PrevRelease`, `PrevReset`, and `PrevJog`.
 
-Those variables are already in this project's global variable table, with **Retained** clear. A rung comment that is only `S00`, `S02`, `S06`, or `S07` is a CCW label, so each one in `Prog1` now has the rung number on it (`S07_267`). The first-scan bit in the ladder is `__SYSVA_FIRST_SCAN`.
+The `Prog1` variables are already in this project's global variable table, with **Retained** clear. A rung comment that is only `S00`, `S02`, `S06`, or `S07` is a CCW label, so each one in `Prog1` now has the rung number on it (`S07_267`). The first-scan bit in the ladder is `__SYSVA_FIRST_SCAN`.
 
-`Prog1` also needs these `BOOL` variables, all initial FALSE: `EntryPressed`, `ExitPressed`, `SortPresent`, `LaneAFull`, `LaneBFull`, `RejectFull`, `RejectHome`, `SortHome`, `ModeChanged`, `LocalStartRise`, `RemoteStartRise`, `StartPulse`, `ReleasePulse`, `ResetPulse`, `JogLocal`, `JogPulse`, `JogHold`, `JogBelt`, `Flash`, `Valve1Cmd`, `Valve2Cmd`, `QrRejectCmd`, `LidPressCmd`, `RejectCmd`, `SortLaneBCmd`, `RelScan`, `RelBay1`, `RelBay2`, `RelCap`, `RelPress`, `RelQC`, `RelGate`, `PublishRail`, `HbAtMax`, `MaskEmpty`. The station bits stay FALSE until S04 and S05 set them, so the valves, diverters, and stoppers stay off. `S00` copies the tank-low floats into `TankLow[1]` and `TankLow[2]`.
+`Prog1` also needs these `BOOL` variables, all initial FALSE: `EntryPressed`, `ExitPressed`, `SortPresent`, `LaneAFull`, `LaneBFull`, `RejectFull`, `RejectHome`, `SortHome`, `ModeChanged`, `LocalStartRise`, `RemoteStartRise`, `StartPulse`, `ReleasePulse`, `ResetPulse`, `JogLocal`, `JogPulse`, `JogHold`, `JogBelt`, `Flash`, `Valve1Cmd`, `Valve2Cmd`, `QrRejectCmd`, `LidPressCmd`, `RejectCmd`, `SortLaneBCmd`, `RelScan`, `RelBay1`, `RelBay2`, `RelCap`, `RelPress`, `RelQC`, `RelGate`, `PublishRail`, `HbAtMax`, `MaskEmpty`. The station bits stay FALSE until `S05_Stations` sets them, so the valves, diverters, and stoppers stay off. `Prog1` copies the tank-low floats into `TankLow[1]` and `TankLow[2]`.
 
 The bottom of `Prog1` is what the bridge, the HMI and FUXA read. These are already in the variable table:
 
@@ -200,32 +114,31 @@ The bottom of `Prog1` is what the bridge, the HMI and FUXA read. These are alrea
 | `Pm` / `PmNext` | `UINT` | 0 | Built into `MB_Sys[16]` (`Sys.PhysicalEStopMask`). Bit0 is the line-start E-Stop, bit1 the line-end E-Stop. |
 | `TON_Publish` | `TON` | | 100 ms publish tick. |
 
-`MB_Sys[3]` is published as 2 (two tanks). `MB_Sys[4]` is set to 3 (both tanks enabled) only while it is still 0, so an HMI mask write is kept. `MB_Station[0]` (`Station.RunPermit`) is 1 only while `Running` is true and `SimInputs` is false. Counts, OEE, containers and the event ring stay 0 until `S03` through `S07` exist. `Cmd.FirePusher` and `Cmd.Reset` are cleared and not acted on: remote reset stays off, and the reject pusher waits for the station program.
+`Prog1` publishes `MB_Sys[3]` as 2 and sets `MB_Sys[4]` to 3 while it is still 0; `S07_Publish` then overwrites both with the enabled tanks every scan, and `S00_Inputs` handles HMI mask writes before `Prog1` sees them. `MB_Station[0]` (`Station.RunPermit`) is 1 only while `Running` is true and `SimInputs` is false. Counts, OEE, containers and the event ring come from the station programs (§6). `Prog1` clears `Cmd.FirePusher` and `Cmd.Reset`; `S00_Inputs` reads `Cmd.FirePusher` first. Remote reset stays off.
 
 Counts (`Accepted`, `Rejected`, `Total`, `LaneA`, `LaneB`) are `UINT`.
 
 ## 6. Add the remaining programs
 
-`Prog1` already runs S00, S01, S02, and the S06 output map, in that rung order. Do not paste a second copy of that logic into new programs. Add the four programs that are not in the ladder. The controller runs programs from top to bottom of the Project Organizer, once per scan, and `Prog1` is already first. A station bit written after `Prog1` moves its output on the next scan.
+`Prog1` already runs S00 through S02 and the S06 output map. The other five programs are written: paste them, do not write them from the specification. [programs.md](programs.md) is the full procedure, with the variable list, how the programs connect, and where they differ from the twin.
 
-For each name below:
+1. Add the 212 variables in [`variables.csv`](variables.csv) to Global Variables, with **Retained** clear.
+2. For each program, right-click **Programs → Add → New ST**, rename it to the name below, and paste its `.st` file.
+3. Drag them until the organizer is `S00_Inputs`, `Prog1`, `S03_Admission`, `S04_Supervisor`, `S05_Stations`, `S07_Publish`.
 
-1. Right-click **Programs → Add → New ST**.
-2. Rename the new program to the name in the table. CCW's default name is not the Genesis name.
-3. Drag it until the organizer is `Prog1`, then `S03_Admission`, `S04_Supervisor`, `S05_Stations`, `S07_Publish`.
+| Program | File | Runs |
+| --- | --- | --- |
+| `S00_Inputs` | [`S00_Inputs.st`](S00_Inputs.st) | **Above Prog1**, because Prog1 clears the command coils and defaults the tank mask. 100 ms time base, presence debounce, `Cmd.FirePusher`, tank mask, tank levels. |
+| `S03_Admission` | [`S03_Admission.st`](S03_Admission.st) | A can on the SCAN eye becomes a container when the line runs, a slot is free, `ActiveContainers < MaxConcurrent`, SCAN is free, no lane is full, and no enabled tank is low. |
+| `S04_Supervisor` | [`S04_Supervisor.st`](S04_Supervisor.st) | Fault latch (§6a), arm sequencer, barcode check, height check. Holds `FaultSet` TRUE while a fault is latched, so `Prog1` seals `FaultHold`. |
+| `S05_Stations` | [`S05_Stations.st`](S05_Stations.st) | The station machines (§4). Sets `Valve1Cmd`, `Valve2Cmd`, `QrRejectCmd`, `LidPressCmd`, `RejectCmd`, `SortLaneBCmd`, and the `Rel*` bits. |
+| `S07_Publish` | [`S07_Publish.st`](S07_Publish.st) | Event ring, counts, OEE, throughput, tank block, container table. |
 
-| Program | Write this from the specification |
-| --- | --- |
-| `S03_Admission` | §4, admission. A new container starts at **SCAN** (`I_Scan_Present` rising), not at a labeler. Refuse a new container when the line is stopped, no slot is free, `ActiveContainers >= MaxConcurrent`, a lane is full, or the tanks that label needs are low. |
-| `S04_Supervisor` | §6a, §4a, §4b, §4c, in that order. Set `FaultSet` for one scan when a fault is new; `Prog1` seals `FaultHold`. Then the barcode parser, the arm sequencer, and the height classification. The structured-text parser in §4a is the one to paste; it was checked against `barcode.ts`. |
-| `S05_Stations` | §4. Station order: SCAN, BAY-1, BAY-2, CAP, PRESS, QC, GATE, SORT. A bad QR is ejected at the scan gate and never reaches a valve. Acquire the next station before releasing the previous one. Set `Valve1Cmd`, `Valve2Cmd`, `QrRejectCmd`, `LidPressCmd`, `RejectCmd`, `SortLaneBCmd`, and the `Rel*` bits. `Prog1` copies those bits to the outputs. |
-| `S07_Publish` | §8. Gated by `PublishTimer` at `T#100ms`, self-resetting. Heartbeat wraps 65535 → 0. Then copy published values into `MB_*`. Do not write the registers the nodes own (specification §2, "Who writes what"). |
-
-`S04` has to run before `S05` in the same scan, so the station machines see this scan's barcode, arm, and height results. S00 through S02 and the S06 output map stay in `Prog1`. S00 in the specification still has to copy node and bridge writes out of `MB_*`, debounce the presence inputs, and on first scan clear run state, reset every `ContStepTimer`, set `ArmNeedHome`, and set both tank levels to capacity. That copy and the first-scan housekeeping are not in the ladder yet. Add them at the top of `S03_Admission` until you split `Prog1` inside CCW.
+`node plc/test/run.mjs` runs these files and Prog1's compiled ladder on a simulated belt beside the virtual PLC. Run it after any change to a `.st` file.
 
 Build after the variables exist, and again after each program (**Build** on the toolbar, or the Build command in the menu). Fix that program before starting the next. A clean build has no errors in the Output window.
 
-CCW evaluates both sides of `AND` and `OR`. The barcode parser's extra array elements are there so a guarded index is still in range. Keep them.
+CCW evaluates both sides of `AND` and `OR`. The barcode parser's extra array elements are there so a guarded index is still in range, and every other index guard in these programs is a nested `IF` for the same reason. Keep them.
 
 ## 7. Modbus mapping
 
@@ -259,6 +172,8 @@ Coils the bridge and the simulator use:
 | 5 | `Cmd.Stop` | HMI, any mode. The hardwired STOP is separate and wins too |
 | 6 | `Cmd.Reset` | HMI, REMOTE, and only if `RemoteResetAllowed` is TRUE |
 | 8–11 | `Sim.LocalStart/Stop/Reset/Jog` | Simulated panel while `SimInputs` is on |
+| 12 | `Cmd.Tank1Refilled` | Touch panel. Sets tank 1's level to capacity |
+| 13 | `Cmd.Tank2Refilled` | Touch panel. Sets tank 2's level to capacity |
 
 `MB_Sys[1]` is the heartbeat. `MB_Sys[4]` is the tank-enable mask the HMI writes. `MB_Sys[19]` is `FaultCode`. `MB_Scan[4]` is the first barcode word. `MB_Station[3]` is `ArmCmd`. `MB_Cmd[5]` is Stop.
 
@@ -337,20 +252,12 @@ Analog. CCW creates the plug-in points. Do not add user variables with those nam
 | Slot | Module | Points | Program |
 | --- | --- | --- | --- |
 | 1 | 2080-IF2 | `_IO_P1_AI_00`, `_IO_P1_AI_01` | Not read. Leave them until a transmitter is wired. |
-| 2 | 2080-OF2 | `_IO_P2_AO_00`, `_IO_P2_AO_01` | `Prog1` writes **0** to both channels every scan. 0 is the closed signal. |
-| 3 | 2080-IF2 | `_IO_P3_AI_00`, `_IO_P3_AI_01` | Not read. Leave them until a transmitter is wired. |
+| 2 | 2080-OF2 | `_IO_P2_AO_00`, `_IO_P2_AO_01` | Valve angles. `S05_Stations` writes `TankValveOpeningPct` × `AoFullScale` / 100 while that tank is dispensing, otherwise 0. |
+| 3 | 2080-OF2 | `_IO_P3_AO_00`, `_IO_P3_AO_01` | Nothing assigned. `S05_Stations` writes **0** to both channels every scan. |
 
 The two digital shutoffs stay on `_IO_EM_DO_02` and `_IO_EM_DO_03`. The expansion stand-ins `X1_DI_00` through `X1_DI_09` and `X2_DO_00` through `X2_DO_09` stay too. Those points are the 2085 modules, which are not on this controller.
 
-When the OF2 **Configuration** page shows the count for 100%, add these globals, all **Retained** clear:
-
-| Name | Type | Initial | Meaning |
-| --- | --- | --- | --- |
-| `AoFullScale` | `INT` | the 100% count from that page | 0 keeps both angles at 0. Do not guess this count. |
-| `AO_Valve_T1_Angle` | `INT` | 0 | `_IO_P2_AO_00`. `TankValveOpeningPct` × `AoFullScale` / 100 while T1 is dispensing, otherwise 0. |
-| `AO_Valve_T2_Angle` | `INT` | 0 | `_IO_P2_AO_01`, same rule for T2. |
-
-Replace the two rungs that write 0 once those variables exist. `SimInputs` and a stopped line still force both angles to 0.
+`AoFullScale` is already in [`variables.csv`](variables.csv), initial 0. When the slot-2 OF2 **Configuration** page shows the count for 100%, set `AoFullScale` to that count. Do not guess it. Until then both valve channels stay 0. `SimInputs` and a stopped line still force both angles to 0. `Prog1` still writes 0 earlier in the scan; `S05_Stations` overwrites it.
 
 Hardwired START and JOG, if you are not using a touch panel, need two inputs on the 2085-IQ16. The base unit has no spare inputs. LOCAL START and JOG are ignored in REMOTE. Remote jog runs the belt for 0.5 s; local jog runs it only while the button is held.
 
@@ -366,7 +273,7 @@ Typical errors on this program:
 | Array index out of range | The barcode buffer is `ARRAY[0..65]`. Keep the two spare bytes. |
 | Unknown variable | It is missing from Global Variables, or it is still named `UntitledST`. |
 | `RTO` not found | Reset the station timers yourself on first scan and accumulate time only while `Running`. |
-| Program order | `S00` through `S07` top to bottom. `S07` last, so a mask write is seen before the publish copy. |
+| Program order | `S00_Inputs`, `Prog1`, `S03_Admission`, `S04_Supervisor`, `S05_Stations`, `S07_Publish`, top to bottom. `S00_Inputs` above `Prog1`, or the pusher and mask writes are lost. |
 
 Then save. The `.ccwsln` and its folder in `plc/` are the program.
 
@@ -395,12 +302,11 @@ Watch one command in CCW's variable monitor: HMI Stop must set `MB_Cmd[5]` for o
 `SimInputs` is how stage 3 runs the logic with no sensors. Turn it on only when `I_Safety_OK` is 0. While it is on:
 
 - `LineState` bit10 (SIMULATION) is 1.
-- Physical E-Stop and the key switch come from `MB_Sim[0]` and `MB_Sim[1]`.
-- Panel buttons come from coils 8–11.
-- Presence sensors are synthesized (about 0.5 s after a station is waiting).
-- With no ESP32, SCAN is fed `PT1|T250|150,100`, which must parse as result 0, and QC is fed the nominal height of the expected lane.
-- Set `ScannerNodeFitted` and `StationNodeFitted` FALSE for that bench, or a missing heartbeat latches fault 7 or 8 and START is refused.
-- Every field output stays off, including `O_Safety_RemoteEStopOK`.
+- `S00_Inputs` takes the physical E-Stop mask from `MB_Sim[0]`, the key switch from `MB_Sim[1]`, and the panel buttons from coils 8–11. A simulated local RESET closes the simulated safety relay, so the line can run while `I_Safety_OK` on the bench stays 0.
+- Coils 12 and 13 refill tank 1 and tank 2 to capacity.
+- The eyes are still the wired inputs. With no sensors, nothing is admitted until those eyes are synthesized.
+- Set `ScannerNodeFitted` and `StationNodeFitted` FALSE for a bench with no ESP32, or a missing heartbeat latches fault 7 or 8 and START is refused. SCAN and QC still wait for a node unless you write the mailbox yourself.
+- Every field output stays off, including `O_Safety_RemoteEStopOK`. Jog stays off too: Prog1's jog rungs require `SimInputs` to be off.
 
 Labels worth typing into `MB_Scan` before the scanner exists, two characters per word, high byte first:
 
@@ -429,11 +335,12 @@ That is commissioning stages 4 through 6, not this download.
 
 - [ ] Solution saved under `plc/` and it opens from `genesis.ccwsln` on a second try.
 - [ ] Controller catalog 2080-L50E-24QBB, revision matched to the connected firmware.
-- [ ] Plug-in slots, nearest the controller first: **2080-IF2**, **2080-OF2**, **2080-IF2**. No 2085 module in a plug-in slot. Expansion slots still empty.
+- [ ] Plug-in slots, nearest the controller first: **2080-IF2**, **2080-OF2**, **2080-OF2**. No 2085 module in a plug-in slot. Expansion slots still empty.
 - [ ] Serial, interrupts, embedded input filters, data log, and recipe left as in §4.
 - [ ] IP `192.168.10.10`, Modbus TCP enabled, controller password set.
 - [ ] Nine `MB_*` arrays mapped at the addresses in §7, and no other variables mapped.
-- [ ] Programs `S00` through `S07` in that order, build clean.
+- [ ] Programs `S00_Inputs`, `Prog1`, `S03_Admission`, `S04_Supervisor`, `S05_Stations`, `S07_Publish` in that order, build clean.
+- [ ] `node plc/test/run.mjs` passes for the `.st` files in the project.
 - [ ] Retained clear. First scan clears run state and the station timers.
 - [ ] `MB_Sys[0]` = 4 and `MB_Sys[1]` is changing, read from a Modbus client.
 - [ ] `SimInputs` off before any actuator is powered.

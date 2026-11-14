@@ -122,7 +122,7 @@ The link is a Modbus client of both servers. It copies command coils `Cmd.Digita
 | `NEXT_PUBLIC_TWIN_URL` | Build time | `/api/twin` (http) | Base URL for `http`; WebSocket URL for `ws` |
 | `TWIN_HTTP_URL` | Runtime | `http://127.0.0.1:43124` | Where the `/api/twin` proxy finds the twin service |
 
-See `hmi/.env.example`. An explicit `NEXT_PUBLIC_TWIN_SOURCE`, in the shell or `hmi/.env.local`, overrides the root scripts' default.
+Copy [`.env.example`](../.env.example) to `.env.local` in the repo root. The root scripts and the twin commands read it; a value set in the shell wins. `hmi/.env.example` is the same idea for an HMI started on its own. An explicit `NEXT_PUBLIC_TWIN_SOURCE`, in the shell, `.env.local`, or `hmi/.env.local`, overrides the root scripts' default.
 
 ### Root scripts
 

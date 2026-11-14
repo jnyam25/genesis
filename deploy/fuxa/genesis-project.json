@@ -272,7 +272,7 @@
             "changed": true,
             "interval": 60
           },
-          "description": "Accepted containers sorted to lane A (config.sort.lanes[0]) (wraps)."
+          "description": "Accepted containers sorted to Lane 1 (config.sort.lanes[0], tag Counts.LaneA) (wraps)."
         },
         "t_Counts_LaneB": {
           "id": "t_Counts_LaneB",
@@ -286,7 +286,7 @@
             "changed": true,
             "interval": 60
           },
-          "description": "Accepted containers sorted to lane B (config.sort.lanes[1]) (wraps)."
+          "description": "Accepted containers sorted to Lane 2 (config.sort.lanes[1], tag Counts.LaneB) (wraps)."
         },
         "t_Sys_FaultCode": {
           "id": "t_Sys_FaultCode",
@@ -504,7 +504,7 @@
             "changed": true,
             "interval": 60
           },
-          "description": "0 none, 1 scan, 2 scan-rejected, 3 label, 11..18 fill at bay n (10+n), 20 mix, 21 sort sensor / reject diverter, 22 accepted to lane A, 23 rejected, 24 capping arm, 26 sort diverter, 27 accepted to lane B (25 reserved)."
+          "description": "0 none, 1 scan, 2 scan-rejected (QR reject at the scan gate), 3 label (only when a LABEL station is configured), 11..12 fill at bay n (10+n), 20 mix, 21 fill check and fill reject, 22 accepted to Lane 1, 23 rejected at the fill reject, 24 capping arm, 25 lid press, 26 sort diverter, 27 accepted to Lane 2."
         },
         "t_Container1_FillMl": {
           "id": "t_Container1_FillMl",
@@ -1488,7 +1488,7 @@
             "changed": true,
             "interval": 60
           },
-          "description": "PLC's validation of the text: 0 OK, 1 BAD_HEADER, 2 BAD_TOTAL, 3 TANK_COUNT_MISMATCH, 4 NEGATIVE_VOLUME, 5 VOLUME_SUM_MISMATCH, 6 MALFORMED, 7 NO_READ. Non-zero → the container rides through unfilled and the reject diverter rejects it."
+          "description": "PLC's validation of the text: 0 OK, 1 BAD_HEADER, 2 BAD_TOTAL, 3 TANK_COUNT_MISMATCH, 4 NEGATIVE_VOLUME, 5 VOLUME_SUM_MISMATCH, 6 MALFORMED, 7 NO_READ. Non-zero → the PLC ejects the container at the scan gate (QR reject) before either valve opens."
         },
         "t_Scan_ResultId": {
           "id": "t_Scan_ResultId",

@@ -16,3 +16,7 @@ runtime/
 .DS_Store
 Thumbs.db
 *.log
+
+# Browser/Electron cache
+DawnCache/
+GPUCache/

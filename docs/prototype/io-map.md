@@ -134,7 +134,7 @@ For N tanks:
 | Digital outputs, indicators (ONN-M4W + RESET lamp) | 5 (tower red / yellow / green, buzzer, RESET lamp) | 5 |
 | Analog outputs | N valve angles (+1 belt speed) | 2–3 |
 
-Size the Micro850's plug-in and expansion modules for the 2-tank line, plus about 20% spare ([micro850-plc.md §1](micro850-plc.md#io-against-the-requirement)). With stoppers fitted, the line needs roughly 23 DI, 20 DO and 3 AO. The 2080-L50E-24QBB has 14 DI and 10 DO embedded and three 2080-series plug-in slots. The bench controller and the CCW graphic are slot 1 **2080-IF2**, slot 2 **2080-OF2**, slot 3 **2080-IF2**. Neither IF2 is read. `Prog1` writes 0 to both OF2 channels every scan, the closed valve signal, until `AoFullScale` is taken from that module's configuration page. Expansion slots are empty. The ladder reads and writes stand-ins `X1_DI_00`–`09` and `X2_DO_00`–`09` until a **2085-IQ16** and a **2085-OB16** are fitted; those contacts then become `_IO_X1_` and `_IO_X2_`. The point list is in [plc/instruction-manual.md](../../plc/instruction-manual.md).
+Size the Micro850's plug-in and expansion modules for the 2-tank line, plus about 20% spare ([micro850-plc.md §1](micro850-plc.md#io-against-the-requirement)). With stoppers fitted, the line needs roughly 23 DI, 20 DO and 3 AO. The 2080-L50E-24QBB has 14 DI and 10 DO embedded and three 2080-series plug-in slots. The CCW graphic is slot 1 **2080-IF2**, slot 2 **2080-OF2**, slot 3 **2080-OF2**. The IF2 is not read. Slot 2 is the valve angles (`AoFullScale` from that module's configuration page; 0 keeps them closed). Slot 3 is written 0. Expansion slots are empty. The ladder reads and writes stand-ins `X1_DI_00`–`09` and `X2_DO_00`–`09` until a **2085-IQ16** and a **2085-OB16** are fitted; those contacts then become `_IO_X1_` and `_IO_X2_`. The point list is in [plc/instruction-manual.md](../../plc/instruction-manual.md).
 
 ### Calibration values per tank
 
@@ -382,6 +382,8 @@ Honoured only while `LineState.SIMULATION` = 1 (virtual PLC, or a PLC in SimInpu
 | 9 | 10 | `Sim.LocalStop` | RW | pulse | SIMULATION ONLY: local panel STOP push-button. |
 | 10 | 11 | `Sim.LocalReset` | RW | pulse | SIMULATION ONLY: local panel RESET push-button. |
 | 11 | 12 | `Sim.LocalJog` | RW | pulse | SIMULATION ONLY: local panel JOG push-button. |
+| 12 | 13 | `Cmd.Tank1Refilled` | RW | pulse | Operator refilled tank 1 by hand. Sets that tank's level to capacity. |
+| 13 | 14 | `Cmd.Tank2Refilled` | RW | pulse | Operator refilled tank 2 by hand. Sets that tank's level to capacity. |
 
 ### Event codes
 

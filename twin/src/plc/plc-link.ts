@@ -18,6 +18,7 @@
  * view reads both servers. Set PLC_LINK_COMMANDS=0 to watch without copying coils.
  */
 
+import { loadLocalEnv } from "../load-env";
 import { ModbusTcpClient } from "./modbus";
 import { COIL, STATION, SYS, SYS_BLOCK } from "./tag-map";
 
@@ -276,6 +277,7 @@ function client(host: string, port: number, unitId: number): ModbusTcpClient {
 }
 
 if (require.main === module) {
+  loadLocalEnv();
   const microHost = process.env.PLC_HOST;
   if (!microHost) {
     console.error("[plc-link] PLC_HOST is required (the Micro850). The virtual PLC is 127.0.0.1:VPLC_PORT.");

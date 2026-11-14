@@ -19,6 +19,7 @@
  * FUXA_COMMANDS=1. See docs/prototype/communication.md.
  */
 
+import { loadLocalEnv } from "../load-env";
 import * as net from "net";
 import { EventEmitter } from "events";
 import { COIL } from "./tag-map";
@@ -183,6 +184,7 @@ function listenHostsFromEnv(raw: string | undefined): string[] {
 }
 
 if (require.main === module) {
+  loadLocalEnv();
   const listenHosts = listenHostsFromEnv(process.env.SCADA_GATEWAY_HOST);
   const listenPort = Number(process.env.SCADA_GATEWAY_PORT ?? 5502);
   const plcHost = process.env.PLC_HOST;

@@ -358,6 +358,10 @@ export const COIL = {
   SIM_LOCAL_STOP: 9,
   SIM_LOCAL_RESET: 10,
   SIM_LOCAL_JOG: 11,
+  /** Operator: tank 1 refilled by hand. Level returns to capacity. */
+  CMD_TANK1_REFILLED: 12,
+  /** Operator: tank 2 refilled by hand. Level returns to capacity. */
+  CMD_TANK2_REFILLED: 13,
 } as const;
 export const COIL_COUNT = 16;
 
@@ -509,6 +513,8 @@ export function coilTable(): RegisterDef[] {
     { address: COIL.SIM_LOCAL_STOP, name: "Sim.LocalStop", access: "RW", unit: "pulse", description: "SIMULATION ONLY: local panel STOP push-button." },
     { address: COIL.SIM_LOCAL_RESET, name: "Sim.LocalReset", access: "RW", unit: "pulse", description: "SIMULATION ONLY: local panel RESET push-button." },
     { address: COIL.SIM_LOCAL_JOG, name: "Sim.LocalJog", access: "RW", unit: "pulse", description: "SIMULATION ONLY: local panel JOG push-button." },
+    { address: COIL.CMD_TANK1_REFILLED, name: "Cmd.Tank1Refilled", access: "RW", unit: "pulse", description: "Operator refilled tank 1 by hand. Sets that tank's level to capacity." },
+    { address: COIL.CMD_TANK2_REFILLED, name: "Cmd.Tank2Refilled", access: "RW", unit: "pulse", description: "Operator refilled tank 2 by hand. Sets that tank's level to capacity." },
   ];
 }
 

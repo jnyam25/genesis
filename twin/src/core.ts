@@ -759,6 +759,16 @@ export class TwinCore {
     }
   }
 
+  /** Operator pressed "tank refilled": the level returns to capacity. This is not the auto-refill. */
+  operatorRefill(slot: number): void {
+    const tank = this.tanks.find((t) => tankSlot(t.id) === slot);
+    if (!tank) return;
+    tank.levelMl = tank.capacityMl;
+    tank.refilling = false;
+    tank.refillTimerSec = 0;
+    this.recordEvent(`tank ${tank.id} refilled to ${Math.round(tank.levelMl)} ml`, "success", EventCode.TANK_REFILLED, slot, Math.round(tank.levelMl));
+  }
+
   /** Record a refused tank-module change requested through another channel (e.g. a PLC mask write). */
   refuseTankChange(refusal: TankChangeRefusal): void {
     this.recordEvent(`Manual: tank change refused (${TankChangeRefusal[refusal]})`, "warn", EventCode.TANK_CHANGE_REFUSED, refusal);

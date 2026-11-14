@@ -45,7 +45,7 @@ From the Micro800 selection guide (2080-SG001) and the Micro800 technical data (
 
 There's **no Wi-Fi**. The ESP32 nodes reach the PLC through an access point wired to the control switch ([communication.md §1](communication.md#1-network)).
 
-The controller on the bench already has its plug-ins fitted, nearest the controller first: **2080-IF2**, **2080-OF2**, **2080-IF2**. No 2085 expansion module is identified on it.
+The CCW project has its plug-ins fitted, nearest the controller first: **2080-IF2**, **2080-OF2**, **2080-OF2**. No 2085 expansion module is identified on it.
 
 ### IO against the requirement
 
@@ -55,11 +55,11 @@ The controller on the bench already has its plug-ins fitted, nearest the control
 | --- | --- | --- |
 | Digital inputs | 14 embedded | The 14 embedded points are the safety, panel and station-present inputs in [plc/instruction-manual.md](../../plc/instruction-manual.md). `I_Sort_Present`, the lane-full sensors, the diverter home switches, the tank-low floats, and hardwired START and JOG are on a **2085-IQ16** |
 | Digital outputs | 10 embedded | The 8 required outputs fit, with 2 left for stack-light green and red. Stoppers (7), amber, the buzzer and the RESET lamp need a **2085-OB16** |
-| Analog outputs (valve angles, belt speed) | None embedded. Slot 2 is a fitted **2080-OF2** | Both channels are the valve angles. `Prog1` writes 0 to `_IO_P2_AO_00` and `_IO_P2_AO_01` every scan until `AoFullScale` is known. Belt speed stays the drive's knob or a PWM output |
+| Analog outputs (valve angles, belt speed) | None embedded. Slots 2 and 3 are fitted **2080-OF2** modules | Slot 2 is the two valve angles. `S05_Stations` writes them from `AoFullScale`; 0 keeps both channels at 0. Slot 3 is written 0. Belt speed stays the drive's knob or a PWM output |
 
-- **Belt speed without an AO channel.** The fitted OF2 is already used by the two valves. Drive the conveyor speed controller's speed input from one of the two PWM outputs if the controller accepts PWM, or leave it on the drive's own knob.
+- **Belt speed without an AO channel.** Slot 2 is already used by the two valves. Slot 3 is a second OF2, held at 0, and is spare. Drive the conveyor speed controller's speed input from one of the two PWM outputs if the controller accepts PWM, or leave it on the drive's own knob.
 - **One-bottle mode** ([bom.md D1](bom.md#6-open-decisions-for-the-team)) drops the 7 stopper outputs. Amber, the buzzer and the RESET lamp still need 3 outputs past the 10 embedded, so a 2080-IQ4OB4 or the 2085-OB16 still belongs on the quote.
-- **More tanks.** Each extra tank adds 2 inputs, 2 outputs (valve shutoff and stopper) and 1 analog output. The embedded points are already full at 2 tanks, so another tank means more of the 2085-IQ16 / 2085-OB16 and another analog channel (a second 2080-OF2 or a 2085-OF4).
+- **More tanks.** Each extra tank adds 2 inputs, 2 outputs (valve shutoff and stopper) and 1 analog output. The embedded points are already full at 2 tanks, so another tank means more of the 2085-IQ16 / 2085-OB16. Slot 3's OF2 has the two spare analog channels.
 - **Distributor prices in September 2026** (they vary a lot, so get a quote): 2080-OF2 about $120–160; 2085-OF4 about $210–350. **Check the lab's parts bin first.**
 - DC inputs must match the sensors (PNP sensors → wire the input common for sourcing sensors). The sourcing outputs switch +24 V to the load; return the load to 0 V.
 
@@ -126,16 +126,16 @@ So `Sys.PlcHeartbeat` (register 1) is `MB_Sys[1]`, `Sys.FaultCode` (19) is `MB_S
 
 ## 3. Program structure
 
-A Micro850 project runs its programs one after another in each scan, in the order set in CCW's Project Organizer. Each program can be ladder, structured text or function block diagram. `Prog1` in the CCW project is the ladder for S00, S01, S02 and the S06 output map. It also clears `MB_Cmd[0..6]` and `MB_Cmd[8..11]` at the end of the scan, and it writes `MB_Sys[0]` (4), `MB_Sys[1]` (heartbeat), `MB_Sys[2]` (`LineState`), `MB_Sys[3]` (2), `MB_Sys[16]` and `MB_Station[0]`. That is the part the bridge and FUXA need before the station programs exist. Create the remaining programs, in this order:
+A Micro850 project runs its programs one after another in each scan, in the order set in CCW's Project Organizer. Each program can be ladder, structured text or function block diagram. `Prog1` in the CCW project is the ladder for S00, S01, S02 and the S06 output map. It also clears `MB_Cmd[0..6]` and `MB_Cmd[8..11]` at the end of the scan, and it writes `MB_Sys[0]` (4), `MB_Sys[1]` (heartbeat), `MB_Sys[2]` (`LineState`), `MB_Sys[3]` (2), `MB_Sys[16]` and `MB_Station[0]`. The station programs are written: [`plc/programs.md`](../../plc/programs.md) has them, their variables, and the tests. In CCW the order is `S00_Inputs` (above `Prog1`, because `Prog1` clears the command coils), `Prog1`, `S03_Admission`, `S04_Supervisor`, `S05_Stations`, `S07_Publish`. The logical steps:
 
 1. `S00_Inputs`: copy the bridge- and ESP32-written registers out of `MB_*`; debounce presence sensors (20 ms `TON`/`TOF`); build `PhysicalMask` from `I_EStop_Entry_Mon` and `I_EStop_Exit_Mon` (0 = pressed); read the low floats; update the tank level estimates (§5). The ladder already copies the embedded and expansion inputs.
 2. `S01_SafetyMode`: E-Stops, reset, run state, control authority (§6). This logic is in `Prog1`.
 3. `S02_Commands`: rising-edge handling of `MB_Cmd[0..15]` ([io-map.md §5](io-map.md#5-handshakes)); tank-enable-mask writes (§7). Reset every command coil (`MB_Cmd[i] := FALSE`) in the scan it is handled. `Prog1` clears the coils. It does not act on `Cmd.FirePusher` or `Cmd.Reset`.
 4. `S03_Admission`: a can at SCAN (`I_Scan_Present` rising) with a free container slot, the line running, `ActiveContainers < MaxConcurrent`, and lanes not full → create a container record. Not in `Prog1`.
-5. `S04_Supervisor`: node supervision and the fault latch (§6a), then the scan mailbox and barcode parser (§4a), the robotic arm sequencer (§4b) and the sort-height classification (§4c). It runs before the station state machines so they see this scan's results. The virtual PLC (`twin/src/plc/virtual-plc.ts`) is this program until it is written in CCW. Set `FaultSet` for one scan; `Prog1` seals `FaultHold`.
-6. `S05_Stations`: one state machine per station (§4). Each station is **acquired** before the container upstream is released. Not in `Prog1`. The station bits (`Valve1Cmd`, `RelScan`, and the rest) stay false, so those outputs stay off.
-7. `S06_Outputs`: map station, tank and belt states onto `O_*` / `AO_*`. **All motion outputs are forced off while `NOT Running`**, except stoppers, which de-energize to extended (holding). `O_Safety_RemoteEStopOK := NOT DigitalEStop`. `Station.RunPermit := Running` (a latched fault clears `RunCmd`, so it drops the permit too). The field-output map and `RunPermit` are in `Prog1`. `RunPermit` is held at 0 while `SimInputs` is on. Both slot-2 OF2 channels are written to 0 every scan. Replace those two rungs with the `ValveOpeningPct` scale once `AoFullScale` is taken from the OF2 configuration page. `SimInputs` and a stopped line still force both angles to 0.
-8. `S07_Publish`, gated by a 100 ms self-resetting `TON`: heartbeat, `Sys.LineState`, `Sys.FaultCode`, counters, OEE, throughput, container table, event ring (§8); then copy everything published into `MB_*`. `Prog1` already writes version, heartbeat, `LineState`, tank count, the E-Stop mask and `RunPermit`. Counters, OEE, containers and the event ring are still this program.
+5. `S04_Supervisor` ([`plc/S04_Supervisor.st`](../../plc/S04_Supervisor.st)): node supervision and the fault latch (§6a), then the scan mailbox and barcode parser (§4a), the robotic arm sequencer (§4b) and the sort-height classification (§4c). It runs before the station state machines so they see this scan's results. `FaultSet` stays TRUE while any fault is latched; `Prog1` seals `FaultHold` from that level.
+6. `S05_Stations` ([`plc/S05_Stations.st`](../../plc/S05_Stations.st)): one state machine per station (§4). Each station is **acquired** before the container upstream is released. It sets `Valve1Cmd`, `RelScan`, and the other station bits; `Prog1` maps those bits onto the outputs.
+7. `S06_Outputs`: map station, tank and belt states onto `O_*` / `AO_*`. **All motion outputs are forced off while `NOT Running`**, except stoppers, which de-energize to extended (holding). `O_Safety_RemoteEStopOK := NOT DigitalEStop`. `Station.RunPermit := Running` (a latched fault clears `RunCmd`, so it drops the permit too). The field-output map and `RunPermit` are in `Prog1`. `RunPermit` is held at 0 while `SimInputs` is on. `S05_Stations` then writes the slot-2 valve angles from `AoFullScale` (0 until the OF2 configuration page is read) and writes 0 to both slot-3 channels. `SimInputs` and a stopped line still force both angles to 0.
+8. `S07_Publish` ([`plc/S07_Publish.st`](../../plc/S07_Publish.st)): every scan, the event ring and an overwrite of `MB_Sys[3]` and `MB_Sys[4]` (Prog1 rewrites the tank count every scan); on the 100 ms tick from `S00_Inputs`, counters, OEE, throughput, uptime, the tank block and the container table (§8). `Prog1` keeps version, heartbeat, `LineState` apart from the HMI-link bit, the E-Stop mask and `RunPermit`.
 
 **Data layout.** Use arrays indexed by slot rather than one variable per slot:
 
@@ -182,7 +182,9 @@ PRESS (status 25):            hold (I_Press_Present). Pulse O_LidPress_Extend to
                               then retract and release. The arm does not seat the lid.
 QC    (station 21, status 21):  sort sensor. hold. SortRequest := id; wait SortDone = id → SortRequest := 0.
                               Classify SortHeightMm (§4c). Type ≠ Lane → ContRejectReason :=
-                              BOTTLE_TYPE_MISMATCH (6). Release straight into GATE (no transit).
+                              BOTTLE_TYPE_MISMATCH (6). Release; the can travels to the GATE eye.
+                              (The twin decides GATE the moment QC finishes; on a belt that
+                              strokes the pusher before the can arrives. plc/programs.md.)
 GATE  (station 22):  decide, in this order:
                        ManualReject (Cmd.FirePusher, §7)                   → reject (MANUAL_PUSHER, 3)
                        ContRejectReason ≠ 0 (CAP failed, bottle type)       → reject (that reason)
@@ -198,7 +200,7 @@ SORT  (status 26):            O_SortDiverter_LaneB := (Lane = B) while the conta
 
 Status 25 is the lid press. The arm places the lid; the cylinder seats it (§4b).
 
-**Analog output scaling.** Slot 2 is the 2080-OF2. A channel takes a raw integer for its range (see the plug-in's configuration page for the count at 100 %). `Prog1` currently writes 0 to `_IO_P2_AO_00` and `_IO_P2_AO_01` every scan, which is the closed signal. When that page shows the 100 % count, set `AoFullScale` to it and write `TankValveOpeningPct × AoFullScale / 100` while that tank is dispensing, otherwise 0. Do not guess the count.
+**Analog output scaling.** Slot 2 is the valve 2080-OF2. A channel takes a raw integer for its range (see the plug-in's configuration page for the count at 100 %). Set `AoFullScale` to that count. `S05_Stations` writes `TankValveOpeningPct × AoFullScale / 100` to `_IO_P2_AO_00` and `_IO_P2_AO_01` while that tank is dispensing, otherwise 0. `AoFullScale` starts at 0, which keeps both channels at 0. Do not guess the count. Slot 3 is a second 2080-OF2 (`_IO_P3_AO_00`, `_IO_P3_AO_01`); nothing is assigned to it, and `S05_Stations` writes 0 there every scan.
 
 **Rules**
 - **Handshakes.** Every station request follows [io-map.md §5](io-map.md#5-handshakes): the PLC writes the container id into `Request`; the node acts once while `Request ≠ 0` and `Request ≠ Done`, then writes the id into `Done` last; the PLC acts when `Done = Request` and then writes `Request := 0`. If a container leaves a station without finishing (jam, manual reject), clear that station's `Request` in the same scan.
@@ -290,7 +292,7 @@ ELSE
         ELSIF Ch[i] >= 48 AND Ch[i] <= 57 AND Digits < 5 AND NOT Gap THEN
           Acc := Acc * 10 + ANY_TO_UDINT(Ch[i] - 48); Digits := Digits + 1;
           IF Acc > 65535 THEN Result := 6; END_IF;
-        ELSIF Ch[i] = 32 THEN
+        ELSIF Ch[i] <= 32 THEN                           (* space or control char, like JS trim() *)
           Gap := Gap OR Neg OR Digits > 0;              (* a space may end a volume, not split it *)
         ELSE
           Result := 6;                                  (* MALFORMED volume *)
@@ -483,7 +485,7 @@ The PLC detects a mask write by comparing `MB_Sys[4]` with its own copy each sca
 
 ## 9. Test-mode inputs
 
-For [commissioning stage 3](commissioning.md#4-stage-3-real-plc-no-field-devices), add a `SimInputs` BOOL, **off by default and cleared on power-up**. When it's on:
+For [commissioning stage 3](commissioning.md#4-stage-3-real-plc-no-field-devices), `SimInputs` is a BOOL, **off by default and cleared on power-up**. `S00_Inputs` already applies the safety, key-switch and panel lines below by writing the input image Prog1 reads. The presence eyes and the stand-in scanner and station node are not in the programs yet. When `SimInputs` is on:
 - publish `LineState.SIMULATION` = 1;
 - take the physical E-Stop mask from `Sim.PhysicalEStopMask` (register 450, `MB_Sim[0]`) and the key switch from `Sim.LocalMode` (451, `MB_Sim[1]`);
 - take panel push-buttons from `Sim.LocalStart/Stop/Reset/Jog` (coils 8–11, `MB_Cmd[8..11]`);

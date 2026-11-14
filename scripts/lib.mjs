@@ -7,6 +7,41 @@ import { fileURLToPath } from "node:url";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+/**
+ * Load the repo-root `.env` and then `.env.local` into `process.env`.
+ * A value already set in the shell is left alone. `.env.local` wins over `.env`.
+ * An empty value is ignored, so a placeholder like `PLC_HOST=` stays unset.
+ */
+export function loadLocalEnv() {
+  const merged = new Map();
+  for (const name of [".env", ".env.local"]) {
+    const file = join(ROOT, name);
+    if (!existsSync(file)) continue;
+    for (const raw of readFileSync(file, "utf8").split(/\r?\n/)) {
+      const line = raw.trim();
+      if (!line || line.startsWith("#")) continue;
+      const body = line.startsWith("export ") ? line.slice(7).trim() : line;
+      const eq = body.indexOf("=");
+      if (eq < 1) continue;
+      const key = body.slice(0, eq).trim();
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+      let value = body.slice(eq + 1).trim();
+      if (
+        (value.startsWith('"') && value.endsWith('"') && value.length >= 2) ||
+        (value.startsWith("'") && value.endsWith("'") && value.length >= 2)
+      ) {
+        value = value.slice(1, -1);
+      }
+      if (value !== "") merged.set(key, value);
+    }
+  }
+  for (const [key, value] of merged) {
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+}
+
+loadLocalEnv();
+
 /** Sub-projects, in install/build order. */
 export const PROJECTS = ["twin", "hmi"];
 
@@ -66,8 +101,8 @@ export function npmSpawnArgs(args, options = {}) {
  *
  * Defaults the HMI to the live twin (`http` source, proxied through the HMI's
  * own `/api/twin` route to TWIN_HTTP_URL). `--mock` forces the built-in mock.
- * An explicit NEXT_PUBLIC_TWIN_SOURCE — in the shell or in hmi/.env.local —
- * always wins.
+ * An explicit NEXT_PUBLIC_TWIN_SOURCE — in the shell, the root `.env.local`,
+ * or hmi/.env.local — always wins.
  */
 export function hmiEnv({ mock = false } = {}) {
   const env = { ...process.env };

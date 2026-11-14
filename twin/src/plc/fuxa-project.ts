@@ -25,6 +25,7 @@
  * commands in LOCAL mode. The line overview stays bound to the primary device.
  */
 
+import { loadLocalEnv } from "../load-env";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -1007,6 +1008,7 @@ export async function pushFuxaProject(project: FuxaProject, fuxaUrl: string): Pr
 export const FUXA_PROJECT_FILE = path.join(__dirname, "..", "..", "..", "deploy", "fuxa", "genesis-project.json");
 
 if (require.main === module) {
+  loadLocalEnv();
   const env = process.env;
   const peerHost = env.FUXA_PEER_HOST;
   const project = buildFuxaProject({

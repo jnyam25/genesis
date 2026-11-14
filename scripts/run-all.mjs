@@ -40,6 +40,7 @@ if (!script || [mock, plcSim, line].filter(Boolean).length > 1) {
 if (line && !process.env.PLC_HOST) {
   console.error(
     "[genesis] npm run line needs PLC_HOST, the Micro850 address on the control network.\n" +
+      "           Put PLC_HOST in .env.local, or set it in the shell:\n" +
       '           PowerShell: $env:PLC_HOST="192.168.10.10"; npm run line\n' +
       "           bash:       PLC_HOST=192.168.10.10 npm run line",
   );

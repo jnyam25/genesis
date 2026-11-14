@@ -32,12 +32,15 @@ import * as http from "http";
 import * as fs from "fs";
 import * as path from "path";
 
+import { loadLocalEnv } from "./load-env";
 import { DEFAULT_CONFIG } from "./config";
 import { TwinCore, type Snapshot } from "./core";
 import { nextBarcode } from "./feeder";
 import { applyHmiCommand, toHmiState, type CommandRequest, type HmiState } from "./hmi";
 import { PlcBridge } from "./plc/bridge";
 import { TankPalette, loadTankColors, saveTankColors } from "./tank-colors";
+
+loadLocalEnv();
 
 const PORT = Number(process.env.GENESIS_PORT ?? 43124);
 /** Bind address. Set GENESIS_HOST=0.0.0.0 to expose the twin on the LAN. */

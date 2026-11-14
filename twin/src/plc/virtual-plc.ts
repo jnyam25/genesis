@@ -39,6 +39,7 @@
  * Port 5020 instead of 502 so it runs without admin/root rights.
  */
 
+import { loadLocalEnv } from "../load-env";
 import { DEFAULT_CONFIG, MAX_TANKS, TANK_SLOTS, tankSlot } from "../config";
 import { TwinCore, type Container, type StationDriver, type StationResult } from "../core";
 import { FaultCode, RejectReason, TankChangeRefusal } from "../events";
@@ -394,6 +395,8 @@ export class VirtualPlc implements StationDriver {
     if (take(COIL.CMD_JOG)) this.core.jogBelt("remote");
     if (take(COIL.SIM_LOCAL_JOG)) this.core.jogBelt("local");
     if (take(COIL.CMD_FIRE_PUSHER)) this.core.firePusher("remote");
+    if (take(COIL.CMD_TANK1_REFILLED)) this.core.operatorRefill(1);
+    if (take(COIL.CMD_TANK2_REFILLED)) this.core.operatorRefill(2);
   }
 
   /**
@@ -640,6 +643,7 @@ export class VirtualPlc implements StationDriver {
 }
 
 if (require.main === module) {
+  loadLocalEnv();
   const port = Number(process.env.VPLC_PORT ?? 5020);
   const host = process.env.VPLC_HOST ?? "0.0.0.0";
   const unitId = process.env.VPLC_UNIT_ID ? Number(process.env.VPLC_UNIT_ID) : 1;
