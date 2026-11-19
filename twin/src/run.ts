@@ -168,9 +168,15 @@ class PhysicalLine implements LineSource {
 }
 
 function writeSnapshotFile(snap: Snapshot): void {
-  const dir = path.dirname(SNAPSHOT_FILE);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(snap, null, 2));
+  try {
+    const dir = path.dirname(SNAPSHOT_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(SNAPSHOT_FILE, JSON.stringify(snap, null, 2));
+  } catch (err) {
+    console.error(
+      `[genesis] could not write snapshot ${SNAPSHOT_FILE}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 // Client script is plain concatenation: no `${` or backslash escapes inside this template literal.

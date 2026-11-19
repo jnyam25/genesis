@@ -68,7 +68,7 @@ export default function ControlsPage() {
   const localWhy = (command: SafetyCommand) => refusal(safety, command, "local");
 
   return (
-    <main className="mx-auto w-full max-w-[1100px] flex-1 space-y-4 px-3 py-4 sm:px-6">
+    <main className="mx-auto w-full max-w-[1100px] flex-1 space-y-4 px-2 py-3 sm:px-3">
       {feedback && (
         <Alert variant={feedback.ok ? "default" : "destructive"}>
           <AlertDescription>{feedback.message}</AlertDescription>

@@ -4,7 +4,13 @@
     <ProgramItem>
       <ProgramName>Program1</ProgramName>
       <RoutingName>Prog1</RoutingName>
-      <SubRoutings />
+      <SubRoutings>
+        <string>S00</string>
+        <string>S03</string>
+        <string>S04</string>
+        <string>S05</string>
+        <string>S07</string>
+      </SubRoutings>
     </ProgramItem>
   </ProgramItems>
 </ProgramItemsData>

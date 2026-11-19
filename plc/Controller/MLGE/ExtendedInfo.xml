@@ -1,5 +1,23 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <ProjectElements>
+  <AcfElementGuid Guid="19881ac2-a2a1-4793-afef-7b1b5ac0dff1">
+    <File>S04.AcfMlge</File>
+  </AcfElementGuid>
+  <AcfElementGuid Guid="368e04ee-1b76-4d31-b5d2-5a042eabc02f">
+    <File>S05.AcfMlge</File>
+  </AcfElementGuid>
+  <AcfElementGuid Guid="6fa31dfe-72df-4878-84af-fe00fc33f7f3">
+    <File>S03.AcfMlge</File>
+  </AcfElementGuid>
+  <AcfElementGuid Guid="80cf4443-8705-4ed1-a4c7-c4880cf0efde">
+    <File>S00.AcfMlge</File>
+  </AcfElementGuid>
+  <AcfElementGuid Guid="88a2e2dc-7f25-4ed3-8a45-bc2045313112">
+    <File>S07.AcfMlge</File>
+  </AcfElementGuid>
+  <AcfElementGuid Guid="c90da2c2-6be5-46a3-8851-80b2323435dd">
+    <File>FB1.AcfMlge</File>
+  </AcfElementGuid>
   <AcfElementGuid Guid="fac4562e-4e1c-45a9-bbe4-4de734e30b21">
     <File>Prog1.AcfMlge</File>
   </AcfElementGuid>

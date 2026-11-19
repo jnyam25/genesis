@@ -33,7 +33,7 @@ export function ActionBar() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] px-3 pt-3 sm:px-6">
+    <div className="mx-auto w-full max-w-[1400px] px-2 pt-2 sm:px-3">
       <div className="flex flex-wrap items-center gap-2">
         <Action
           label="Start"

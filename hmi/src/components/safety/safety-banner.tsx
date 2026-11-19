@@ -50,7 +50,7 @@ export function SafetyBanner() {
 
 function Banner({ tone, icon, children }: { tone: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
-    <div className="mx-auto w-full max-w-[1400px] px-3 pt-3 sm:px-6" aria-live="assertive">
+    <div className="mx-auto w-full max-w-[1400px] px-2 pt-2 sm:px-3" aria-live="assertive">
       <div role="alert" className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm font-bold tracking-wide ${tone}`}>
         {icon}
         <span>{children}</span>

@@ -21,7 +21,7 @@ export default function Page() {
   const { state, events, loading, stale } = useTwin();
 
   return (
-    <main className="mx-auto w-full max-w-[1400px] flex-1 px-3 py-4 sm:px-6">
+    <main className="mx-auto w-full max-w-[1400px] flex-1 px-2 py-3 sm:px-3">
       {loading && <LoadingState />}
       {!loading && stale && <StaleAlert />}
       {!loading && (
@@ -74,16 +74,7 @@ function DashboardView({
     <div className="space-y-4">
       <OeeGrid oee={state.oee} />
       <CountsCard counts={state.counts} throughputCpm={state.throughputCpm} sortLanes={state.sortLanes} />
-      <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <Card className="h-full">
-            <CardContent className="pt-4">
-              <LineSchematic state={state} />
-            </CardContent>
-          </Card>
-        </div>
-        <EventLog events={events} />
-      </div>
+      <EventLog events={events} />
       <TankLevels tanks={state.tanks} />
     </div>
   );

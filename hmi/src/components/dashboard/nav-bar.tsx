@@ -20,7 +20,7 @@ export function NavBar() {
   const safety = state.safety;
 
   return (
-    <header className="flex flex-col gap-3 border-b border-border/60 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+    <header className="flex flex-col gap-3 border-b border-border/60 px-2 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:px-3">
       <div className="flex items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground font-mono text-sm font-bold">
           GN

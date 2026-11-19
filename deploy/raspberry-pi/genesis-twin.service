@@ -11,15 +11,19 @@ User=genesis
 Group=genesis
 WorkingDirectory=/opt/genesis/twin
 EnvironmentFile=/etc/genesis/genesis.env
+# '+' runs outside the sandbox so the runtime directory exists before ProtectSystem locks the tree.
+ExecStartPre=+/usr/bin/mkdir -p /opt/genesis/twin/runtime
+ExecStartPre=+/usr/bin/chown genesis:genesis /opt/genesis/twin/runtime
 # If Node was installed with nvm, replace /usr/bin/node with the absolute path from `which node`.
 ExecStart=/usr/bin/node dist/run.js
 Restart=always
 RestartSec=3
-# Hardening
+# Hardening. The snapshot and tank-color files are written on the first live PLC reading.
 NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=true
 PrivateTmp=true
+ReadWritePaths=/opt/genesis/twin/runtime
 
 [Install]
 WantedBy=multi-user.target

@@ -179,6 +179,7 @@ The Pi runs `genesis-twin` (`GENESIS_MODE=plc`) and `genesis-hmi` (`next start`)
 | `/health` from the Pi is `online: false` | The Pi's `eth0` must reach the PLC. A Wi-Fi path to the PLC is the wrong network |
 | HMI on the Pi shows mock tanks | The HMI was built without `NEXT_PUBLIC_TWIN_SOURCE=http`. From `/opt/genesis`, `npm run build`, then `sudo systemctl restart genesis-hmi` |
 | Kiosk browser shows a blank page | The desktop file waits for port 43123. `systemctl status genesis-hmi` and `curl -s http://127.0.0.1:43124/health` |
+| Dashboard stays on "Connecting" after a reboot, while the PLC is in Run | The service files lock the disk read-only. The twin exits when it tries to save the first live snapshot. Copy the current `genesis-twin.service` and `genesis-hmi.service` into `/etc/systemd/system/`, then `sudo systemctl daemon-reload && sudo systemctl restart genesis-twin genesis-hmi`. `journalctl -u genesis-twin -n 30` should stay up and `/health` should show `"online": true` |
 | Operators can open the HMI, nobody can open the twin port | Expected. `GENESIS_HOST` stays `127.0.0.1`. Other devices use `http://<pi>:43123` |
 
 ## 11. ESP32 scanner node

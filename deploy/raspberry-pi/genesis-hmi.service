@@ -11,6 +11,9 @@ User=genesis
 Group=genesis
 WorkingDirectory=/opt/genesis/hmi
 EnvironmentFile=/etc/genesis/genesis.env
+# '+' runs outside the sandbox. next start writes its cache under .next on boot.
+ExecStartPre=+/usr/bin/mkdir -p /opt/genesis/hmi/.next
+ExecStartPre=+/usr/bin/chown -R genesis:genesis /opt/genesis/hmi/.next
 # If Node was installed with nvm, replace /usr/bin/node with the absolute path from `which node`.
 ExecStart=/usr/bin/node node_modules/next/dist/bin/next start -p 43123
 Restart=always
@@ -19,6 +22,7 @@ NoNewPrivileges=true
 ProtectSystem=full
 ProtectHome=true
 PrivateTmp=true
+ReadWritePaths=/opt/genesis/hmi/.next
 
 [Install]
 WantedBy=multi-user.target

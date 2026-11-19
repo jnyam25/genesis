@@ -97,7 +97,7 @@ export default function AlarmsPage() {
     );
 
   return (
-    <main className="mx-auto w-full max-w-[1100px] flex-1 px-3 py-4 sm:px-6 space-y-4">
+    <main className="mx-auto w-full max-w-[1100px] flex-1 space-y-4 px-2 py-3 sm:px-3">
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>

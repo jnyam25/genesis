@@ -73,6 +73,8 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now genesis-twin genesis-hmi
 ```
 
+The units keep the rest of the disk read-only. They create `/opt/genesis/twin/runtime` and `/opt/genesis/hmi/.next` and allow writes only there, so the first live PLC reading can be saved after a reboot. Copy the unit files again after pulling an update, then `sudo systemctl daemon-reload`.
+
 Check them:
 
 ```bash
